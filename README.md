@@ -93,19 +93,6 @@ It requires Azure credentials, subscription, resource group and location setting
 and creates billable resources. Never treat a successful build or publish as
 verification of a live deployment.
 
-### Validate the template
-
-```bash
-python3 tests/validate-template.py
-```
-
-Requires Python 3, the .NET 10 SDK and Aspire CLI. The script uses an isolated
-template hive and temporary output, builds all test-framework variants, checks
-name/HTTPS/port substitutions, runs a Redis-disabled integration smoke test,
-and inspects Redis-enabled and disabled ACA publication artifacts. It also checks
-native Aspire generation and includes .NET 11 when that SDK is installed.
-It never starts a Redis-enabled AppHost or deploys/provisions Azure resources.
-
 ## Attribution
 
 The starter was copied from `microsoft/aspire-templates` at commit
