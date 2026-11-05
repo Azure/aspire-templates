@@ -53,26 +53,26 @@ aspire start
 Without Redis enabled, app services run locally and the Container Apps environment
 is a deployment target, not a local Azure deployment.
 
-**With Redis enabled, local runs use the real Azure Managed Redis service**, not
-a Redis container or emulator. `AddAzureManagedRedis("cache")` enables Aspire's
-Azure provisioner. Before starting, authenticate with `az login` and configure
-`Azure:SubscriptionId`, `Azure:Location`, and `Azure:ResourceGroup` on the generated
-AppHost, for example using `dotnet user-secrets --project MyAzureApp.AppHost set`.
-Starting can create billable Azure resources and assign Redis data access to the
-development principal; use a development subscription/resource group and ensure
-you have provisioning and role-assignment permissions.
+**With Redis enabled, local runs use a Redis container**, through
+`AddAzureManagedRedis("cache").RunAsContainer()`. Start a supported container
+runtime before running the application. No Azure credentials, subscription,
+resource group, or Azure provisioning are required for local development.
+Publication and deployment still model Azure Managed Redis, not a Redis container.
 
 The frontend references `cache`, waits for it, and uses
 `AddRedisClientBuilder("cache").WithAzureAuthentication().WithOutputCache()`.
-Locally this uses Azure developer credentials; in Azure it uses the frontend's
+`WithAzureAuthentication()` applies Azure token authentication only to Azure Redis
+endpoints; the local container uses the Aspire-provided connection configuration
+without requesting Azure credentials. In Azure, the client uses the frontend's
 managed identity and Aspire-generated Redis access policy. This is service-to-service
 authentication only, not interactive user authentication in the website.
-To reuse an existing Redis instance, customize the AppHost with the supported
-`AsExisting` API and arrange appropriate data access separately.
+To reuse an existing Azure Redis instance instead, remove `RunAsContainer()` and
+customize the AppHost with the supported `AsExisting` API, arranging appropriate
+data access separately.
 
 Integration tests start the AppHost too. Tests generated **with Redis enabled**
-therefore also require Azure access and can provision resources; they are not
-offline tests. Generate without Redis for cloud-free smoke testing.
+therefore require a supported container runtime, but do not require Azure access
+or provision Azure resources.
 
 ### Azure Container Apps artifacts
 

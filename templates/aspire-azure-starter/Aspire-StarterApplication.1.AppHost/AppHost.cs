@@ -3,7 +3,8 @@ var builder = DistributedApplication.CreateBuilder(args);
 builder.AddAzureContainerAppEnvironment("aca");
 
 #if UseRedisCache
-var cache = builder.AddAzureManagedRedis("cache");
+var cache = builder.AddAzureManagedRedis("cache")
+    .RunAsContainer();
 
 #endif
 var apiService = builder.AddDotnetProject("apiservice", "../Aspire-StarterApplication.1.ApiService/Aspire-StarterApplication.1.ApiService.csproj")

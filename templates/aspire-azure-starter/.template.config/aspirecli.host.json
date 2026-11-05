@@ -65,7 +65,7 @@
       }
     },
     "Framework": { "isHidden": true },
-    "UseRedisCache": { "displayName": "Use Azure Managed Redis for caching (requires Azure access)" },
+    "UseRedisCache": { "displayName": "Use Azure Managed Redis for caching (local runs require a container runtime)" },
     "TestFx": { "displayName": "Test framework" },
     "XUnitVersion": { "displayName": "xUnit.net version" },
     "appHostHttpPort": { "isHidden": true },

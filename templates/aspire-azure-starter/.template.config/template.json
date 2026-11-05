@@ -139,8 +139,8 @@
       "type": "parameter",
       "datatype": "bool",
       "defaultValue": "false",
-      "displayName": "_Use Azure Managed Redis for caching (requires Azure access)",
-      "description": "Use Azure Managed Redis for output caching. Local runs also use Azure and may provision billable resources; no Redis container is used."
+      "displayName": "_Use Azure Managed Redis for caching (local runs require a container runtime)",
+      "description": "Use Azure Managed Redis for output caching, with a local Redis container for development. Local runs require a supported container runtime, not Azure credentials."
     },
     "TestFx": {
       "type": "parameter",
