@@ -1,7 +1,7 @@
 # aspire-templates
 Azure-focused templates for Aspire.
 
-## Azure starter
+## aspire-azure-starter
 
 `templates/aspire-azure-starter` adapts the canonical
 [`microsoft/aspire-templates` starter](https://github.com/microsoft/aspire-templates/tree/e9690bd925a2bf161044a05216ff0642b718b612/templates/aspire-starter).

@@ -16,7 +16,7 @@
     "NUnit",
     "xUnit"
   ],
-  "name": "Aspire Azure Starter App (ASP.NET Core/Blazor)",
+  "name": "aspire-azure-starter",
   "defaultName": "AspireApp",
   "description": "An Aspire Blazor frontend and web API targeting Azure Container Apps, with optional Azure Managed Redis caching.",
   "shortName": "aspire-azure-starter",
