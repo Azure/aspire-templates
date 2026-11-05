@@ -1,6 +1,6 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
-builder.AddAzureContainerAppEnvironment("aca");
+builder.AddAzureContainerAppEnvironment("env");
 
 #if UseRedisCache
 var cache = builder.AddAzureManagedRedis("cache")
