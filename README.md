@@ -4,7 +4,7 @@ Azure-focused templates for Aspire.
 
 ## Templates
 
-- [`aspire-azure-starter`](templates/aspire-azure-starter): Blazor frontend and ASP.NET Core API targeting Azure Container Apps, with optional Azure Managed Redis.
+- [Azure Starter App](templates/aspire-azure-starter) (`aspire-azure-starter`): ASP.NET Core/Blazor, Azure Container Apps, Azure Redis.
 
 ## Documentation
 
