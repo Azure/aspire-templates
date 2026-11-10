@@ -1,0 +1,104 @@
+name: Azure
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish deployment artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: TemplateDotnetSdkVersion
+          dotnet-quality: TemplateDotnetSdkQuality
+
+      - name: Install Aspire CLI
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --location https://aspire.dev/install.sh -o "$RUNNER_TEMP/install-aspire.sh"
+          bash "$RUNNER_TEMP/install-aspire.sh" --version HostingAppHostPackageVersion
+          echo "$HOME/.aspire/bin" >> "$GITHUB_PATH"
+
+      - name: Build application
+        run: |
+          dotnet build Aspire-StarterApplication.1.AppHost/Aspire-StarterApplication.1.AppHost.csproj --configuration Release
+          dotnet build Aspire-StarterApplication.1.ApiService/Aspire-StarterApplication.1.ApiService.csproj --configuration Release
+          dotnet build Aspire-StarterApplication.1.Web/Aspire-StarterApplication.1.Web.csproj --configuration Release
+
+      - name: Publish deployment artifacts
+        run: aspire publish --apphost Aspire-StarterApplication.1.AppHost/Aspire-StarterApplication.1.AppHost.csproj --environment Production --output-path "$RUNNER_TEMP/aspire-output" --non-interactive
+
+  deploy:
+    name: Deploy production
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    concurrency:
+      group: azure-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: TemplateDotnetSdkVersion
+          dotnet-quality: TemplateDotnetSdkQuality
+
+      - name: Install Aspire CLI
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --location https://aspire.dev/install.sh -o "$RUNNER_TEMP/install-aspire.sh"
+          bash "$RUNNER_TEMP/install-aspire.sh" --version HostingAppHostPackageVersion
+          echo "$HOME/.aspire/bin" >> "$GITHUB_PATH"
+
+      - name: Check production configuration
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          : "${AZURE_CLIENT_ID:?Set the production AZURE_CLIENT_ID secret}"
+          : "${AZURE_TENANT_ID:?Set the production AZURE_TENANT_ID secret}"
+          : "${AZURE_SUBSCRIPTION_ID:?Set the production AZURE_SUBSCRIPTION_ID secret}"
+          : "${AZURE_LOCATION:?Set the production AZURE_LOCATION variable}"
+          : "${AZURE_RESOURCE_GROUP:?Set the production AZURE_RESOURCE_GROUP variable}"
+
+      - name: Sign in to Azure using OIDC
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Azure Container Apps
+        env:
+          Azure__SubscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          Azure__TenantId: ${{ secrets.AZURE_TENANT_ID }}
+          Azure__Location: ${{ vars.AZURE_LOCATION }}
+          Azure__ResourceGroup: ${{ vars.AZURE_RESOURCE_GROUP }}
+          Azure__CredentialSource: AzureCli
+        run: aspire deploy --apphost Aspire-StarterApplication.1.AppHost/Aspire-StarterApplication.1.AppHost.csproj --environment Production --non-interactive
