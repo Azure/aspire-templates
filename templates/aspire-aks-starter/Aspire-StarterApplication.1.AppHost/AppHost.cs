@@ -20,26 +20,23 @@ var webfrontend = builder.AddDotnetProject("webfrontend", "../Aspire-StarterAppl
     .WithReference(apiService)
     .WaitFor(apiService);
 
-if (builder.ExecutionContext.IsPublishMode)
-{
-    var vnet = builder.AddAzureVirtualNetwork("vnet", "10.100.0.0/16");
-    var aksSubnet = vnet.AddSubnet("aks-nodes", "10.100.0.0/22");
-    var albSubnet = vnet.AddSubnet("alb-public", "10.100.4.0/24");
+var vnet = builder.AddAzureVirtualNetwork("vnet", "10.100.0.0/16");
+var aksSubnet = vnet.AddSubnet("aks-nodes", "10.100.0.0/22");
+var albSubnet = vnet.AddSubnet("alb-public", "10.100.4.0/24");
 
-    var aks = builder.AddAzureKubernetesEnvironment("aks")
-        .WithSubnet(aksSubnet);
-    var publicLb = aks.AddLoadBalancer("public", albSubnet);
+var aks = builder.AddAzureKubernetesEnvironment("aks")
+    .WithSubnet(aksSubnet);
+var publicLb = aks.AddLoadBalancer("public", albSubnet);
 
-    var acmeEmail = builder.AddParameter("acme-email");
-    var certManager = aks.AddCertManager("cert-manager");
-    var letsencrypt = certManager.AddIssuer("letsencrypt-prod")
-        .WithLetsEncryptProduction(acmeEmail)
-        .WithHttp01Solver();
+var acmeEmail = builder.AddParameter("acme-email");
+var certManager = aks.AddCertManager("cert-manager");
+var letsencrypt = certManager.AddIssuer("letsencrypt-prod")
+    .WithLetsEncryptProduction(acmeEmail)
+    .WithHttp01Solver();
 
-    aks.AddGateway("web")
-        .WithLoadBalancer(publicLb)
-        .WithRoute("/", webfrontend.GetEndpoint("http"))
-        .WithTls(letsencrypt);
-}
+aks.AddGateway("web")
+    .WithLoadBalancer(publicLb)
+    .WithRoute("/", webfrontend.GetEndpoint("http"))
+    .WithTls(letsencrypt);
 
 builder.Build().Run();

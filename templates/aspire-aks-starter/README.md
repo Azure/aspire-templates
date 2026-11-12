@@ -18,10 +18,9 @@ aspire run
 
 In the generated app, run `aspire run` from the directory containing
 `aspire.config.json`. Use the dashboard's frontend link to open the app.
-The deployment gateway does not replace the local frontend endpoint. Azure network,
-AKS, gateway, and certificate resources are declared only in publish mode (used by
-both `aspire publish` and `aspire deploy`), so local runs do not provision them or
-require an ACME contact email.
+The deployment gateway does not replace the local frontend endpoint. Aspire applies
+the Azure network, AKS, gateway, and certificate resources during publishing and
+deployment; local runs do not provision them or require an ACME contact email.
 
 The template preserves the starter's .NET 10/.NET 11, HTTPS, `.dev.localhost`,
 port, and optional MSTest/NUnit/xUnit test-project options. Caching is **off by
