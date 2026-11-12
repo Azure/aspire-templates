@@ -1,0 +1,94 @@
+{
+  "createNuGetConfig": true,
+  "symbolInfo": {
+    "HostingAppHostVersion": {
+      "isHidden": true,
+      "valueSource": {
+        "kind": "nugetPackageVersion",
+        "packageId": "Aspire.Hosting.AppHost",
+        "versionRange": "[13.6.5]",
+        "allowPrerelease": false
+      }
+    },
+    "HostingDotnetVersion": {
+      "isHidden": true,
+      "valueSource": {
+        "kind": "nugetPackageVersion",
+        "packageId": "Aspire.Hosting.Dotnet",
+        "versionRange": "[13.6.5-preview.1.26559.7]",
+        "allowPrerelease": true
+      }
+    },
+    "HostingAzureKubernetesVersion": {
+      "isHidden": true,
+      "valueSource": {
+        "kind": "nugetPackageVersion",
+        "packageId": "Aspire.Hosting.Azure.Kubernetes",
+        "versionRange": "[13.6.5-preview.1.26559.7]",
+        "allowPrerelease": true
+      }
+    },
+    "HostingAzureNetworkVersion": {
+      "isHidden": true,
+      "valueSource": {
+        "kind": "nugetPackageVersion",
+        "packageId": "Aspire.Hosting.Azure.Network",
+        "versionRange": "[13.6.5]",
+        "allowPrerelease": false
+      }
+    },
+    "HostingAzureRedisVersion": {
+      "isHidden": true,
+      "valueSource": {
+        "kind": "nugetPackageVersion",
+        "packageId": "Aspire.Hosting.Azure.Redis",
+        "versionRange": "[13.6.5]",
+        "allowPrerelease": false
+      }
+    },
+    "AzureRedisClientVersion": {
+      "isHidden": true,
+      "valueSource": {
+        "kind": "nugetPackageVersion",
+        "packageId": "Aspire.Microsoft.Azure.StackExchangeRedis",
+        "versionRange": "[13.6.5]",
+        "allowPrerelease": false
+      }
+    },
+    "RedisOutputCachingVersion": {
+      "isHidden": true,
+      "valueSource": {
+        "kind": "nugetPackageVersion",
+        "packageId": "Aspire.StackExchange.Redis.OutputCaching",
+        "versionRange": "[13.6.5]",
+        "allowPrerelease": false
+      }
+    },
+    "HostingTestingVersion": {
+      "isHidden": true,
+      "valueSource": {
+        "kind": "nugetPackageVersion",
+        "packageId": "Aspire.Hosting.Testing",
+        "versionRange": "[13.6.5]",
+        "allowPrerelease": false
+      }
+    },
+    "Framework": { "isHidden": true },
+    "UseRedisCache": { "displayName": "Use Azure Managed Redis for caching (local runs require a container runtime)" },
+    "TestFx": { "displayName": "Test framework" },
+    "XUnitVersion": { "displayName": "xUnit.net version" },
+    "appHostHttpPort": { "isHidden": true },
+    "appHostHttpsPort": { "isHidden": true },
+    "appHostOtlpHttpPort": { "isHidden": true },
+    "appHostOtlpHttpsPort": { "isHidden": true },
+    "appHostResourceHttpPort": { "isHidden": true },
+    "appHostResourceHttpsPort": { "isHidden": true },
+    "webHttpPort": { "isHidden": true },
+    "webHttpsPort": { "isHidden": true },
+    "apiServiceHttpPort": { "isHidden": true },
+    "apiServiceHttpsPort": { "isHidden": true },
+    "skipRestore": { "isHidden": true },
+    "NoHttps": { "isHidden": true },
+    "LocalhostTld": { "displayName": "Use .dev.localhost URLs" }
+  }
+}
