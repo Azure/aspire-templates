@@ -18,7 +18,7 @@
   ],
   "name": "aspire-aks-starter",
   "defaultName": "AspireApp",
-  "description": "An Aspire Blazor frontend and web API targeting Azure Kubernetes Service with Application Gateway for Containers and Let's Encrypt TLS, with optional Azure Managed Redis caching.",
+  "description": "Blazor starter on Azure Kubernetes Service",
   "shortName": "aspire-aks-starter",
   "sourceName": "Aspire-StarterApplication.1",
   "preferNameDirectory": false,
