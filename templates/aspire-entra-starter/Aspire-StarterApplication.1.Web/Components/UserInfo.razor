@@ -1,0 +1,13 @@
+﻿<AuthorizeView>
+    <Authorized>
+        <span class="nav-item">Hello, @context.User.Identity?.Name</span>
+        <form action="authentication/logout" method="post" class="nav-item">
+            <AntiforgeryToken />
+            <input type="hidden" name="returnUrl" value="/" />
+            <button type="submit" class="btn btn-link nav-link">Log out</button>
+        </form>
+    </Authorized>
+    <NotAuthorized>
+        <a href="authentication/login?returnUrl=/" class="nav-link">Log in</a>
+    </NotAuthorized>
+</AuthorizeView>
