@@ -44,6 +44,12 @@ The AppHost follows the [Aspire AKS walkthrough](https://aspire.dev/deployment/k
 - An AKS cluster, Azure Container Registry, and the managed identities/permissions
   created by the native integration. `AddLoadBalancer` delegates the AGC subnet
   and enables the AKS-managed Gateway API and ALB ingress profiles.
+- System and workload node pools default to `Standard_D2as_v5`, matching the
+  [Aspire AKS cert-manager E2E test](https://github.com/microsoft/aspire/blob/005375592f33f7796fab23e813dacafa54d1947a/tests/Aspire.Deployment.EndToEnd.Tests/AksAzureKubernetesEnvironmentCertManagerDeploymentTests.cs#L130-L133).
+  Both pools autoscale from one to three nodes. The generated AppHost's
+  `appsettings.json` sets `Azure:AKS:VmSize`; override it with
+  `Azure__AKS__VmSize` or the AppHost argument `--Azure:AKS:VmSize`.
+  This SKU still requires regional availability and subscription vCPU quota.
 - `AddGateway("web")` routes `/` to the Blazor frontend's HTTP endpoint. The API
   remains an internal service; no API gateway route or public service is added.
 - `AddCertManager` installs cert-manager; a Let's Encrypt production ClusterIssuer

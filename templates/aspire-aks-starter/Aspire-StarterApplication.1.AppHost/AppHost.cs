@@ -24,8 +24,13 @@ var vnet = builder.AddAzureVirtualNetwork("vnet", "10.100.0.0/16");
 var aksSubnet = vnet.AddSubnet("aks-nodes", "10.100.0.0/22");
 var albSubnet = vnet.AddSubnet("alb-public", "10.100.4.0/24");
 
+var nodeVmSize = builder.Configuration["Azure:AKS:VmSize"]
+    ?? throw new InvalidOperationException("Azure:AKS:VmSize must specify an AKS node VM size.");
 var aks = builder.AddAzureKubernetesEnvironment("aks")
-    .WithSubnet(aksSubnet);
+    .WithSubnet(aksSubnet)
+    .WithSystemNodePool(nodeVmSize);
+aks.AddNodePool("workload", nodeVmSize, minCount: 1, maxCount: 3);
+
 var publicLb = aks.AddLoadBalancer("public", albSubnet);
 
 var acmeEmail = builder.AddParameter("acme-email");
