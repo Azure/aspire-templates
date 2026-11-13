@@ -1,0 +1,9 @@
+@ApiService_HostAddress = http://localhost:5301
+# /weatherforecast requires a Microsoft Entra ID access token for the API's "access_as_user" scope.
+@AccessToken = <access-token>
+
+GET {{ApiService_HostAddress}}/weatherforecast/
+Accept: application/json
+Authorization: Bearer {{AccessToken}}
+
+###
