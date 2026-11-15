@@ -109,13 +109,13 @@ public sealed class DroneFleetSimulator(
         drone.State = DroneState.Loading;
         await ReportAsync(drone, cancellationToken);
         var loaded = (time.GetUtcNow() > mission.ReadyAt ? time.GetUtcNow() : mission.ReadyAt) + LogisticsPlanner.LoadingTime;
-        await WaitUntilAsync(loaded, cancellationToken);
+        await WaitUntilAsync(drone, loaded, cancellationToken);
         await MilestoneAsync(drone, mission, MissionMilestone.PickedUp, cancellationToken);
 
         await FlyAsync(drone, toCustomer, DroneState.FlyingToCustomer, proofOfDelivery: true, cancellationToken);
         drone.State = DroneState.Unloading;
         await ReportAsync(drone, cancellationToken);
-        await WaitUntilAsync(time.GetUtcNow() + LogisticsPlanner.UnloadingTime, cancellationToken);
+        await WaitUntilAsync(drone, time.GetUtcNow() + LogisticsPlanner.UnloadingTime, cancellationToken);
         await MilestoneAsync(drone, mission, MissionMilestone.Delivered, cancellationToken);
 
         await FlyAsync(drone, toPad, DroneState.ReturningToPad, proofOfDelivery: false, cancellationToken);
@@ -166,11 +166,13 @@ public sealed class DroneFleetSimulator(
         }
     }
 
-    async Task WaitUntilAsync(DateTimeOffset until, CancellationToken cancellationToken)
+    async Task WaitUntilAsync(SimulatedDrone drone, DateTimeOffset until, CancellationToken cancellationToken)
     {
-        var delay = until - time.GetUtcNow();
-        if (delay > TimeSpan.Zero)
-            await Task.Delay(delay, time, cancellationToken);
+        while (until - time.GetUtcNow() is var remaining && remaining > TimeSpan.Zero)
+        {
+            await Task.Delay(remaining < options.ParkedTelemetryInterval ? remaining : options.ParkedTelemetryInterval, time, cancellationToken);
+            await ReportAsync(drone, cancellationToken);
+        }
     }
 
     Task ReportAsync(SimulatedDrone drone, CancellationToken cancellationToken) =>

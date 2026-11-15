@@ -123,7 +123,7 @@ export function addToBag(bag: Bag, line: BagLine, payload: PayloadSize): Bag {
 
 export type Stage = 'Preparing' | 'Ready for pickup' | 'Delivering' | 'Delivered';
 export type DroneAssignment = { id: string; pickupOrigin: Point; assignedAt: number };
-export type Order = { id: string; customer: string; bag: Bag; payload: PayloadSize; stage: Stage; elapsed: number; manual: boolean; drone?: DroneAssignment };
+export type Order = { id: string; customer: string; bag: Bag; payload: PayloadSize; stage: Stage; elapsed: number; manual: boolean; drone?: DroneAssignment; backend?: boolean; tracking?: OrderFlight; pickup?: Destination; dropOff?: Destination; note?: string | null; etaSeconds?: number; photo?: { url: string; timestamp: string; proofOfDelivery: boolean } };
 export type DemoState = { orders: Order[]; nextId: number; ticks: number; dronePads: Record<string, Point> };
 export const initialState: DemoState = {
   nextId: 1044, ticks: 0,
@@ -251,7 +251,13 @@ export type OrderFlight = Point & {
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
 const ease = (value: number) => value * value * (3 - 2 * value);
 export function orderFlight(order: Order, fraction = 0): OrderFlight {
-  const destination = destinationFor(order);
+  if (order.tracking) return order.tracking;
+  const destination = order.dropOff ?? destinationFor(order);
+  if (order.backend) return {
+    droneId: order.drone?.id ?? null, phase: 'Awaiting drone', manoeuvre: 'On the ground', origin: order.pickup ?? kitchen,
+    target: destination, destination, progress: 0, heading: 0, x: 0, y: 0, altitude: 0, cameraDown: 0,
+    remainingMetres: 0, etaSeconds: 0,
+  };
   const inbound = order.stage === 'Ready for pickup' && !!order.drone;
   const origin = inbound && order.drone ? order.drone.pickupOrigin : kitchen;
   const target = inbound ? { ...kitchen, label: 'ForthCoffee pickup' } : destination;

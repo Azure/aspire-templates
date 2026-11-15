@@ -26,9 +26,9 @@ The map is illustrative and cannot support navigation or real flight planning.
 
 ## Customer journey
 
-1. The landing experience opens directly into the customer menu, with a clear
-   **Barista & fleet** switch. This substitutes for demo sign-in during the spike;
-   no real account is required.
+1. The customer site opens directly into the menu. It contains no fleet operations,
+   vendor switch or login chooser. Fleet operations is a separate Vite/React site
+   and ASP.NET host with its own Aspire endpoint. Neither site has real authentication.
 2. Choose a single, double or quad payload first: one, two or four bays. The
    landing page is the payload builder itself; tapping a bay opens a tabbed
    selector (coffee builder or treats) and each bay holds one coffee or one treat.
@@ -43,14 +43,18 @@ The map is illustrative and cannot support navigation or real flight planning.
 3. Confirm a demo order explicitly. The customer lands on a dedicated order
    status page (`#/order/<id>`) with a four-step progress indicator, ETA, items
    and total. A home-page card links back to it.
-4. Once the order is ready, the status page adds two follow views: an overhead
+4. Once the order is ready and matching assigned-drone telemetry is available,
+   the status page adds two follow views: an overhead
    map centred on the assigned drone (illustrated, or Azure Maps when configured)
    and a simulated drone camera. The camera is a lazily loaded three.js scene: the
    ground plane is textured with the illustrated map, or Azure Maps road tiles
    when configured, with temporary placeholder buildings and trees to convey
    motion. It is labelled as a simulated feed, not real video. A reduced-motion
    preference removes bob and sub-second interpolation, and the page explains
-   when WebGL is unavailable.
+   when WebGL is unavailable. The inbound leg targets the pickup store, while the
+   order remains Ready for pickup. The same views continue through loading into
+   delivery. Queued assignments, unrelated missions and stale fixes never become
+   a misleading live view. The last captured backend frame is labelled separately.
 5. Offer a voice shortcut without making the menu less usable. The spike uses an
    editable example transcript; the UI explicitly says that it accesses no
    microphone and calls no AI.
@@ -64,21 +68,20 @@ single-bar experience replaces the earlier multi-vendor direction. Do not add a
 marketplace as a follow-up without a new scope decision. Plant-based milk is an
 option, never an allergen-free guarantee.
 
-## Vendor journey
+## Fleet operations journey
 
-The vendor portal presents a map and a live-feeling job queue together, with
-compact fleet indicators. Ready orders expose **Request pickup**. The simulation
-waits 30 seconds before automatic pickup so the reviewer can intervene.
-Pause/resume and reset controls support reproducible design review.
-The same browser-local order state is shared by the two views.
-
-Six fictional drones are represented: four independent looping map markers and
-two roster drones (FC-05/06). A customer-placed order is assigned one of the
-roster drones, which waits on the coffee bar's pad while the order is ready and flies
-a deterministic route to one of several fictional drop-offs while delivering,
-climbing and descending vertically at each end. The
-other map paths are visual scaffolding. Actual dispatch, return-to-base and battery state
-transitions are later work.
+The independent operations site presents the store map and dispatch queue together,
+with a roster of every API-reported drone. Both sites use the same server-owned
+orders and fleet; there is no browser-local simulation or portal switch.
+Each site has its own frontend folder, UI server and published assets. Azure
+SignalR Serverless delivers updates from the backend through its local emulator:
+customer connections receive only their order snapshots, while operator
+connections receive fleet/dispatch snapshots. REST restores initial and reconnect
+state; the clients do not substitute polling for realtime delivery.
+Logistics handles scheduling and pickup after preparation, arrival and loading.
+Battery, drone class, altitude, current order and queued missions are reported
+telemetry, not decorative constants. Browser skip, pickup and reset controls are
+removed because they would contradict the server-owned lifecycle.
 
 ## Maps and voice feasibility
 
@@ -99,8 +102,9 @@ requirements. An accessible text/manual flow must remain available.
 - A reviewer can select a payload, build customized coffees, fill spare capacity
   with treats, edit the contents, confirm it, and land on an order
   status page that follows the drone overhead and through a simulated camera.
-- **Skip to next stage (demo)** lets a reviewer reach each stage without waiting.
-- A vendor can request pickup before automatic dispatch.
+- Customer ordering appears in the independent operations queue via the shared API.
+- Ready orders follow only their assigned inbound mission and retain the camera
+  through pickup and delivery.
 - The scripted voice flow exposes its mock nature and never places an implicit
   order; unknown or modified requests stop for clarification.
 - Illustrative versus Azure Maps data and the simulation's limitations are clear.
@@ -115,8 +119,8 @@ pending, not success.
 
 ## Provisional architecture and follow-up
 
-Keep the starter's C# AppHost + Minimal API + Vite/React arrangement. Mock service
-data in the frontend until this direction is accepted. Next, prioritize shared
+Keep the C# AppHost + Minimal API + two Vite/React sites. Both sites use the API.
+Next, prioritize shared
 server-owned order/recipe/payload contracts, a deterministic simulator and
 real-time delivery updates. Choose messaging/storage only when their demo value
 justifies the added setup and cloud cost.

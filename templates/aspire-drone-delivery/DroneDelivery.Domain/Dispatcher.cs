@@ -24,7 +24,8 @@ public sealed record OrderSnapshot(
     DateTimeOffset? EstimatedDelivery,
     DateTimeOffset? DeliveredAt,
     string? Note,
-    IReadOnlyList<OrderPhoto> Photos);
+    IReadOnlyList<OrderPhoto> Photos,
+    DroneTelemetry? Telemetry = null);
 
 public sealed class OrderView(OrderPlaced order, PickupLocation store, DateTimeOffset readyAt)
 {
@@ -183,7 +184,14 @@ public sealed class Dispatcher
     public OrderSnapshot? Order(string orderId)
     {
         lock (gate)
-            return orders.GetValueOrDefault(orderId)?.Snapshot();
+        {
+            var view = orders.GetValueOrDefault(orderId);
+            if (view is null)
+                return null;
+            var telemetry = view.DroneId is { } droneId ? fleet.GetValueOrDefault(droneId) : null;
+            // A reserved drone may still be serving an earlier order.
+            return view.Snapshot() with { Telemetry = telemetry?.OrderId == orderId ? telemetry : null };
+        }
     }
 
     void Release(string droneId)

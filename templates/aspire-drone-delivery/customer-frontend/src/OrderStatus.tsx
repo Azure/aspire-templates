@@ -27,9 +27,9 @@ function FollowMap({ flight, settings, onSettings }: { flight: OrderFlight; sett
   const angle = flight.heading * 180 / Math.PI;
   const width = 560, height = 440;
   return <div className="follow-map">
-    {settings ? <AzureBasemap settings={settings} flights={[{ id: flight.droneId, x: flight.x, y: flight.y, status: flight.phase }]} follow={flight} route={flight.target} routeOrigin={flight.origin} />
+    {settings ? <AzureBasemap settings={settings} flights={[{ id: flight.droneId, x: flight.x, y: flight.y, status: flight.phase }]} follow={flight} route={flight.target} routeOrigin={flight.origin} stores={[{ ...(flight.target.label === 'ForthCoffee pickup' ? flight.target : flight.origin), label: 'ForthCoffee' }]} />
       : <svg viewBox={`${flight.x - width / 2} ${flight.y - height / 2} ${width} ${height}`} preserveAspectRatio="xMidYMid slice" role="img" aria-label={`Overhead illustrated map centred on drone ${flight.droneId}`}>
-        <MapArtwork routes={false} />
+        <MapArtwork routes={false} store={false} />
         <line x1={flight.origin.x} y1={flight.origin.y} x2={flight.target.x} y2={flight.target.y} stroke="#184b38" strokeWidth="2.5" strokeDasharray="6 6" opacity=".55" />
         <line x1={flight.origin.x} y1={flight.origin.y} x2={flight.x} y2={flight.y} stroke="#184b38" strokeWidth="3.5" strokeLinecap="round" />
         <g transform={`translate(${flight.target.x} ${flight.target.y})`}>
@@ -49,30 +49,32 @@ function FollowMap({ flight, settings, onSettings }: { flight: OrderFlight; sett
 }
 
 export default function OrderStatus({ order, orderId, settings, onSettings, onAdvance, onBack }: {
-  order: Order | undefined; orderId: string; settings: MapSettings | null; onSettings: () => void; onAdvance: () => void; onBack: () => void;
+  order: Order | undefined; orderId: string; settings: MapSettings | null; onSettings: () => void; onAdvance?: () => void; onBack: () => void;
 }) {
   if (!order) return <main className="status-page"><button className="text-button back-link" onClick={onBack}><ArrowLeft size={15} />Back to the menu</button>
-    <section className="status-missing"><h1>We can’t find order {orderId}.</h1><p>Demo orders live only in this browser tab and reset when the page reloads.</p><button className="primary-button" onClick={onBack}>Find something good <ArrowRight size={15} /></button></section></main>;
+    <section className="status-missing"><h1>We can’t find order {orderId}.</h1><p>This browser shows only the orders you placed here. The demo server resets on restart.</p><button className="primary-button" onClick={onBack}>Find something good <ArrowRight size={15} /></button></section></main>;
 
   const flight = orderFlight(order);
   const current = stages.indexOf(order.stage);
-  const followable = current >= 1 && flight.droneId !== null;
+  const followable = current >= 1 && flight.droneId !== null && (!order.backend || !!order.tracking);
   const copy = order.stage === 'Ready for pickup' && !flight.droneId
     ? { title: 'Ready. Waiting for a drone.', detail: 'Your coffee run is packed and sealed. The map and camera will appear once a drone is assigned.' }
     : order.stage === 'Ready for pickup' && flight.phase === 'On the pad'
     ? { title: 'Ready. Your drone is at the bar.', detail: 'Your drone has landed at ForthCoffee. Next stop: your drop-off.' }
+    : order.stage === 'Ready for pickup' && order.backend && !order.tracking
+    ? { title: 'Ready. Waiting for your drone.', detail: 'Your assigned drone may still be serving another order. Live views appear when current telemetry for your order arrives.' }
     : stageCopy[order.stage];
   const items = bagCount(order.bag);
   return <main className="status-page">
     <button className="text-button back-link" onClick={onBack}><ArrowLeft size={15} />Back to the menu</button>
     <section className="status-header" aria-live="polite">
       <div><div className="eyebrow">ORDER {order.id} · FORTHCOFFEE · {payloadNames[order.payload].toUpperCase()} PAYLOAD</div><h1>{copy.title}</h1><p>{copy.detail}</p></div>
-      <div className="status-eta"><span>{order.stage === 'Delivered' ? 'DELIVERED' : 'ESTIMATED ARRIVAL'}</span><strong>{flight.droneId ? eta(flight.etaSeconds) : 'Awaiting drone'}</strong><small>Accelerated demo time</small></div>
+      <div className="status-eta"><span>{order.stage === 'Delivered' ? 'DELIVERED' : 'ESTIMATED ARRIVAL'}</span><strong>{order.stage === 'Delivered' ? 'Arrived' : order.backend ? (order.etaSeconds === undefined ? 'Awaiting estimate' : eta(order.etaSeconds)) : flight.droneId ? eta(flight.etaSeconds) : 'Awaiting drone'}</strong><small>{order.backend ? 'Demo server estimate' : 'Accelerated demo time'}</small></div>
     </section>
     <ol className="status-steps" aria-label="Order progress">{stages.map((stage, index) => {
       const Icon = stageIcons[index];
       const state = index < current ? 'done' : index === current ? 'current' : 'upcoming';
-      const fill = state === 'done' ? 1 : state === 'current' ? (stage === 'Delivered' ? 1 : Math.min(1, order.elapsed / duration[stage])) : 0;
+      const fill = state === 'done' ? 1 : state === 'current' ? (stage === 'Delivered' ? 1 : order.backend ? 0 : Math.min(1, order.elapsed / duration[stage])) : 0;
       return <li key={stage} className={state} aria-current={state === 'current' ? 'step' : undefined}>
         <span className="step-icon">{state === 'done' ? <Check size={16} /> : <Icon size={16} />}</span>
         <span className="step-label">{stage}</span>
@@ -88,7 +90,7 @@ export default function OrderStatus({ order, orderId, settings, onSettings, onAd
             <Suspense fallback={<div className="drone-cam"><div className="cam-fallback" role="status">Starting simulated camera…</div></div>}><DroneCam order={order} settings={settings} /></Suspense></div>
         </div> : <div className="kitchen-card">
           <div className="kitchen-food">{order.bag.slice(0, 3).map(line => <div key={line.id}>{line.coffee ? <CoffeeCup options={line.coffee} style={line.itemId} /> : <FoodArt kind={menuItem(line.itemId).kind} />}</div>)}</div>
-          <div><span className="eyebrow">ON THE COFFEE BAR</span><h2>Made your way.<br /><em>Then on its way.</em></h2><p>{order.stage === 'Ready for pickup' ? 'Packed and waiting for an available drone. No drone is assigned yet.' : 'Your barista is preparing your flight box. Once a drone is assigned, follow its pickup and delivery through the map and simulated camera.'}</p></div>
+          <div><span className="eyebrow">YOUR COFFEE RUN</span><h2>Made your way.<br /><em>Then on its way.</em></h2><p>{order.stage === 'Ready for pickup' ? (order.drone ? 'Your drone is assigned. Waiting for current telemetry for this order; no unrelated flight is shown.' : 'Packed and waiting for an available drone. No drone is assigned yet.') : order.stage === 'Preparing' ? 'Your barista is preparing your flight box. Once a drone is assigned, follow its pickup and delivery through the map and simulated camera.' : order.stage === 'Delivered' ? 'Your coffee run has landed. Enjoy your ForthCoffee moment.' : 'Waiting for current telemetry from your assigned drone.'}</p>{order.note && <p role="status">{order.note}</p>}</div>
         </div>}
       </section>
       <aside className="status-summary">
@@ -98,12 +100,13 @@ export default function OrderStatus({ order, orderId, settings, onSettings, onAd
         <dl>
           <div><dt>Drone</dt><dd>{flight.droneId ?? 'Not yet assigned'}</dd></div>
           <div><dt>Payload</dt><dd>{payloadNames[order.payload]}</dd></div>
-          <div><dt>From</dt><dd>ForthCoffee, Coventry Street</dd></div>
+          <div><dt>From</dt><dd>{order.pickup?.label ?? 'ForthCoffee, Coventry Street'}</dd></div>
           <div><dt>To</dt><dd>{flight.destination.label}</dd></div>
           {(order.stage === 'Delivering' || flight.phase === 'To pickup') && <div><dt>{flight.phase === 'To pickup' ? 'To pickup' : 'Distance left'}</dt><dd>{flight.remainingMetres} m</dd></div>}
         </dl>
-        {order.stage !== 'Delivered' ? <button className="outline-button full-width" disabled={order.stage === 'Ready for pickup' && !flight.droneId} onClick={onAdvance}><FastForward size={14} />Skip to next stage (demo)</button>
-          : <button className="primary-button full-width" onClick={onBack}>Order something else <ArrowRight size={15} /></button>}
+        {order.stage !== 'Delivered' && onAdvance && <button className="outline-button full-width" disabled={order.stage === 'Ready for pickup' && !flight.droneId} onClick={onAdvance}><FastForward size={14} />Skip to next stage (demo)</button>}
+        {order.stage === 'Delivered' && <button className="primary-button full-width" onClick={onBack}>Order something else <ArrowRight size={15} /></button>}
+        {order.photo && <figure className="captured-frame"><img src={order.photo.url} alt={`Last simulated camera frame for ${order.id}`} /><figcaption>Last captured frame · {new Date(order.photo.timestamp).toLocaleTimeString()}{order.photo.proofOfDelivery ? ' · Proof of delivery' : ''}</figcaption></figure>}
         <p className="privacy-note"><ShieldCheck size={14} />Simulated order and flight. No payment, drone or camera is involved.</p>
       </aside>
     </div>

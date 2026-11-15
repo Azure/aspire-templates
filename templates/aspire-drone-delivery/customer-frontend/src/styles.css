@@ -553,3 +553,6 @@ footer button { display: flex; align-items: center; gap: 7px; background: none; 
 .proof-caret { position: absolute; left: 50%; top: -.02em; transform: translateX(-60%); font-size: .8em; font-weight: 700; line-height: 1; color: #b5552f; font-family: "Segoe Print", "Bradley Hand", cursive; font-style: normal; }
 .packing-section { padding-top: 28px; }
 @media (max-width: 760px) { .customer-intro h1 { font-size: 28px; } }
+.captured-frame { margin: 20px 0; }
+.captured-frame img { width: 100%; border-radius: 8px; }
+.captured-frame figcaption { font-size: 11px; color: #73816c; }

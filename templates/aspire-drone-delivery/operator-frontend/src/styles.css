@@ -1,0 +1,4 @@
+.operations-roster { margin-top: 40px; }
+.operations-drones { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.operations-drones article { display: flex; flex-direction: column; gap: 9px; padding: 20px; background: #fffdf7; border: 1px solid #dde1d5; border-radius: 8px; }
+.operations-drones small { color: #73816c; }

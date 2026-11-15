@@ -94,6 +94,22 @@ public class LogisticsTests
     }
 
     [Fact]
+    public void Order_tracking_does_not_expose_a_reserved_drones_unrelated_mission()
+    {
+        var dispatcher = new Dispatcher();
+        var telemetry = new DroneTelemetry("PIC-01", DroneClass.Piccolo, 1, Now, Store, Store, 0, 0, 100, DroneState.Parked, Manoeuvre.OnTheGround, null, null, 0);
+        dispatcher.Observe(telemetry);
+        dispatcher.Accept(new OrderPlaced("A", "c", "Test", Customer, 1, [], Now, "test"));
+        dispatcher.Accept(new OrderPlaced("B", "c", "Test", Customer, 1, [], Now, "test"));
+        dispatcher.PlanPending(Now);
+        dispatcher.Observe(telemetry with { Sequence = 2, OrderId = "A", State = DroneState.FlyingToPickup, Manoeuvre = Manoeuvre.Cruise });
+
+        Assert.Equal("A", dispatcher.Order("A")!.Telemetry!.OrderId);
+        Assert.Equal("PIC-01", dispatcher.Order("B")!.DroneId);
+        Assert.Null(dispatcher.Order("B")!.Telemetry);
+    }
+
+    [Fact]
     public void A_returned_drone_is_available_again_from_its_pad()
     {
         var dispatcher = new Dispatcher();

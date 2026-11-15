@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/template",
   "author": "Microsoft",
   "name": "ForthCoffee drone delivery (design preview)",
-  "description": "Build a coffee payload and follow its simulated flight over South Melbourne, with React and a C# Aspire AppHost.",
+  "description": "Separate customer and operator React sites and ASP.NET hosts, with server-owned dispatch and realtime SignalR drone tracking.",
   "identity": "Azure.Aspire.Templates.DroneDelivery.CSharp",
   "groupIdentity": "Azure.Aspire.DroneDelivery",
   "shortName": "aspire-drone-delivery",

@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { addToBag, bagFromBays, baysFromBag, bagTotal, canPickup, emptyBays, resizeBays, bagUnits, defaultCoffee, demoFlights, demoReducer, destinationFor, dropOffs, initialState, kitchen, linePrice, makeLine, matchSpokenOrder, orderFlight, stageTicks, validBag } from '../src/demo.ts';
 import { fromLonLat, toLonLat } from '../src/mapGeometry.ts';
 import type { Bag, Bays, CoffeeOptions, Order } from '../src/demo.ts';

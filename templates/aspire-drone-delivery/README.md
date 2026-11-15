@@ -2,8 +2,9 @@
 
 **Design preview, not a complete delivery service.** Explore one fictional coffee
 company in South Melbourne, Victoria: choose a payload, customize coffees and pack
-treats, then follow a simulated drone. A barista dispatch queue and scripted
-voice-ordering interaction share the same browser-local orders.
+treats, then follow a simulated drone. Two independent Vite/React sites share
+server-owned orders and fleet telemetry: a customer-only coffee experience and
+a fleet operations site. The voice-ordering shortcut is scripted.
 No real orders, payments, microphone recordings or drone flights occur.
 
 ## Run the design
@@ -18,33 +19,58 @@ From this directory:
 aspire run
 ```
 
-Open the frontend endpoint from the Aspire dashboard. The AppHost starts:
+Open **customer-site** for ordering and your own tracking, or **operator-site**
+for the store maps, dispatch queue and full fleet. There is no portal/login chooser
+or operations UI on the customer site. The AppHost starts:
 
 | Resource | What it does |
 | --- | --- |
 | `eventhubs` | Event Hubs emulator with `orders`, `drone-missions`, `drone-telemetry` and `drone-photos` hubs |
 | `storage` | Azurite with the `drone-photo-store` blob container for simulated camera images |
 | `drone-simulator` | Worker that owns the fleet: flies missions, sends telemetry and uploads camera shots |
-| `server` | Minimal API plus the logistics worker that assigns drones and estimates delivery times |
+| `backend` | Authoritative REST APIs, logistics, Event Hubs ingestion, fleet/orders/photos and realtime publisher (`DroneDelivery.Server`) |
+| `customer-server` | Customer UI host and service-discovered backend/negotiate proxy (`DroneDelivery.CustomerServer`) |
+| `operator-server` | Operator UI host and service-discovered backend/negotiate proxy (`DroneDelivery.OperatorServer`) |
 | `customer-simulator` | Worker that places orders from many customers at random South Melbourne locations |
-| `frontend` | Vite/React UI, published into the server's `wwwroot` like Aspire's `aspire-ts-cs-starter` |
+| `customer-site` | Customer-only Vite/React app in `customer-frontend`, published into CustomerServer `wwwroot` |
+| `operator-site` | Independent Vite/React app in `operator-frontend`, published into OperatorServer `wwwroot` |
+| `signalr` | Azure SignalR Service local emulator, using Serverless mode |
 
 The development launch profile uses localhost HTTP endpoints; its unsecured
 transport opt-in is local development configuration, not a deployment setting.
 
-For frontend-only design iteration:
+For separate frontend iteration, keep the API running and use either app:
 
 ```bash
-cd frontend
+cd customer-frontend
+npm ci
+npm run dev
+# Or, from the template root:
+cd operator-frontend
 npm ci
 npm run dev
 ```
 
-Open the localhost URL printed by Vite. Orders, the bag and map configuration
-exist only in browser memory and reset on reload. Each browser has an independent
-simulation. The minimal API's `/api/demo` and `/health` endpoints are available
-when the server is running; the UX spike does not require the API for its mock
-data.
+Open each localhost URL printed by Vite. Both proxy `/api` and `/realtime` to
+their own UI server, provided by Aspire (`SERVER_HTTPS` or `SERVER_HTTP`);
+standalone Vite uses localhost ports 5383 (customer) and 5384 (operator).
+Set `SERVER_HTTP` to the matching UI host's actual endpoint when running outside
+Aspire. There is no browser-local order or fleet simulation.
+The customer stores up to 20 order receipts in localStorage and subscribes only
+to those order IDs. Bag contents and map credentials remain in page memory. Backend orders
+reset when the server restarts, with missing-order errors shown explicitly.
+
+Each frontend publishes its `dist` into its own UI server's `wwwroot` using
+`PublishWithContainerFiles`. The two ASP.NET servers have independent processes
+and endpoints; neither contains logistics nor shares a static-file root.
+Frontend builds are self-contained, including map artwork and theme assets,
+so their publish contexts need no sibling source directories.
+Both UI servers proxy to the service-discovered backend. This packaging is not an Azure
+deployment claim; no deployment target is configured.
+
+This is not an authentication boundary: receipts filter the customer UI, but the
+demo API is unauthenticated. Add authorization before exposing real customer data
+or operations controls publicly.
 
 ## Simulated fleet and demand
 
@@ -85,9 +111,33 @@ Tune the simulation with environment variables in `DroneDelivery.AppHost/AppHost
 Active customers rise and fall between the quiet share and the peak over each
 demand cycle. Fleet state lives in memory, so it resets when the simulator restarts.
 
-The server exposes `GET /api/fleet`, `GET /api/orders`, `GET /api/orders/{id}`,
-`POST /api/orders` and `GET /api/photos/{droneId}/{fileName}`. The React UI does
-not use these APIs yet; it still runs its own browser simulation.
+The backend exposes `GET /api/fleet`, `GET /api/stores`, `GET /api/orders`,
+`GET /api/orders/{id}`, `POST /api/orders` and
+`GET /api/photos/{droneId}/{fileName}`. Single-order
+responses include telemetry only when it belongs to that order and assigned drone.
+
+## Realtime updates
+
+Azure SignalR Service was selected instead of Web PubSub: they are different
+protocols, not interchangeable clients. Aspire 17.0 supports
+`AddAzureSignalR("signalr", AzureSignalRServiceMode.Serverless).RunAsEmulator()`.
+The emulator supports **Serverless mode only**. No default-mode hub server is
+hosted: the backend publishes through `Microsoft.Azure.SignalR.Management`
+with transient transport, and the UI hosts expose their own negotiation routes.
+
+The customer subscribes to the `customers` hub under its order ID and receives
+only that order's snapshot. The operator subscribes to the separate `operators`
+hub and receives fleet, stores and dispatch snapshots. Initial connection and
+reconnect recover authoritative REST snapshots; realtime transport failures are
+visible, with retries but no silent browser-polling substitute.
+Customer order IDs are demo subscription identity, not authentication.
+The backend retains at most 512 customer subscriptions, with one-hour leases
+renewed on negotiation; expired subscriptions are removed rather than publishing
+every historical order forever.
+
+References: [Aspire SignalR integration](https://aspire.dev/integrations/cloud/azure/signalr/),
+[emulator limitations](https://learn.microsoft.com/azure/azure-signalr/signalr-howto-emulator),
+[Management SDK](https://learn.microsoft.com/azure/azure-signalr/signalr-howto-use-management-sdk).
 
 ## Things to try
 
@@ -103,15 +153,16 @@ not use these APIs yet; it still runs its own browser simulation.
    confirm a demo order. You land on its status page. Once it is ready and a drone
    is assigned, follow that drone's inbound flight to the bar on an overhead map
    and through a simulated drone camera. The order stays **Ready for pickup**
-   until pickup, and both views carry on into delivery. If both drones are busy,
-   the order waits without showing an unrelated drone or camera. Use **Skip to next stage
-   (demo)** to move on without waiting.
-2. Switch to **Barista & fleet**. Coffee customizations appear on the docket.
-   Request pickup once the assigned drone has landed at the bar.
-   Otherwise it dispatches automatically after 30 seconds and drone arrival;
-   the inbound flight takes 24 seconds from assignment. Preparation takes
-   20 seconds and simulated delivery another 35. New orders arrive every 45
-   simulation seconds. Pause/resume or reset the scene.
+   until pickup, and both views carry on into delivery. A reserved drone serving
+   another order, absent telemetry or a fix older than 30 seconds never produces
+   an unrelated live view. Select your drop-off before confirming.
+2. Open the separate **operator-site** endpoint. Coffee customizations appear
+   on the docket alongside synthetic orders. Store locations, drone classes,
+   battery levels, altitude, current work and queued missions come from the API.
+   Logistics handles automatic pickup after preparation and drone arrival, including
+   30 seconds for loading. Preparation takes 45 seconds plus 15 per payload bay;
+   flight duration depends on distance and drone class. There are no browser
+   skip/pickup/pause/reset controls that could contradict server state.
 3. Choose **Try a voice-order preview**. Edit “one latte and two biscuits”,
    match it to the menu, review the proposed payload, then separately confirm.
    Coffee defaults are regular, hot, double-shot with full cream milk (or no milk
@@ -122,18 +173,24 @@ not use these APIs yet; it still runs its own browser simulation.
    clarification rather than silently changing the request.
 4. Open **Map options** to investigate an Azure Maps basemap.
 
-The four looping drone icons are illustrative and not assigned to orders. Ready
-orders reserve an available FC-05 or FC-06, which flies from its last drop-off
-(or its initial demo pad) back to ForthCoffee before pickup. The assignment and
-camera persist into the deterministic delivery route from
-ForthCoffee's fictional Coventry Street bar to one of seven South Melbourne drop-offs, taking off and
-landing vertically. The drone camera points straight down during take-off and landing. It is a three.js scene
-with placeholder buildings, not real video. It uses Azure Maps road tiles for the
+Only API-reported drones appear in the operations map. Customer tracking uses the
+assigned drone's actual simulator telemetry, with no browser-generated flight leg.
+The three.js camera stays mounted through inbound flight, loading and delivery
+and points straight down during take-off and landing. It has placeholder buildings,
+not real video. A separately labelled last captured frame comes from the server's
+blob-photo proxy, including proof of delivery when available.
+The rendered camera uses Azure Maps road tiles for the
 ground when Azure Maps is configured, otherwise the illustrated map. If WebGL is
 unavailable, the overhead map still follows the drone.
 Prices, battery levels and the company are fictional design data.
 Plant milk choices are not an allergen-free guarantee; no dietary suitability is claimed.
 This is not a navigation map or a flight planning tool.
+
+## Checks
+
+Run `npm test` (Vitest) and `npm run build` in both `customer-frontend` and `operator-frontend`.
+Run `dotnet test DroneDelivery.Tests` and
+`dotnet build DroneDelivery.AppHost/DroneDelivery.AppHost.csproj` from this directory.
 
 ## Azure Maps feasibility spike
 
@@ -206,7 +263,11 @@ packages; remove that source once the packages are on nuget.org.
 ```bash
 dotnet build DroneDelivery.AppHost
 dotnet test DroneDelivery.Tests
-cd frontend
+cd customer-frontend
+npm ci
+npm test
+npm run build
+cd ../operator-frontend
 npm ci
 npm test
 npm run build
@@ -223,9 +284,9 @@ their large vendor chunks produce a Vite size advisory.
 ## Not ready yet
 
 `aspire deploy` is **not configured in this design phase**. Real Azure deployment,
-wiring the UI to the backend orders and fleet, live updates, genuine
-speech/AI integration and end-to-end template validation are subsequent work.
-Do not treat this preview as meeting the epic's deployment acceptance criteria.
+genuine speech/AI integration and production identity/persistence are subsequent work.
+Customer and operator clients already use the authoritative backend and scoped
+SignalR updates. Do not treat this preview as meeting deployment acceptance criteria.
 
 The [design](https://github.com/Azure/aspire-templates/blob/feature/drone-delivery/docs/drone-delivery/design.md) and
 [architecture](https://github.com/Azure/aspire-templates/blob/feature/drone-delivery/docs/drone-delivery/architecture.md) notes in the repository

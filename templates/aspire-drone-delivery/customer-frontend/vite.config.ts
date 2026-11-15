@@ -9,6 +9,10 @@ export default defineConfig({
         target: process.env.SERVER_HTTPS || process.env.SERVER_HTTP || 'http://localhost:5383',
         changeOrigin: true,
       },
+      '/realtime': {
+        target: process.env.SERVER_HTTPS || process.env.SERVER_HTTP || 'http://localhost:5383',
+        changeOrigin: true,
+      },
     },
   },
 });

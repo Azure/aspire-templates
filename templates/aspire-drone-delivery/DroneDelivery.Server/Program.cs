@@ -22,6 +22,14 @@ builder.AddAzureBlobContainerClient(Hubs.PhotoContainer);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<Dispatcher>();
 builder.Services.AddHostedService<LogisticsWorker>();
+builder.Services.AddSingleton(sp => RealtimeContexts.CreateManager(
+    builder.Configuration.GetConnectionString("signalr")
+        ?? throw new InvalidOperationException("The signalr connection string is required."),
+    sp.GetRequiredService<ILoggerFactory>()));
+builder.Services.AddSingleton<CustomerSubscriptions>();
+builder.Services.AddSingleton<RealtimeContexts>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<RealtimeContexts>());
+builder.Services.AddHostedService<RealtimeWorker>();
 
 var app = builder.Build();
 app.UseExceptionHandler();
@@ -31,13 +39,16 @@ app.MapGet("/api/demo", () => new
 {
     name = "ForthCoffee",
     location = "South Melbourne, Victoria",
-    mode = "Simulated customers and drones communicate through Event Hubs; the web UI still runs its own browser simulation",
+    mode = "Customer and fleet operations sites share simulated orders, drone telemetry and camera events through the API",
 });
 
 app.MapGet("/api/fleet", (Dispatcher dispatcher) => dispatcher.Fleet());
+app.MapGet("/api/stores", () => ServiceArea.Stores);
 app.MapGet("/api/orders", (Dispatcher dispatcher, int? take) => dispatcher.Orders(Math.Clamp(take ?? 50, 1, 500)));
 app.MapGet("/api/orders/{orderId}", (Dispatcher dispatcher, string orderId) =>
     dispatcher.Order(orderId) is { } order ? Results.Ok(order) : Results.NotFound());
+
+app.MapRealtimeEndpoints();
 
 // Web orders take the same path as simulated customers: onto the orders hub, then through logistics.
 app.MapPost("/api/orders", async (
@@ -50,10 +61,13 @@ app.MapPost("/api/orders", async (
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["lines"] = ["Choose between one and four items."] });
     if (!ServiceArea.Contains(request.DropOff))
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["dropOff"] = ["Drop-off must be inside the South Melbourne service area."] });
+    var payloadBays = request.PayloadBays ?? (request.Lines.Count switch { 1 => 1, 2 => 2, _ => 4 });
+    if (payloadBays is not (1 or 2 or 4) || payloadBays < request.Lines.Count)
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["payloadBays"] = ["Choose a single, double or quad payload that fits the items."] });
     var lines = request.Lines.Select(item => new OrderLine(item.Trim(), 1)).ToList();
     var order = new OrderPlaced(
         $"FC-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}", "web", request.CustomerName?.Trim() is { Length: > 0 } name ? name : "You",
-        request.DropOff, lines.Count switch { 1 => 1, 2 => 2, _ => 4 }, lines, time.GetUtcNow(), "web");
+        request.DropOff, payloadBays, lines, time.GetUtcNow(), "web");
     await orders.SendAsync(order, order.CustomerId, cancellationToken);
     return Results.Accepted($"/api/orders/{order.OrderId}", new { order.OrderId });
 });
@@ -72,12 +86,9 @@ app.MapGet("/api/photos/{droneId}/{fileName}", async (string droneId, string fil
     return Results.Stream(download.Value.Content, "image/svg+xml");
 });
 
-app.UseDefaultFiles();
-app.UseStaticFiles();
-app.MapFallbackToFile("index.html");
 app.Run();
 
-record PlaceOrder(string? CustomerName, GeoPoint DropOff, IReadOnlyList<string> Lines);
+record PlaceOrder(string? CustomerName, GeoPoint DropOff, IReadOnlyList<string> Lines, int? PayloadBays);
 
 static partial class Program
 {

@@ -1,31 +1,29 @@
 {
-  "name": "drone-delivery-design",
+  "name": "forthcoffee-operations",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "engines": {
-    "node": ">=22.13.0"
-  },
+  "engines": { "node": ">=22.13.0" },
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
-    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test": "vitest run",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
+    "@microsoft/signalr": "^10.0.0",
     "azure-maps-control": "^3.7.0",
     "lucide-react": "^1.73.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "three": "^0.187.0"
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
-    "@types/three": "^0.187.0",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.9.3",
-    "vite": "^7.3.0"
+    "vite": "^7.3.0",
+    "vitest": "^3.2.0"
   }
 }
