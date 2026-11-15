@@ -66,6 +66,7 @@ main { max-width: 1600px; margin: auto; }
 .live-dot { display: inline-block; height: 6px; width: 6px; border-radius: 50%; background: #618864; flex-shrink: 0; box-shadow: 0 0 0 3px #8cab7412; }
 .hero-drone { width: min(94%, 520px); z-index: 1; margin-top: -22px; animation: float 6s ease-in-out infinite; }
 @keyframes float { 50% { transform: translateY(-9px) rotate(1deg); } }
+@keyframes pulse { 50% { opacity: .35; } }
 .floating-delivery { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 13px; background: #fffef7ee; box-shadow: 0 8px 32px #374c3610; border: 1px solid #e8e9dc; padding: 13px 15px; border-radius: 7px; width: 287px; z-index: 2; }
 .floating-icon { width: 33px; height: 33px; background: #edf0e3; display: grid; place-items: center; border-radius: 50%; }
 .floating-delivery strong { font-size: 10px; font-weight: 600; display: block; }
@@ -254,6 +255,69 @@ footer button { display: flex; align-items: center; gap: 7px; background: none; 
 .bag-summary > .bag-total { color: var(--forest); border-top: 1px solid var(--line); margin-top: 13px; padding-top: 17px; font-size: 14px; }
 .about-features { display: grid; gap: 18px; font-size: 12px; margin: 25px 0; }
 .about-features span { display: flex; gap: 12px; align-items: center; color: #667e57; }
+.tracking-panel .primary-button { margin-top: 18px; }
+.status-page { padding: 26px 5.2% 60px; max-width: 1540px; margin: 0 auto; }
+.back-link { padding: 0; margin-bottom: 22px; }
+.status-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 30px; }
+.status-header h1 { font-family: Georgia, serif; font-weight: 400; font-size: 44px; line-height: 1.1; margin: 12px 0 10px; color: var(--ink); }
+.status-header p { color: var(--muted); font-size: 13px; }
+.status-eta { text-align: right; border-left: 1px solid var(--line); padding-left: 26px; min-width: 170px; }
+.status-eta span { font-size: 8px; letter-spacing: 1.5px; color: #7f8a73; }
+.status-eta strong { display: block; font-size: 28px; font-weight: 500; color: var(--forest); margin: 6px 0 2px; }
+.status-eta small { font-size: 9px; color: #9aa08f; }
+.status-steps { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 28px 0 24px; padding: 0; }
+.status-steps li { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; gap: 10px 10px; align-items: center; background: #fffefa; border: 1px solid var(--line); border-radius: 7px; padding: 14px; color: #8c9384; }
+.step-icon { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: #eef0e6; }
+.step-label { font-size: 12px; }
+.step-bar { grid-column: 1 / -1; height: 3px; background: #edefe6; border-radius: 2px; overflow: hidden; }
+.step-bar i { display: block; height: 100%; background: var(--forest); transition: width 1s linear; }
+.status-steps li.done { color: var(--forest); }
+.status-steps li.done .step-icon { background: #dce8d4; }
+.status-steps li.current { border-color: #b8ccaa; background: #f3f6ec; color: var(--ink); }
+.status-steps li.current .step-icon { background: var(--forest); color: #fffef5; }
+.status-steps li.current .step-label { font-weight: 600; }
+.status-grid { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 20px; align-items: start; }
+.follow-views { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 14px; }
+.follow-panel { background: #fffefa; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.follow-heading { display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; border-bottom: 1px solid var(--line); font-size: 11px; }
+.follow-heading > span { display: flex; align-items: center; gap: 8px; color: var(--ink); }
+.follow-heading small { font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: #7f8a73; }
+.rec-dot { width: 8px; height: 8px; border-radius: 50%; background: #c84a3a; animation: pulse 1.6s infinite; }
+.follow-map, .drone-cam { position: relative; height: 430px; overflow: hidden; background: #c7ddda; }
+.follow-map > svg { width: 100%; height: 100%; display: block; }
+.drop-pulse { animation: pulse 1.8s infinite; }
+.drone-cam { background: #dfe9e4; }
+.drone-cam canvas { width: 100% !important; height: 100% !important; display: block; }
+.cam-hud { position: absolute; inset: 0; pointer-events: none; color: #fffef5; font: 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .6px; text-shadow: 0 1px 3px #0009; }
+.cam-hud::before, .cam-hud::after { content: ""; position: absolute; inset: 14px; border: 2px solid #fffef5aa; clip-path: polygon(0 0, 24px 0, 24px 2px, 2px 2px, 2px 24px, 0 24px, 0 calc(100% - 24px), 2px calc(100% - 24px), 2px calc(100% - 2px), 24px calc(100% - 2px), 24px 100%, 0 100%); }
+.cam-hud::after { transform: scaleX(-1); }
+.cam-rec, .cam-id, .cam-readout { background: #13261dbb; padding: 5px 8px; border-radius: 3px; }
+.cam-rec { position: absolute; top: 24px; left: 28px; display: flex; align-items: center; gap: 7px; }
+.cam-rec i { width: 8px; height: 8px; background: #e2513f; border-radius: 50%; animation: pulse 1.6s infinite; }
+.cam-id { position: absolute; top: 24px; right: 28px; }
+.cam-cross { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; transform: translate(-50%, -50%); border: 1px solid #fffef5aa; border-radius: 50%; }
+.cam-readout { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); white-space: nowrap; }
+.cam-credit { position: absolute; bottom: 6px; right: 10px; font-size: 7px; color: #314034; background: #fffef5c0; padding: 2px 4px; }
+.cam-note { position: absolute; top: 48px; left: 20px; right: 20px; background: #fff2df; border: 1px solid #c89759; color: #77542b; padding: 8px; font-size: 10px; }
+.cam-fallback { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 8px; padding: 30px; color: #53644c; font-size: 12px; }
+.kitchen-card { display: flex; align-items: center; gap: 30px; background: #fffefa; border: 1px solid var(--line); border-radius: 7px; padding: 34px; min-height: 300px; }
+.kitchen-card h2 { font-family: Georgia, serif; font-weight: 400; font-size: 30px; margin: 12px 0; }
+.kitchen-card p { color: var(--muted); font-size: 13px; line-height: 1.7; max-width: 460px; }
+.kitchen-food { display: flex; }
+.kitchen-food > div { width: 120px; height: 120px; border-radius: 50%; overflow: hidden; border: 4px solid #fffefa; background: #eee8db; margin-left: -26px; box-shadow: 0 4px 14px #30492a14; }
+.kitchen-food > div:first-child { margin-left: 0; }
+.kitchen-food svg { width: 100%; height: 100%; display: block; transform: scale(1.7); }
+.status-summary { background: #fffefa; border: 1px solid var(--line); border-radius: 7px; padding: 22px; display: grid; gap: 16px; }
+.status-summary ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; font-size: 12px; }
+.status-summary li, .summary-total { display: flex; justify-content: space-between; gap: 12px; }
+.summary-total { border-top: 1px solid var(--line); padding-top: 14px; font-size: 13px; color: var(--forest); }
+.status-summary dl { margin: 0; display: grid; gap: 9px; font-size: 11px; }
+.status-summary dl > div { display: flex; justify-content: space-between; gap: 12px; }
+.status-summary dt { color: #8a9180; }
+.status-summary dd { margin: 0; text-align: right; }
+.status-summary .outline-button { justify-content: center; }
+.status-missing { padding: 60px 0; display: grid; gap: 16px; justify-items: start; }
+.status-missing h1 { font-family: Georgia, serif; font-weight: 400; font-size: 36px; }
 @media (min-width: 1600px) { .site-header, .demo-strip, footer { padding-left: max(5.2%, calc((100% - 1434px) / 2)); padding-right: max(5.2%, calc((100% - 1434px) / 2)); } }
 @media (max-width: 1100px) {
   .portal-switch { margin-left: 0; }
@@ -268,6 +332,7 @@ footer button { display: flex; align-items: center; gap: 7px; background: none; 
   .restaurant-name { font-size: 5px; }
   .menu-card h3 { font-size: 12px; }
   .operations-grid { grid-template-columns: 1.5fr 1fr; gap: 14px; }
+  .status-grid { grid-template-columns: 1fr; }
   .fleet-strip { flex-wrap: wrap; justify-content: flex-start; gap: 18px; }
   .fleet-strip > div { flex: 1; min-width: 100px; }
   .footer-coordinates { display: none; }
@@ -351,6 +416,18 @@ footer button { display: flex; align-items: center; gap: 7px; background: none; 
   .modal { padding: 29px 23px; }
   .modal h2 { font-size: 28px; }
   .modal-backdrop { padding: 12px; }
+  .status-page { padding: 20px 5% 40px; }
+  .status-header { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .status-header h1 { font-size: 32px; }
+  .status-eta { text-align: left; border-left: 0; border-top: 1px solid var(--line); padding: 14px 0 0; width: 100%; }
+  .status-steps { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .status-steps li { padding: 10px; }
+  .step-label { font-size: 10px; }
+  .follow-views { grid-template-columns: 1fr; }
+  .follow-map { height: 260px; }
+  .drone-cam { height: 300px; }
+  .kitchen-card { flex-direction: column; align-items: flex-start; padding: 24px; }
+  .kitchen-food > div { width: 90px; height: 90px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; scroll-behavior: auto !important; transition: none !important; }

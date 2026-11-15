@@ -30,12 +30,21 @@ The map is illustrative and cannot support navigation or real flight planning.
    no real account is required.
 2. Find an item through categories or search. Add items and adjust quantities in
    the bag. Show AUD pricing and the full total before confirmation.
-3. Confirm a demo order explicitly. Show preparation, readiness for pickup,
-   delivery and arrival in a tracking card.
-4. Offer a voice shortcut without making the menu less usable. The spike uses an
+3. Confirm a demo order explicitly. The customer lands on a dedicated order
+   status page (`#/order/<id>`) with a four-step progress indicator, ETA, items
+   and total. A home-page card links back to it.
+4. Once the order is ready, the status page adds two follow views: an overhead
+   map centred on the assigned drone (illustrated, or Azure Maps when configured)
+   and a simulated drone camera. The camera is a lazily loaded three.js scene: the
+   ground plane is textured with the illustrated map, or Azure Maps road tiles
+   when configured, with temporary placeholder buildings and trees to convey
+   motion. It is labelled as a simulated feed, not real video. A reduced-motion
+   preference removes bob and sub-second interpolation, and the page explains
+   when WebGL is unavailable.
+5. Offer a voice shortcut without making the menu less usable. The spike uses an
    editable example transcript; the UI explicitly says that it accesses no
    microphone and calls no AI.
-5. Match only recognized menu items and quantities. A voice proposal replaces the
+6. Match only recognized menu items and quantities. A voice proposal replaces the
    bag only after the user chooses it, and placing the order still needs a
    separate confirmation. Unsupported modifiers, dietary requests, unknown
    products or ambiguous quantities ask for clarification.
@@ -53,8 +62,10 @@ Pause/resume and reset controls support reproducible design review.
 The same browser-local order state is shared by the two views.
 
 Six fictional drones are represented: four independent looping map markers and
-two charging roster entries. The map paths are visual scaffolding, not
-order-assigned routes. Actual dispatch, return-to-base and battery state
+two roster drones (SKY-05/06). A customer-placed order is assigned one of the
+roster drones, which waits on the kitchen pad while the order is ready and flies
+a deterministic straight route to a fictional drop-off while delivering. The
+other map paths are visual scaffolding. Actual dispatch, return-to-base and battery state
 transitions are later work.
 
 ## Maps and voice feasibility
@@ -73,7 +84,9 @@ requirements. An accessible text/manual flow must remain available.
 ## Immediate review criteria
 
 - Both views are understandable and usable at desktop and mobile widths.
-- A reviewer can add food, inspect/edit a bag, confirm it, and see order tracking.
+- A reviewer can add food, inspect/edit a bag, confirm it, and land on an order
+  status page that follows the drone overhead and through a simulated camera.
+- **Skip to next stage (demo)** lets a reviewer reach each stage without waiting.
 - A vendor can request pickup before automatic dispatch.
 - The scripted voice flow exposes its mock nature and never places an implicit
   order; unknown or modified requests stop for clarification.

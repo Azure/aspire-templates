@@ -28,8 +28,9 @@ flowchart LR
 | --- | --- | --- |
 | AppHost | Start the API and Vite frontend; expose resources in the dashboard | No deployment target configured |
 | API | Health endpoint, demo metadata and published frontend hosting | No order mutations or persistence |
-| React UI | Customer/vendor views, bag, confirmed orders and scripted transcript matching | In-memory, per browser; no real authentication |
-| Simulation | Timed preparation, pickup, delivery and synthetic order creation | Independent illustrative drone loops; not real dispatch |
+| React UI | Customer/vendor views, bag, confirmed orders, order status page and scripted transcript matching | In-memory, per browser; hash route only; no real authentication |
+| Simulated drone camera | Lazily loaded three.js view of the assigned drone's route over a map-textured ground plane | Placeholder scenery; not video; Azure Maps tiles only with the reviewer's token |
+| Simulation | Timed preparation, pickup, delivery, synthetic orders and a deterministic flight for customer orders | Other drones are illustrative loops; not real dispatch |
 | Azure Maps adapter | Real basemap and fictional animated markers | Opt-in reviewer token, no refresh or resource provisioning |
 
 Simulation order history is capped at 20 recent entries, synthetic active orders

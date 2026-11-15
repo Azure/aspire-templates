@@ -39,7 +39,9 @@ data.
 ## Things to try
 
 1. Browse or filter the menu, add items, review the bag, and explicitly confirm a
-   demo order. Follow its progress in the customer view.
+   demo order. You land on its status page. Once it is ready, follow the drone on
+   an overhead map and through a simulated drone camera. Use **Skip to next stage
+   (demo)** to move on without waiting.
 2. Switch to **Kitchen & fleet**. Request pickup for an order that is ready.
    Otherwise it dispatches automatically after 30 seconds; preparation takes
    20 seconds and simulated delivery another 35. New orders arrive every 45
@@ -51,8 +53,12 @@ data.
    clarification rather than silently changing the request.
 4. Open **Map options** to investigate an Azure Maps basemap.
 
-The four moving drone icons follow independent illustrative loops; they are not
-assigned to individual orders. Two additional drones are shown charging at base.
+The four looping drone icons are illustrative and not assigned to orders. Your
+own order is assigned SKY-05 or SKY-06, which flies a deterministic route from
+Peninsula Kitchen to a fictional drop-off. The drone camera is a three.js scene
+with placeholder buildings, not real video. It uses Azure Maps road tiles for the
+ground when Azure Maps is configured, otherwise the illustrated map. If WebGL is
+unavailable, the overhead map still follows the drone.
 Prices, menu ratings, battery levels and all businesses are fictional design data.
 This is not a navigation map or a flight planning tool.
 
@@ -78,6 +84,10 @@ Maps Data Reader** access to that account:
    The token is retained only in page memory, sent to Azure Maps by its SDK,
    and is not stored by the sample server. Reload or switch to the illustrated
    map to clear it. There is no automatic token renewal in this spike.
+   While an order's drone camera is open, the page also requests 36
+   zoom-16 road tiles directly from `atlas.microsoft.com` with the same token to
+   texture the simulated ground. If any tile fails, the camera says so and falls
+   back to the illustrated ground.
 
 The account must be reachable from the browser and its policies must allow the
 requested access. Token/account/network failures appear on the map rather than
@@ -130,8 +140,9 @@ npm run build
 ```
 
 The tests cover conservative transcript matching, confirmation-only order
-creation, invalid bags and the simulation lifecycle. The Azure Maps SDK is loaded
-only when selected; its large vendor chunk produces a Vite size advisory.
+creation, invalid bags, the simulation lifecycle, the order's drone flight and
+demo stage skipping. The Azure Maps SDK and three.js are loaded only when needed;
+their large vendor chunks produce a Vite size advisory.
 
 ## Not ready yet
 

@@ -38,7 +38,10 @@ export function validBag(bag: Bag) {
     menu.some(item => item.id === id) && Number.isInteger(count) && count > 0 && count <= 9);
 }
 
-export type Action = { type: 'tick' } | { type: 'confirm'; bag: Bag } | { type: 'pickup'; id: string } | { type: 'reset' };
+export const stageTicks = { preparing: 20, ready: 30, flight: 35 } as const;
+export const stages: Stage[] = ['Preparing', 'Ready for pickup', 'Delivering', 'Delivered'];
+
+export type Action = { type: 'tick' } | { type: 'confirm'; bag: Bag } | { type: 'pickup'; id: string } | { type: 'advance'; id: string } | { type: 'reset' };
 export function demoReducer(state: DemoState, action: Action): DemoState {
   if (action.type === 'reset') return initialState;
   if (action.type === 'confirm') {
@@ -52,12 +55,16 @@ export function demoReducer(state: DemoState, action: Action): DemoState {
     ...state, orders: state.orders.map(order => order.id === action.id && order.stage === 'Ready for pickup'
       ? { ...order, stage: 'Delivering', elapsed: 0 } : order),
   };
+  if (action.type === 'advance') return {
+    ...state, orders: state.orders.map(order => order.id === action.id && order.stage !== 'Delivered'
+      ? { ...order, stage: stages[stages.indexOf(order.stage) + 1], elapsed: 0 } : order),
+  };
   const ticks = state.ticks + 1;
   const orders = state.orders.map(order => {
     const elapsed = order.elapsed + 1;
-    if (order.stage === 'Preparing' && elapsed >= 20) return { ...order, stage: 'Ready for pickup' as const, elapsed: 0 };
-    if (order.stage === 'Ready for pickup' && elapsed >= 30) return { ...order, stage: 'Delivering' as const, elapsed: 0 };
-    if (order.stage === 'Delivering' && elapsed >= 35) return { ...order, stage: 'Delivered' as const, elapsed: 0 };
+    if (order.stage === 'Preparing' && elapsed >= stageTicks.preparing) return { ...order, stage: 'Ready for pickup' as const, elapsed: 0 };
+    if (order.stage === 'Ready for pickup' && elapsed >= stageTicks.ready) return { ...order, stage: 'Delivering' as const, elapsed: 0 };
+    if (order.stage === 'Delivering' && elapsed >= stageTicks.flight) return { ...order, stage: 'Delivered' as const, elapsed: 0 };
     return { ...order, elapsed };
   }).filter(order => order.stage !== 'Delivered' || order.manual || order.elapsed < 25).slice(0, 20);
   if (ticks % 45 === 0 && orders.filter(order => order.stage !== 'Delivered').length < 8) {
@@ -96,4 +103,48 @@ export function demoFlights(tick: number) {
       status: phase < .12 ? 'Charging' : phase < .25 ? 'To pickup' : phase < .5 ? 'Delivering' : 'Returning',
     };
   });
+}
+
+export type Point = { x: number; y: number };
+export const kitchen: Point = { x: 510, y: 318 };
+export const dropOff: Point & { label: string } = { x: 742, y: 504, label: 'Your drop-off · Beach house' };
+/** Illustrated-map units are roughly 4.2 m each across Mornington's 4.2 km wide demo area. */
+export const metresPerUnit = 4.2;
+const cruiseAltitude = 60;
+
+export type OrderFlight = Point & {
+  droneId: string;
+  phase: 'Awaiting drone' | 'On the pad' | 'In flight' | 'Landed';
+  progress: number;
+  heading: number;
+  altitude: number;
+  remainingMetres: number;
+  etaSeconds: number;
+};
+
+/**
+ * Deterministic flight for one order: the assigned drone waits on Peninsula Kitchen's pad while the order is ready,
+ * flies directly to the drop-off while delivering, then lands. `fraction` (0-1) interpolates within the current tick.
+ */
+export function orderFlight(order: Order, fraction = 0): OrderFlight {
+  const dx = dropOff.x - kitchen.x, dy = dropOff.y - kitchen.y;
+  const length = Math.hypot(dx, dy);
+  const heading = Math.atan2(dy, dx);
+  const elapsed = Math.max(0, order.elapsed + Math.min(1, Math.max(0, fraction)));
+  const progress = order.stage === 'Delivered' ? 1 : order.stage === 'Delivering' ? Math.min(1, elapsed / stageTicks.flight) : 0;
+  const climb = Math.min(1, progress / .15, (1 - progress) / .15);
+  const phase = order.stage === 'Preparing' ? 'Awaiting drone' : order.stage === 'Ready for pickup' ? 'On the pad' : order.stage === 'Delivering' ? 'In flight' : 'Landed';
+  const flightSecondsLeft = stageTicks.flight * (1 - progress);
+  const etaSeconds = order.stage === 'Preparing' ? Math.max(0, stageTicks.preparing - elapsed) + stageTicks.ready + stageTicks.flight
+    : order.stage === 'Ready for pickup' ? Math.max(0, stageTicks.ready - elapsed) + stageTicks.flight
+    : order.stage === 'Delivering' ? flightSecondsLeft : 0;
+  return {
+    droneId: `SKY-${String(5 + Number(order.id.replace(/\D/g, '')) % 2).padStart(2, '0')}`,
+    phase, progress, heading,
+    x: kitchen.x + dx * progress,
+    y: kitchen.y + dy * progress,
+    altitude: order.stage === 'Delivering' ? Math.round(cruiseAltitude * Math.max(0, climb)) : 0,
+    remainingMetres: Math.round(length * (1 - progress) * metresPerUnit),
+    etaSeconds: Math.ceil(etaSeconds),
+  };
 }
