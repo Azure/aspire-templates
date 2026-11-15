@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Check, ChefHat, Drone, FastForward, House, Layer
 import { AzureBasemap, MapArtwork } from './DeliveryMap';
 import type { MapSettings } from './DeliveryMap';
 import FoodArt, { CoffeeCup } from './FoodArt';
+import { baristaFor } from './baristas';
 import { bagCount, bagTotal, coffeeDescription, linePrice, menuItem, money, orderFlight, payloadNames, stages, stageTicks } from './demo';
 import type { Order, OrderFlight } from './demo';
 
@@ -20,6 +21,24 @@ function eta(seconds: number) {
   if (seconds <= 0) return 'Arrived';
   const minutes = Math.floor(seconds / 60);
   return minutes ? `${minutes} min ${seconds % 60} s` : `${seconds} s`;
+}
+
+function BaristaCard({ orderId }: { orderId: string }) {
+  const barista = baristaFor(orderId);
+  return <section className="barista-card" aria-label={`Your barista, ${barista.name}`}>
+    <img src={barista.avatar} alt={`Illustrated portrait of ${barista.name}`} width={96} height={96} />
+    <div>
+      <span className="eyebrow">YOUR BARISTA</span>
+      <h2>{barista.name}<small>On the bar since {barista.since}</small></h2>
+      <p>{barista.backstory}</p>
+      <dl>
+        <div><dt>AFL team</dt><dd>{barista.aflTeam}</dd></div>
+        <div><dt>Favourite coffee</dt><dd>{barista.favouriteCoffee}</dd></div>
+        {barista.facts.map(fact => <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}
+      </dl>
+      <small className="barista-note">A fictional barista profile for this demo.</small>
+    </div>
+  </section>;
 }
 
 function FollowMap({ flight, settings, onSettings }: { flight: OrderFlight; settings: MapSettings | null; onSettings: () => void }) {
@@ -92,6 +111,7 @@ export default function OrderStatus({ order, orderId, settings, onSettings, onAd
           <div className="kitchen-food">{order.bag.slice(0, 3).map(line => <div key={line.id}>{line.coffee ? <CoffeeCup options={line.coffee} style={line.itemId} /> : <FoodArt kind={menuItem(line.itemId).kind} />}</div>)}</div>
           <div><span className="eyebrow">YOUR COFFEE RUN</span><h2>Made your way.<br /><em>Then on its way.</em></h2><p>{order.stage === 'Ready for pickup' ? (order.drone ? 'Your drone is assigned. Waiting for current telemetry for this order; no unrelated flight is shown.' : 'Packed and waiting for an available drone. No drone is assigned yet.') : order.stage === 'Preparing' ? 'Your barista is preparing your flight box. Once a drone is assigned, follow its pickup and delivery through the map and simulated camera.' : order.stage === 'Delivered' ? 'Your coffee run has landed. Enjoy your ForthCoffee moment.' : 'Waiting for current telemetry from your assigned drone.'}</p>{order.note && <p role="status">{order.note}</p>}</div>
         </div>}
+        {order.stage === 'Preparing' && <BaristaCard orderId={order.id} />}
       </section>
       <aside className="status-summary">
         <div className="eyebrow">YOUR COFFEE RUN</div>

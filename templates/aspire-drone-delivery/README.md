@@ -21,7 +21,9 @@ aspire run
 
 Open **customer-site** for ordering and your own tracking, or **operator-site**
 for the store maps, dispatch queue and full fleet. There is no portal/login chooser
-or operations UI on the customer site. The AppHost starts:
+or operations UI on the customer site. While an order is Preparing, the customer
+site shows a fictional barista profile (frontend-only mock data with illustrated
+avatars), picked consistently from the order ID. The AppHost starts:
 
 | Resource | What it does |
 | --- | --- |
