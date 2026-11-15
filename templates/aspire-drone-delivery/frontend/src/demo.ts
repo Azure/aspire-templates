@@ -197,26 +197,59 @@ export function demoFlights(tick: number) {
 }
 export type Point = { x: number; y: number };
 export const kitchen: Point = { x: 510, y: 318 };
-export const dropOff: Point & { label: string } = { x: 742, y: 504, label: 'Your drop-off · Albert Park' };
+export type Destination = Point & { label: string };
+/** Demo drop-off points across South Melbourne. Each order is sent to one, so consecutive orders land somewhere different. */
+export const dropOffs: Destination[] = [
+  { x: 742, y: 504, label: 'Albert Park' },
+  { x: 398, y: 192, label: 'South Melbourne Market' },
+  { x: 681, y: 108, label: 'Southbank' },
+  { x: 440, y: 430, label: 'Dorcas Street' },
+  { x: 788, y: 233, label: 'Kings Domain' },
+  { x: 620, y: 560, label: 'Bridport Street' },
+  { x: 860, y: 300, label: 'St Kilda Road' },
+];
+export const destinationFor = (order: Pick<Order, 'id'>): Destination => dropOffs[Number(order.id.replace(/\D/g, '')) % dropOffs.length];
 /** Illustrated-map units are roughly 4.2 m each across the South Melbourne demo area. */
 export const metresPerUnit = 4.2;
 const cruiseAltitude = 60;
+/** Share of the flight spent climbing straight up at the bar, and descending straight down at the drop-off. */
+export const verticalShare = .15;
+/** Share of the flight spent swinging the camera between straight down and level, either side of the cruise. */
+const cameraSwingShare = .06;
+/** Ticks before an automatic dispatch when the camera starts tilting down to the pad. */
+const preTakeoffSwing = 4;
+export type Manoeuvre = 'On the ground' | 'Vertical climb' | 'Cruise' | 'Vertical descent';
 export type OrderFlight = Point & {
-  droneId: string; phase: 'Awaiting drone' | 'On the pad' | 'In flight' | 'Landed';
-  progress: number; heading: number; altitude: number; remainingMetres: number; etaSeconds: number;
+  droneId: string; phase: 'Awaiting drone' | 'On the pad' | 'In flight' | 'Landed'; manoeuvre: Manoeuvre;
+  destination: Destination; progress: number; heading: number; altitude: number;
+  /** Camera tilt below the horizon: 0 looks ahead, 1 looks straight down. */
+  cameraDown: number; remainingMetres: number; etaSeconds: number;
 };
+const clamp = (value: number) => Math.min(1, Math.max(0, value));
+const ease = (value: number) => value * value * (3 - 2 * value);
 export function orderFlight(order: Order, fraction = 0): OrderFlight {
-  const dx = dropOff.x - kitchen.x, dy = dropOff.y - kitchen.y;
+  const destination = destinationFor(order);
+  const dx = destination.x - kitchen.x, dy = destination.y - kitchen.y;
   const length = Math.hypot(dx, dy), heading = Math.atan2(dy, dx);
-  const elapsed = Math.max(0, order.elapsed + Math.min(1, Math.max(0, fraction)));
+  const elapsed = Math.max(0, order.elapsed + clamp(fraction));
   const progress = order.stage === 'Delivered' ? 1 : order.stage === 'Delivering' ? Math.min(1, elapsed / stageTicks.flight) : 0;
-  const climb = Math.min(1, progress / .15, (1 - progress) / .15);
+  // VTOL: climb vertically over the bar, cruise level, then descend vertically over the drop-off.
+  const travel = clamp((progress - verticalShare) / (1 - 2 * verticalShare));
+  const altitude = order.stage !== 'Delivering' ? 0
+    : progress < verticalShare ? cruiseAltitude * ease(progress / verticalShare)
+    : progress > 1 - verticalShare ? cruiseAltitude * ease((1 - progress) / verticalShare) : cruiseAltitude;
+  const manoeuvre: Manoeuvre = order.stage !== 'Delivering' ? 'On the ground'
+    : progress < verticalShare ? 'Vertical climb' : progress > 1 - verticalShare ? 'Vertical descent' : 'Cruise';
+  const cameraDown = order.stage === 'Delivered' ? 1
+    : order.stage === 'Ready for pickup' ? ease(clamp((elapsed - (stageTicks.ready - preTakeoffSwing)) / preTakeoffSwing))
+    : order.stage !== 'Delivering' ? 0
+    : ease(clamp(Math.max(verticalShare + cameraSwingShare - progress, progress - (1 - verticalShare - cameraSwingShare)) / cameraSwingShare));
   const phase = order.stage === 'Preparing' ? 'Awaiting drone' : order.stage === 'Ready for pickup' ? 'On the pad' : order.stage === 'Delivering' ? 'In flight' : 'Landed';
   const flightSecondsLeft = stageTicks.flight * (1 - progress);
   const etaSeconds = order.stage === 'Preparing' ? Math.max(0, stageTicks.preparing - elapsed) + stageTicks.ready + stageTicks.flight
     : order.stage === 'Ready for pickup' ? Math.max(0, stageTicks.ready - elapsed) + stageTicks.flight : order.stage === 'Delivering' ? flightSecondsLeft : 0;
   return { droneId: `FC-${String(5 + Number(order.id.replace(/\D/g, '')) % 2).padStart(2, '0')}`,
-    phase, progress, heading, x: kitchen.x + dx * progress, y: kitchen.y + dy * progress,
-    altitude: order.stage === 'Delivering' ? Math.round(cruiseAltitude * Math.max(0, climb)) : 0,
-    remainingMetres: Math.round(length * (1 - progress) * metresPerUnit), etaSeconds: Math.ceil(etaSeconds) };
+    phase, manoeuvre, destination, progress, heading, x: kitchen.x + dx * travel, y: kitchen.y + dy * travel,
+    altitude: Math.round(altitude), cameraDown,
+    remainingMetres: Math.round(length * (1 - travel) * metresPerUnit), etaSeconds: Math.ceil(etaSeconds) };
 }

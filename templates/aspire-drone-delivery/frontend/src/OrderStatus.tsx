@@ -3,7 +3,7 @@ import { ArrowLeft, ArrowRight, Check, ChefHat, Drone, FastForward, House, Layer
 import { AzureBasemap, MapArtwork } from './DeliveryMap';
 import type { MapSettings } from './DeliveryMap';
 import FoodArt, { CoffeeCup } from './FoodArt';
-import { bagCount, bagTotal, coffeeDescription, dropOff, kitchen, linePrice, menuItem, money, orderFlight, payloadNames, stages, stageTicks } from './demo';
+import { bagCount, bagTotal, coffeeDescription, kitchen, linePrice, menuItem, money, orderFlight, payloadNames, stages, stageTicks } from './demo';
 import type { Order, OrderFlight } from './demo';
 
 const DroneCam = lazy(() => import('./DroneCam'));
@@ -26,12 +26,12 @@ function FollowMap({ flight, settings, onSettings }: { flight: OrderFlight; sett
   const angle = flight.heading * 180 / Math.PI;
   const width = 560, height = 440;
   return <div className="follow-map">
-    {settings ? <AzureBasemap settings={settings} flights={[{ id: flight.droneId, x: flight.x, y: flight.y, status: flight.phase }]} follow={flight} route />
+    {settings ? <AzureBasemap settings={settings} flights={[{ id: flight.droneId, x: flight.x, y: flight.y, status: flight.phase }]} follow={flight} route={flight.destination} />
       : <svg viewBox={`${flight.x - width / 2} ${flight.y - height / 2} ${width} ${height}`} preserveAspectRatio="xMidYMid slice" role="img" aria-label={`Overhead illustrated map centred on drone ${flight.droneId}`}>
         <MapArtwork routes={false} />
-        <line x1={kitchen.x} y1={kitchen.y} x2={dropOff.x} y2={dropOff.y} stroke="#184b38" strokeWidth="2.5" strokeDasharray="6 6" opacity=".55" />
+        <line x1={kitchen.x} y1={kitchen.y} x2={flight.destination.x} y2={flight.destination.y} stroke="#184b38" strokeWidth="2.5" strokeDasharray="6 6" opacity=".55" />
         <line x1={kitchen.x} y1={kitchen.y} x2={flight.x} y2={flight.y} stroke="#184b38" strokeWidth="3.5" strokeLinecap="round" />
-        <g transform={`translate(${dropOff.x} ${dropOff.y})`}>
+        <g transform={`translate(${flight.destination.x} ${flight.destination.y})`}>
           <circle r="15" fill="#e9b44c" opacity=".25" className="drop-pulse" /><circle r="7" fill="#e9b44c" stroke="#fff" strokeWidth="2.5" />
           <rect x="20" y="-9" width="84" height="17" rx="8" fill="#fffdf5" /><text x="62" y="3" textAnchor="middle" className="tiny-label">Your drop-off</text>
         </g>
@@ -94,7 +94,7 @@ export default function OrderStatus({ order, orderId, settings, onSettings, onAd
           <div><dt>Drone</dt><dd>{flight.droneId}</dd></div>
           <div><dt>Payload</dt><dd>{payloadNames[order.payload]}</dd></div>
           <div><dt>From</dt><dd>ForthCoffee, Coventry Street</dd></div>
-          <div><dt>To</dt><dd>{dropOff.label}</dd></div>
+          <div><dt>To</dt><dd>{flight.destination.label}</dd></div>
           {order.stage === 'Delivering' && <div><dt>Distance left</dt><dd>{flight.remainingMetres} m</dd></div>}
         </dl>
         {order.stage !== 'Delivered' ? <button className="outline-button full-width" onClick={onAdvance}><FastForward size={14} />Skip to next stage (demo)</button>

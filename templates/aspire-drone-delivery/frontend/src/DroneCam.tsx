@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { MapSettings } from './DeliveryMap';
 import type { Order } from './demo';
-import { dropOff, kitchen, metresPerUnit, orderFlight } from './demo';
+import { dropOffs, kitchen, metresPerUnit, orderFlight } from './demo';
 import { coastPath, fromLonLat, landmarks, lakePath, landPath, mapLabels, parkPath, pierPath, roadPaths, toLonLat } from './mapGeometry';
 
 // Ground region (illustrated-map units) around the kitchen-to-drop-off corridor.
@@ -83,13 +83,8 @@ function random(seed: number) {
   let value = seed;
   return () => { value = (value * 1664525 + 1013904223) % 4294967296; return value / 4294967296; };
 }
-function distanceToRoute(x: number, y: number) {
-  const dx = dropOff.x - kitchen.x, dy = dropOff.y - kitchen.y;
-  const t = Math.max(0, Math.min(1, ((x - kitchen.x) * dx + (y - kitchen.y) * dy) / (dx * dx + dy * dy)));
-  return Math.hypot(x - kitchen.x - dx * t, y - kitchen.y - dy * t);
-}
 
-function buildScenery(scene: THREE.Scene, disposables: { dispose(): void }[]) {
+function buildScenery(scene: THREE.Scene, disposables: { dispose(): void }[]): THREE.Mesh {
   const probe = document.createElement('canvas').getContext('2d');
   const land = new Path2D(landPath);
   const lake = new Path2D(lakePath);
@@ -100,7 +95,7 @@ function buildScenery(scene: THREE.Scene, disposables: { dispose(): void }[]) {
   const palette = ['#f2efe4', '#e6e1d2', '#d9d6c8', '#efe6d4', '#cfd8cc'].map(color => new THREE.Color(color));
   for (let i = 0; i < 1600 && boxes.length < 420; i++) {
     const x = region.x + next() * region.width, y = region.y + next() * region.height;
-    if (!onLand(x, y) || Math.hypot(x - kitchen.x, y - kitchen.y) < 22 || Math.hypot(x - dropOff.x, y - dropOff.y) < 18 || distanceToRoute(x, y) < 10) continue;
+    if (!onLand(x, y) || Math.hypot(x - kitchen.x, y - kitchen.y) < 22 || dropOffs.some(point => Math.hypot(x - point.x, y - point.y) < 18)) continue;
     const tree = next() < .35;
     const matrix = new THREE.Matrix4();
     if (tree) {
@@ -123,9 +118,9 @@ function buildScenery(scene: THREE.Scene, disposables: { dispose(): void }[]) {
   const padGeometry = new THREE.CylinderGeometry(3, 3, .2, 32), padMaterial = new THREE.MeshLambertMaterial({ color: '#184b38' });
   const pad = new THREE.Mesh(padGeometry, padMaterial); pad.position.set(kitchen.x, .15, kitchen.y);
   const targetGeometry = new THREE.RingGeometry(2.2, 3, 40), targetMaterial = new THREE.MeshLambertMaterial({ color: '#e9b44c', side: THREE.DoubleSide });
-  const target = new THREE.Mesh(targetGeometry, targetMaterial); target.rotation.x = -Math.PI / 2; target.position.set(dropOff.x, .05, dropOff.y);
-  scene.add(buildings, treeMesh, pad, target);
+  const target = new THREE.Mesh(targetGeometry, targetMaterial); target.rotation.x = -Math.PI / 2; scene.add(buildings, treeMesh, pad, target);
   disposables.push(boxGeometry, boxMaterial, treeGeometry, treeMaterial, padGeometry, padMaterial, targetGeometry, targetMaterial, buildings, treeMesh);
+  return target;
 }
 
 export default function DroneCam({ order, settings }: { order: Order; settings: MapSettings | null }) {
@@ -173,7 +168,7 @@ export default function DroneCam({ order, settings }: { order: Order; settings: 
     plane.position.set(region.x + region.width / 2, 0, region.y + region.height / 2);
     scene.add(plane);
     disposables.push(texture, planeGeometry, planeMaterial);
-    buildScenery(scene, disposables);
+    const target = buildScenery(scene, disposables);
     if (settings) {
       drawAzureGround(ctx, scale, settings, controller.signal)
         .then(() => { texture.needsUpdate = true; setGround('azure'); setGroundNote(''); })
@@ -206,10 +201,15 @@ export default function DroneCam({ order, settings }: { order: Order; settings: 
       const flying = flight.phase === 'In flight';
       const bob = still || !flying ? 0 : Math.sin(t * 2.1) * .25;
       const height = Math.max(3, flight.altitude / metresPerUnit) + bob;
-      camera.position.set(flight.x - forwardX * 2, height, flight.y - forwardZ * 2);
-      const lookAhead = flying ? 30 : 24;
-      camera.lookAt(flight.x + forwardX * lookAhead, 0, flight.y + forwardZ * lookAhead);
-      if (!still && flying) camera.rotateZ(Math.sin(t * .7) * .015);
+      target.position.set(flight.destination.x, .05, flight.destination.y);
+      camera.position.set(flight.x, height, flight.y);
+      // Tilt from a forward view (looking slightly down at the ground ahead) to straight down for vertical take-off and landing.
+      const level = Math.atan2(height, flying ? 30 : 24);
+      const tilt = level + (Math.PI / 2 - level) * flight.cameraDown;
+      const down = Math.sin(tilt), across = Math.cos(tilt);
+      camera.up.set(forwardX * down, across, forwardZ * down);
+      camera.lookAt(flight.x + forwardX * across, height - down, flight.y + forwardZ * across);
+      if (!still && flying && flight.manoeuvre === 'Cruise') camera.rotateZ(Math.sin(t * .7) * .015);
       renderer.render(scene, camera);
       frame = requestAnimationFrame(render);
     };
@@ -234,7 +234,7 @@ export default function DroneCam({ order, settings }: { order: Order; settings: 
       <span className="cam-rec"><i />SIMULATED FEED</span>
       <span className="cam-id">{flight.droneId} · CAM 1</span>
       <span className="cam-cross" />
-      <span className="cam-readout">ALT {flight.altitude} m · {flight.phase === 'In flight' ? `${flight.remainingMetres} m to go` : flight.phase}</span>
+      <span className="cam-readout">ALT {flight.altitude} m · {flight.manoeuvre === 'Cruise' ? `${flight.remainingMetres} m to go` : flight.phase === 'In flight' ? flight.manoeuvre : flight.phase} · CAM {flight.cameraDown > .5 ? 'DOWN' : 'FWD'}</span>
     </div>
     <span className="cam-credit">{ground === 'azure' ? '© Microsoft, © TomTom · Azure Maps tiles · simulated view' : 'Illustrated ground · placeholder structures · not real video'}</span>
     {groundNote && <span className="cam-note" role="status">{groundNote}</span>}

@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Drone, Layers, MapPin, Minus, Plus } from 'lucide-react';
 import type * as Atlas from 'azure-maps-control';
 import type { Order, Point } from './demo';
-import { demoFlights, dropOff, kitchen, orderFlight } from './demo';
+import { demoFlights, kitchen, orderFlight } from './demo';
 import { coastPath, landmarks, lakePath, landPath, mapLabels, parkPath, pierPath, roadPaths, routePaths, toLonLat } from './mapGeometry';
 
 export type MapSettings = { clientId: string; token: string };
@@ -17,7 +17,7 @@ export function liveFlights(tick: number, orders: Order[]): Flight[] {
     .map(order => { const flight = orderFlight(order); return { id: flight.droneId, x: flight.x, y: flight.y, status: `Delivering ${order.id}` }; })];
 }
 
-export function AzureBasemap({ settings, flights, follow, route }: { settings: MapSettings; flights: Flight[]; follow?: Point; route?: boolean }) {
+export function AzureBasemap({ settings, flights, follow, route }: { settings: MapSettings; flights: Flight[]; follow?: Point; route?: Point }) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<{ map: Atlas.Map; atlas: typeof Atlas } | null>(null);
   const markers = useRef(new Map<string, Atlas.HtmlMarker>());
@@ -50,12 +50,12 @@ export function AzureBasemap({ settings, flights, follow, route }: { settings: M
         if (route) {
           const source = new atlas.source.DataSource();
           map.sources.add(source);
-          source.add(new atlas.data.LineString([position(kitchen), position(dropOff)]));
+          source.add(new atlas.data.LineString([position(kitchen), position(route)]));
           map.layers.add(new atlas.layer.LineLayer(source, undefined, { strokeColor: '#184b38', strokeWidth: 3, strokeDashArray: [2, 2] }));
           const home = document.createElement('div');
           home.className = 'azure-store';
           home.textContent = 'Your drop-off';
-          map.markers.add(new atlas.HtmlMarker({ position: position(dropOff), htmlContent: home }));
+          map.markers.add(new atlas.HtmlMarker({ position: position(route), htmlContent: home }));
         }
         mapRef.current = { map, atlas };
         setReady(true);
@@ -66,7 +66,7 @@ export function AzureBasemap({ settings, flights, follow, route }: { settings: M
     return () => { cancelled = true; mapRef.current = null; markers.current.clear(); map?.dispose(); };
     // Recreate the map only when credentials or the map mode change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings, Boolean(follow), route]);
+  }, [settings, Boolean(follow), route?.x, route?.y]);
   useEffect(() => {
     const current = mapRef.current;
     if (!ready || !current) return;

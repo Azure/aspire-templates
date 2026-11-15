@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { addToBag, bagFromBays, baysFromBag, bagTotal, emptyBays, resizeBays, bagUnits, defaultCoffee, demoFlights, demoReducer, dropOff, initialState, kitchen, linePrice, makeLine, matchSpokenOrder, orderFlight, stageTicks, validBag } from '../src/demo.ts';
+import { addToBag, bagFromBays, baysFromBag, bagTotal, emptyBays, resizeBays, bagUnits, defaultCoffee, demoFlights, demoReducer, destinationFor, dropOffs, initialState, kitchen, linePrice, makeLine, matchSpokenOrder, orderFlight, stageTicks, validBag } from '../src/demo.ts';
 import { fromLonLat, toLonLat } from '../src/mapGeometry.ts';
 import type { Bag, Bays, CoffeeOptions, Order } from '../src/demo.ts';
 
@@ -147,7 +147,39 @@ test('an order flight waits at the bar, flies to the drop-off and lands', () => 
   assert.ok(halfway.altitude > 0 && halfway.remainingMetres > 0);
   assert.ok(orderFlight({ ...order, stage: 'Delivering', elapsed: 3 }, .5).progress > orderFlight({ ...order, stage: 'Delivering', elapsed: 3 }).progress);
   const landed = orderFlight({ ...order, stage: 'Delivered', elapsed: 0 });
-  assert.deepEqual([landed.phase, landed.x, landed.y, landed.altitude, landed.etaSeconds, landed.remainingMetres], ['Landed', dropOff.x, dropOff.y, 0, 0, 0]);
+  assert.deepEqual([landed.phase, landed.x, landed.y, landed.altitude, landed.etaSeconds, landed.remainingMetres], ['Landed', destinationFor(order).x, destinationFor(order).y, 0, 0, 0]);
+});
+
+test('drones take off and land vertically with the camera looking straight down', () => {
+  const order: Order = { id: 'FC-1044', customer: 'You', bag: [makeLine('flat-white')], payload: 1, stage: 'Delivering', elapsed: 0, manual: true };
+  const at = (ticks: number) => orderFlight({ ...order, elapsed: ticks });
+  const destination = destinationFor(order);
+  for (const ticks of [0, 1, 2, 3, 4, 5]) {
+    const climb = at(ticks * stageTicks.flight * .15 / 5 * .999);
+    assert.deepEqual([climb.x, climb.y], [kitchen.x, kitchen.y], 'no horizontal movement while climbing');
+    const descent = at(stageTicks.flight - ticks * stageTicks.flight * .15 / 5 * .999);
+    assert.ok(Math.abs(descent.x - destination.x) < 1e-9 && Math.abs(descent.y - destination.y) < 1e-9, 'no horizontal movement while descending');
+    assert.equal(climb.cameraDown, 1);
+    assert.equal(descent.cameraDown, 1);
+  }
+  assert.equal(at(stageTicks.flight * .15 * .99).manoeuvre, 'Vertical climb');
+  assert.ok(at(stageTicks.flight * .15 * .99).altitude > 50);
+  const cruise = at(stageTicks.flight / 2);
+  assert.deepEqual([cruise.manoeuvre, cruise.altitude, cruise.cameraDown], ['Cruise', 60, 0]);
+  assert.equal(at(stageTicks.flight * .9).manoeuvre, 'Vertical descent');
+  const ready = orderFlight({ ...order, stage: 'Ready for pickup', elapsed: 0 });
+  assert.equal(ready.cameraDown, 0);
+  assert.equal(orderFlight({ ...order, stage: 'Ready for pickup', elapsed: stageTicks.ready }).cameraDown, 1);
+});
+
+test('consecutive orders fly to different drop-offs', () => {
+  let state = initialState;
+  const seen: string[] = [];
+  for (let i = 0; i < dropOffs.length; i++) {
+    state = demoReducer(state, { type: 'confirm', bag: [makeLine('latte')], payload: 1 });
+    seen.push(orderFlight(state.orders[0]).destination.label);
+  }
+  assert.equal(new Set(seen).size, dropOffs.length);
 });
 
 test('demo skip-ahead advances only the chosen undelivered order', () => {
@@ -162,7 +194,7 @@ test('demo skip-ahead advances only the chosen undelivered order', () => {
 });
 
 test('both map modes use South Melbourne coordinates and round-trip the delivery route', () => {
-  for (const point of [kitchen, dropOff]) {
+  for (const point of [kitchen, ...dropOffs]) {
     const [lon, lat] = toLonLat(point.x, point.y);
     assert.ok(lon > 144.95 && lon < 144.98 && lat > -37.85 && lat < -37.82);
     const back = fromLonLat(lon, lat);
