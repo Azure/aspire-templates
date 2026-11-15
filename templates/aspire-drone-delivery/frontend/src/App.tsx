@@ -146,6 +146,7 @@ export default function App() {
 
     {portal === 'customer' && statusId ? <OrderStatus order={state.orders.find(order => order.id === statusId)} orderId={statusId} settings={maps} onSettings={() => setModal('maps')} onAdvance={() => dispatch({ type: 'advance', id: statusId })} onBack={() => navigate('')} />
       : portal === 'customer' ? <main>
+        <section className="customer-intro"><div className="eyebrow"><span className="small-line" /> SOUTH MELBOURNE, MEET YOUR NEW COFFEE RUN.</div><h1>Good coffee. Great company. <em>A little <span className="altitude" aria-label="altitude">a<span className="proof-insert" aria-hidden="true"><span className="proof-l">l</span><span className="proof-caret">^</span></span>titude.</span></em></h1></section>
         <section className="packing-section" id="payload">
           <div className="packing-copy"><div className="eyebrow"><span className="step-count">01</span> BUILD YOUR PAYLOAD</div><h2>A little me time.<br />Or <em>make it a round.</em></h2><p>Pick your flight box, then tap a bay to fill it. Every bay carries one coffee or one treat.</p>
             <PayloadPicker value={payload} filled={count} onChange={choosePayload} />

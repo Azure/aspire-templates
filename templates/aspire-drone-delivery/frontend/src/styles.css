@@ -542,3 +542,14 @@ footer button { display: flex; align-items: center; gap: 7px; background: none; 
   .bay-selector .builder-preview { border-radius: 0; }
   .treat-grid { grid-template-columns: 1fr; padding: 18px 20px 22px; }
 }
+
+.customer-intro { padding: 40px 5.2% 6px; }
+.customer-intro h1 { font-size: 40px; font-weight: 450; letter-spacing: -1.3px; line-height: 1.2; margin-top: 14px; color: var(--ink); }
+.customer-intro h1 em { color: #8a7956; white-space: nowrap; }
+.altitude { display: inline-block; }
+/* A proofreader's insertion: the "l" is written above the line with a caret marking where it goes. */
+.proof-insert { position: relative; display: inline-block; width: .06em; }
+.proof-l { position: absolute; left: 50%; bottom: .62em; transform: translateX(-50%) rotate(-4deg); font-size: .9em; color: #b5552f; font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive; }
+.proof-caret { position: absolute; left: 50%; top: -.02em; transform: translateX(-60%); font-size: .8em; font-weight: 700; line-height: 1; color: #b5552f; font-family: "Segoe Print", "Bradley Hand", cursive; font-style: normal; }
+.packing-section { padding-top: 28px; }
+@media (max-width: 760px) { .customer-intro h1 { font-size: 28px; } }
