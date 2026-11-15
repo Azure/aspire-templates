@@ -2,17 +2,17 @@ import { lazy, Suspense } from 'react';
 import { ArrowLeft, ArrowRight, Check, ChefHat, Drone, FastForward, House, Layers, MapPin, Package, ShieldCheck } from 'lucide-react';
 import { AzureBasemap, MapArtwork } from './DeliveryMap';
 import type { MapSettings } from './DeliveryMap';
-import FoodArt from './FoodArt';
-import { bagTotal, dropOff, kitchen, menu, money, orderFlight, stages, stageTicks } from './demo';
+import FoodArt, { CoffeeCup } from './FoodArt';
+import { bagCount, bagTotal, coffeeDescription, dropOff, kitchen, linePrice, menuItem, money, orderFlight, payloadNames, stages, stageTicks } from './demo';
 import type { Order, OrderFlight } from './demo';
 
 const DroneCam = lazy(() => import('./DroneCam'));
 const stageIcons = [ChefHat, Package, Drone, House];
 const stageCopy = {
-  Preparing: { title: 'Good things are in the making.', detail: 'Peninsula Kitchen is preparing your order.' },
+  Preparing: { title: 'Your barista is on it.', detail: 'ForthCoffee is brewing your coffee run, just the way you like it.' },
   'Ready for pickup': { title: 'Ready. Your drone is warming up.', detail: 'Packed, sealed and on the pad. Take a look through the drone camera.' },
   Delivering: { title: 'Look up. It’s on its way.', detail: 'Follow your drone overhead and through its camera.' },
-  Delivered: { title: 'A good thing has arrived.', detail: 'Your drone has landed at the drop-off. Enjoy!' },
+  Delivered: { title: 'Your morning has landed.', detail: 'Your drone has landed at the drop-off. Enjoy your ForthCoffee moment.' },
 } as const;
 const duration = { Preparing: stageTicks.preparing, 'Ready for pickup': stageTicks.ready, Delivering: stageTicks.flight, Delivered: 1 } as const;
 
@@ -57,11 +57,11 @@ export default function OrderStatus({ order, orderId, settings, onSettings, onAd
   const current = stages.indexOf(order.stage);
   const followable = current >= 1;
   const copy = stageCopy[order.stage];
-  const items = Object.values(order.bag).reduce((sum, quantity) => sum + quantity, 0);
+  const items = bagCount(order.bag);
   return <main className="status-page">
     <button className="text-button back-link" onClick={onBack}><ArrowLeft size={15} />Back to the menu</button>
     <section className="status-header" aria-live="polite">
-      <div><div className="eyebrow">ORDER {order.id} · PENINSULA KITCHEN</div><h1>{copy.title}</h1><p>{copy.detail}</p></div>
+      <div><div className="eyebrow">ORDER {order.id} · FORTHCOFFEE · {payloadNames[order.payload].toUpperCase()} PAYLOAD</div><h1>{copy.title}</h1><p>{copy.detail}</p></div>
       <div className="status-eta"><span>{order.stage === 'Delivered' ? 'DELIVERED' : 'ESTIMATED ARRIVAL'}</span><strong>{eta(flight.etaSeconds)}</strong><small>Accelerated demo time</small></div>
     </section>
     <ol className="status-steps" aria-label="Order progress">{stages.map((stage, index) => {
@@ -82,17 +82,18 @@ export default function OrderStatus({ order, orderId, settings, onSettings, onAd
           <div className="follow-panel"><div className="follow-heading"><span><span className="rec-dot" />Drone camera</span><small>Simulated</small></div>
             <Suspense fallback={<div className="drone-cam"><div className="cam-fallback" role="status">Starting simulated camera…</div></div>}><DroneCam order={order} settings={settings} /></Suspense></div>
         </div> : <div className="kitchen-card">
-          <div className="kitchen-food">{Object.keys(order.bag).slice(0, 3).map(id => { const item = menu.find(entry => entry.id === id); return item && <div key={id}><FoodArt kind={item.kind} /></div>; })}</div>
-          <div><span className="eyebrow">IN THE KITCHEN</span><h2>Made fresh, <em>just for you.</em></h2><p>When your order is packed, {flight.droneId} takes over. You’ll be able to follow it overhead and through a live (simulated) camera.</p></div>
+          <div className="kitchen-food">{order.bag.slice(0, 3).map(line => <div key={line.id}>{line.coffee ? <CoffeeCup options={line.coffee} style={line.itemId} /> : <FoodArt kind={menuItem(line.itemId).kind} />}</div>)}</div>
+          <div><span className="eyebrow">ON THE COFFEE BAR</span><h2>Made your way.<br /><em>Then on its way.</em></h2><p>When your flight box is packed, {flight.droneId} takes over. Follow it above South Melbourne and through a live (simulated) camera.</p></div>
         </div>}
       </section>
       <aside className="status-summary">
-        <div className="eyebrow">YOUR LITTLE DELIVERY</div>
-        <ul>{Object.entries(order.bag).map(([id, quantity]) => { const item = menu.find(entry => entry.id === id); return <li key={id}><span>{quantity} × {item?.name}</span><strong>{money((item?.price || 0) * quantity)}</strong></li>; })}</ul>
+        <div className="eyebrow">YOUR COFFEE RUN</div>
+        <ul>{order.bag.map(line => <li key={line.id}><span>{line.quantity} × {menuItem(line.itemId).name}{line.coffee && <small className="summary-coffee-options">{coffeeDescription(line.coffee)}</small>}</span><strong>{money(linePrice(line) * line.quantity)}</strong></li>)}</ul>
         <div className="summary-total"><span>Total · {items} {items === 1 ? 'item' : 'items'}</span><strong>{money(bagTotal(order.bag))}</strong></div>
         <dl>
           <div><dt>Drone</dt><dd>{flight.droneId}</dd></div>
-          <div><dt>From</dt><dd>Peninsula Kitchen, Main Street</dd></div>
+          <div><dt>Payload</dt><dd>{payloadNames[order.payload]}</dd></div>
+          <div><dt>From</dt><dd>ForthCoffee, Coventry Street</dd></div>
           <div><dt>To</dt><dd>{dropOff.label}</dd></div>
           {order.stage === 'Delivering' && <div><dt>Distance left</dt><dd>{flight.remainingMetres} m</dd></div>}
         </dl>

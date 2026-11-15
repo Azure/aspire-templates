@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/template",
   "author": "Microsoft",
-  "name": "Mornington drone delivery (design preview)",
-  "description": "An interactive drone takeaway design preview with a React frontend and C# Aspire AppHost.",
+  "name": "ForthCoffee drone delivery (design preview)",
+  "description": "Build a coffee payload and follow its simulated flight over South Melbourne, with React and a C# Aspire AppHost.",
   "identity": "Azure.Aspire.Templates.DroneDelivery.CSharp",
   "groupIdentity": "Azure.Aspire.DroneDelivery",
   "shortName": "aspire-drone-delivery",

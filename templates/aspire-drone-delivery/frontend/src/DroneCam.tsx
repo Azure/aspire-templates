@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { MapSettings } from './DeliveryMap';
 import type { Order } from './demo';
 import { dropOff, kitchen, metresPerUnit, orderFlight } from './demo';
-import { coastPath, fromLonLat, landmarks, landPath, mapLabels, parkPath, pierPath, roadPaths, toLonLat } from './mapGeometry';
+import { coastPath, fromLonLat, landmarks, lakePath, landPath, mapLabels, parkPath, pierPath, roadPaths, toLonLat } from './mapGeometry';
 
 // Ground region (illustrated-map units) around the kitchen-to-drop-off corridor.
 const region = { x: 380, y: 200, width: 500, height: 440 };
@@ -23,7 +23,6 @@ function drawIllustratedGround(ctx: CanvasRenderingContext2D, scale: number) {
   ctx.fillRect(region.x, region.y, region.width, region.height);
   ctx.save();
   ctx.translate(region.x, region.y);
-  ctx.rotate(-20 * Math.PI / 180);
   ctx.fillStyle = '#e3e5da';
   for (let x = -300; x < 800; x += 56) for (let y = -300; y < 800; y += 66) ctx.fillRect(x + 5, y + 5, 44, 54);
   ctx.restore();
@@ -34,6 +33,7 @@ function drawIllustratedGround(ctx: CanvasRenderingContext2D, scale: number) {
     ctx.strokeStyle = color; ctx.lineWidth = width;
     roadPaths.forEach(path => ctx.stroke(new Path2D(path)));
   }
+  ctx.fillStyle = '#c7ddda'; ctx.fill(new Path2D(lakePath));
   ctx.restore();
   ctx.strokeStyle = '#f5ecd1'; ctx.lineWidth = 9; ctx.stroke(new Path2D(coastPath));
   ctx.strokeStyle = '#acb6a8'; ctx.lineWidth = 5; ctx.stroke(new Path2D(pierPath));
@@ -92,7 +92,8 @@ function distanceToRoute(x: number, y: number) {
 function buildScenery(scene: THREE.Scene, disposables: { dispose(): void }[]) {
   const probe = document.createElement('canvas').getContext('2d');
   const land = new Path2D(landPath);
-  const onLand = (x: number, y: number) => probe ? probe.isPointInPath(land, x, y) : true;
+  const lake = new Path2D(lakePath);
+  const onLand = (x: number, y: number) => probe ? probe.isPointInPath(land, x, y) && !probe.isPointInPath(lake, x, y) : true;
   const next = random(1046);
   const boxes: THREE.Matrix4[] = [], trees: THREE.Matrix4[] = [];
   const colors: THREE.Color[] = [];
@@ -108,7 +109,7 @@ function buildScenery(scene: THREE.Scene, disposables: { dispose(): void }[]) {
       trees.push(matrix);
     } else {
       const width = 3 + next() * 6, depth = 3 + next() * 6, height = 1.5 + next() * (next() < .08 ? 7 : 3.5);
-      matrix.compose(new THREE.Vector3(x, height / 2, y), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -20 * Math.PI / 180), new THREE.Vector3(width, height, depth));
+      matrix.compose(new THREE.Vector3(x, height / 2, y), new THREE.Quaternion(), new THREE.Vector3(width, height, depth));
       boxes.push(matrix);
       colors.push(palette[Math.floor(next() * palette.length)]);
     }

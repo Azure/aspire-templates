@@ -1,4 +1,4 @@
-# Skylane design spike
+# ForthCoffee design spike
 
 Status: first direction for maintainer review. This is a working UX experiment
 inside `templates/aspire-drone-delivery`, not a separate throwaway prototype.
@@ -14,22 +14,31 @@ epic or claim deployment readiness.
 
 ## Visual direction
 
-Working brand: **Skylane — a little closer, by air.**
+Working brand: **ForthCoffee — great coffee. A little altitude.**
 
-Use the Mornington waterfront and Main Street as the real geographic backdrop.
-Restaurants, pickup sites, customers and delivery activity are fictional.
-Soft ivory, forest green, muted coastal tones, generous space and original food/
-drone illustrations make this a neighbourhood takeaway service rather than an
+Use South Melbourne, Coventry Street and Albert Park as the geographic backdrop.
+One fictional company, ForthCoffee, owns the menu, coffee bar and delivery
+experience; this is not a restaurant marketplace. Customers and flights are fictional.
+Soft ivory, forest green, warm coffee tones, generous space and original cup/
+pastry illustrations make this a neighbourhood coffee experience rather than an
 industrial flight-control console. No real business imagery or menu is copied.
 The map is illustrative and cannot support navigation or real flight planning.
 
 ## Customer journey
 
 1. The landing experience opens directly into the customer menu, with a clear
-   **Kitchen & fleet** switch. This substitutes for demo sign-in during the spike;
+   **Barista & fleet** switch. This substitutes for demo sign-in during the spike;
    no real account is required.
-2. Find an item through categories or search. Add items and adjust quantities in
-   the bag. Show AUD pricing and the full total before confirmation.
+2. Choose a single, double or quad payload first: one, two or four cup wells.
+   Each coffee occupies one well; a biscuit takes ¼ and cake or croissant ½.
+   These are illustrative packaging rules, not engineering constraints. A live
+   tray shows occupancy, permits removal and coffee editing, and refuses overflow
+   or downsizing below its contents. Unused capacity is allowed.
+   Build coffee interactively by choosing style, size, milk, espresso shots,
+   sugar and hot/iced temperature. The illustration, description and price update.
+   Keep different recipes separate and merge identical recipes. Categories and
+   search find coffees and treats; checkout permits quantity/recipe edits and
+   shows AUD prices and full customization details before confirmation.
 3. Confirm a demo order explicitly. The customer lands on a dedicated order
    status page (`#/order/<id>`) with a four-step progress indicator, ETA, items
    and total. A home-page card links back to it.
@@ -49,9 +58,10 @@ The map is illustrative and cannot support navigation or real flight planning.
    separate confirmation. Unsupported modifiers, dietary requests, unknown
    products or ambiguous quantities ask for clarification.
 
-The initial menu groups four food styles under a fictional Peninsula Kitchen
-collective to keep the spike small. Separate vendors and multiple store locations
-remain a requirement for later implementation, not a completed capability.
+The menu is five coffee styles plus a biscuit, cake and croissant. The company's
+single-bar experience replaces the earlier multi-vendor direction. Do not add a
+marketplace as a follow-up without a new scope decision. Plant-based milk is an
+option, never an allergen-free guarantee.
 
 ## Vendor journey
 
@@ -62,8 +72,8 @@ Pause/resume and reset controls support reproducible design review.
 The same browser-local order state is shared by the two views.
 
 Six fictional drones are represented: four independent looping map markers and
-two roster drones (SKY-05/06). A customer-placed order is assigned one of the
-roster drones, which waits on the kitchen pad while the order is ready and flies
+two roster drones (FC-05/06). A customer-placed order is assigned one of the
+roster drones, which waits on the coffee bar's pad while the order is ready and flies
 a deterministic straight route to a fictional drop-off while delivering. The
 other map paths are visual scaffolding. Actual dispatch, return-to-base and battery state
 transitions are later work.
@@ -84,7 +94,8 @@ requirements. An accessible text/manual flow must remain available.
 ## Immediate review criteria
 
 - Both views are understandable and usable at desktop and mobile widths.
-- A reviewer can add food, inspect/edit a bag, confirm it, and land on an order
+- A reviewer can select a payload, build customized coffees, fill spare capacity
+  with treats, edit the contents, confirm it, and land on an order
   status page that follows the drone overhead and through a simulated camera.
 - **Skip to next stage (demo)** lets a reviewer reach each stage without waiting.
 - A vendor can request pickup before automatic dispatch.
@@ -104,7 +115,7 @@ pending, not success.
 
 Keep the starter's C# AppHost + Minimal API + Vite/React arrangement. Mock service
 data in the frontend until this direction is accepted. Next, prioritize shared
-server-owned order contracts, store locations, a deterministic simulator and
+server-owned order/recipe/payload contracts, a deterministic simulator and
 real-time delivery updates. Choose messaging/storage only when their demo value
 justifies the added setup and cloud cost.
 

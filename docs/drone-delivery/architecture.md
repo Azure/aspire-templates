@@ -28,20 +28,25 @@ flowchart LR
 | --- | --- | --- |
 | AppHost | Start the API and Vite frontend; expose resources in the dashboard | No deployment target configured |
 | API | Health endpoint, demo metadata and published frontend hosting | No order mutations or persistence |
-| React UI | Customer/vendor views, bag, confirmed orders, order status page and scripted transcript matching | In-memory, per browser; hash route only; no real authentication |
+| React UI | ForthCoffee payload selection, interactive coffee builder, tray, barista queue, confirmed orders/status and scripted transcript matching | In-memory, per browser; hash route only; no real authentication |
 | Simulated drone camera | Lazily loaded three.js view of the assigned drone's route over a map-textured ground plane | Placeholder scenery; not video; Azure Maps tiles only with the reviewer's token |
 | Simulation | Timed preparation, pickup, delivery, synthetic orders and a deterministic flight for customer orders | Other drones are illustrative loops; not real dispatch |
 | Azure Maps adapter | Real basemap and fictional animated markers | Opt-in reviewer token, no refresh or resource provisioning |
 
 Simulation order history is capped at 20 recent entries, synthetic active orders
-at eight, and quantities at nine per menu item. These are local demo UX bounds,
+at eight, and quantities at nine per recipe or treat. Confirmed orders snapshot
+the payload size and each coffee's size, milk, shots, sugar and temperature.
+Canonical variant IDs merge only identical recipes. Payload capacity uses integer
+quarter-well units: single/double/quad hold 4/8/16; coffee uses 4, biscuit 1 and
+cake/croissant 2. Validation runs again at confirmation; UI controls cannot
+overfill or shrink below the contents. These are illustrative local UX bounds,
 not platform capacity guarantees. No shared automation artifacts or claims are
 created by this implementation.
 
 ## Azure Maps findings
 
 The Web SDK supports the required browser basemap and moving HTML markers.
-Mornington is centered near longitude 145.04, latitude -38.22. The fictional
+South Melbourne is centered near longitude 144.96, latitude -37.83. The fictional
 positions use a small approximate rectangle around that area, not surveyed
 store/flight data. The SVG default is independently illustrated approximate
 geography and does not fetch mapping tiles.
@@ -68,8 +73,9 @@ References:
 ## Proposed next architecture, not implemented
 
 Keep the app readable. First move menus/orders and the deterministic simulator
-into the server; stream state updates to the frontend, provisionally with
-ASP.NET Core SignalR. Add store locations and explicit drone
+into the server, including recipe pricing and payload validation; stream state
+updates to the frontend, provisionally with ASP.NET Core SignalR. Keep the
+single-company ForthCoffee scope and add explicit drone
 pickup/delivery/return/charging state before selecting managed service variants.
 Evaluate persistence and messaging against demonstrable sample value and the
 local prerequisites, rather than adding Azure services solely for a diagram.

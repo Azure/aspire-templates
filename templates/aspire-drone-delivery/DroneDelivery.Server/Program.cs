@@ -7,8 +7,8 @@ app.UseExceptionHandler();
 app.MapHealthChecks("/health");
 app.MapGet("/api/demo", () => new
 {
-    name = "Skylane",
-    location = "Mornington, Victoria",
+    name = "ForthCoffee",
+    location = "South Melbourne, Victoria",
     mode = "UX spike: orders and flights are simulated in this browser"
 });
 app.UseDefaultFiles();

@@ -1,25 +1,25 @@
 // Shared illustrated-map geometry in a 1000 × 650 coordinate space. Used by the SVG maps and the simulated camera texture.
 export const mapSize = { width: 1000, height: 650 };
-export const landPath = 'M530 -10 C490 60 461 91 430 120 L375 162 L400 196 L382 240 L338 281 L320 321 L335 359 L303 408 L290 451 L238 503 L211 550 L190 660 H1010 V-10Z';
-export const coastPath = 'M530 -10 C490 60 461 91 430 120 L375 162 L400 196 L382 240 L338 281 L320 321 L335 359 L303 408 L290 451 L238 503 L211 550 L190 660';
-export const parkPath = 'M420 210 L490 199 L540 249 L501 282 L427 276Z M670 370 L750 352 L795 445 L705 472Z M382 437 L447 402 L483 461 L404 510Z M818 72L934 70L929 189L849 172Z';
-export const roadPaths = ['M355 227 L802 430 L1030 473', 'M576 -30 L559 186 L608 350 L706 681', 'M325 457 L636 323 L1013 157'];
-export const pierPath = 'M391 191L328 158L308 175';
+export const landPath = 'M-10-10H1010V660H-10Z';
+export const lakePath = 'M870 431C821 444 799 489 810 531L901 660H1010V534C956 504 924 429 870 431Z';
+export const coastPath = 'M870 431C821 444 799 489 810 531L901 660';
+export const parkPath = 'M737 375L1010 471V660H871L747 520Z M266 95H362V177H266Z M597 52H686V135H597Z';
+export const roadPaths = ['M-10 252H1010', 'M-10 318H1010', 'M-10 387H1010', 'M-10 456H707', 'M400-10V660', 'M600-10V660', 'M695-10L742 331L1010 493', 'M727 382L1010 570'];
+export const pierPath = 'M853 453L873 467';
 export const routePaths = 'M510 318 Q420 215 398 192 M510 318 Q646 205 681 108 M510 318 Q705 391 742 504';
 export const landmarks = [
-  { x: 398, y: 192, label: 'The jetty' },
-  { x: 681, y: 108, label: 'Garden stop' },
-  { x: 742, y: 504, label: 'Beach house' },
+  { x: 398, y: 192, label: 'Market stop' },
+  { x: 681, y: 108, label: 'Southbank stop' },
+  { x: 742, y: 504, label: 'Albert Park' },
 ];
 export const mapLabels = [
-  { x: 442, y: 155, text: 'MORNINGTON' },
-  { x: 270, y: 151, text: 'Mornington Pier', small: true },
-  { x: 665, y: 407, text: 'Alexandra Park', small: true },
-  { x: 790, y: 141, text: 'Mornington', small: true },
-  { x: 803, y: 156, text: 'Golf Club', small: true },
-  { x: 290, y: 532, text: 'Fishermans Beach', small: true },
+  { x: 410, y: 147, text: 'SOUTH MELBOURNE' },
+  { x: 135, y: 531, text: 'PORT MELBOURNE', small: true },
+  { x: 788, y: 233, text: 'Kings Domain', small: true },
+  { x: 811, y: 404, text: 'Albert Park Reserve', small: true },
+  { x: 803, y: 77, text: 'SOUTHBANK', small: true },
 ];
 
-/** Approximate conversion from illustrated-map units to WGS84 longitude/latitude for Mornington, Victoria. */
-export const toLonLat = (x: number, y: number): [number, number] => [145.016 + x / 1000 * .048, -38.201 - y / 650 * .037];
-export const fromLonLat = (lon: number, lat: number) => ({ x: (lon - 145.016) / .048 * 1000, y: (-38.201 - lat) / .037 * 650 });
+/** Approximate South Melbourne coordinates. The fictional bar is near Coventry Street, not a real shop. */
+export const toLonLat = (x: number, y: number): [number, number] => [144.93232 + x / 1000 * .048, -37.81797 - y / 650 * .0295];
+export const fromLonLat = (lon: number, lat: number) => ({ x: (lon - 144.93232) / .048 * 1000, y: (-37.81797 - lat) / .0295 * 650 });

@@ -1,8 +1,9 @@
-# Skylane: Mornington drone delivery
+# ForthCoffee: South Melbourne coffee by drone
 
-**Design preview, not a complete delivery service.** Explore a fictional takeaway
-experience over Mornington, Victoria: a customer menu and bag, a kitchen dispatch
-queue, simulated drone movement, and a scripted voice-ordering interaction.
+**Design preview, not a complete delivery service.** Explore one fictional coffee
+company in South Melbourne, Victoria: choose a payload, customize coffees and pack
+treats, then follow a simulated drone. A barista dispatch queue and scripted
+voice-ordering interaction share the same browser-local orders.
 No real orders, payments, microphone recordings or drone flights occur.
 
 ## Run the design
@@ -38,35 +39,48 @@ data.
 
 ## Things to try
 
-1. Browse or filter the menu, add items, review the bag, and explicitly confirm a
-   demo order. You land on its status page. Once it is ready, follow the drone on
+1. Choose a **Single**, **Double** or **Quad** flight box (one, two or four cup
+   wells). Build a coffee: pick its style, size, milk, shots, sugar and temperature.
+   The cup illustration and price update as you go. Different combinations stay
+   separate; identical coffees combine. Fill spare space with biscuits (¼ well),
+   cake (½ well) or croissants (½ well). Each coffee, regardless of size, uses one
+   well. These are illustrative packaging rules, not real payload engineering.
+   The tray shows capacity and blocks overfilling or shrinking a box below its
+   contents. You can leave space unused. Tap a packed coffee to edit it, or remove
+   an item from the tray. Review quantities, options and AUD prices, then explicitly
+   confirm a demo order. You land on its status page. Once it is ready, follow the drone on
    an overhead map and through a simulated drone camera. Use **Skip to next stage
    (demo)** to move on without waiting.
-2. Switch to **Kitchen & fleet**. Request pickup for an order that is ready.
+2. Switch to **Barista & fleet**. Coffee customizations appear on the docket.
+   Request pickup for an order that is ready.
    Otherwise it dispatches automatically after 30 seconds; preparation takes
    20 seconds and simulated delivery another 35. New orders arrive every 45
    simulation seconds. Pause/resume or reset the scene.
-3. Choose **Or, just say it**. Edit the example transcript, match it to the menu,
-   review the proposed bag, then separately confirm the order. The preview uses a
+3. Choose **Try a voice-order preview**. Edit “one latte and two biscuits”,
+   match it to the menu, review the proposed payload, then separately confirm.
+   Coffee defaults are regular, hot, double-shot with full cream milk (or no milk
+   for espresso/long black). Edit cups with the builder afterward. Proposals must
+   fit the chosen payload; they never silently resize it. The preview uses a
    small deterministic matcher, not speech recognition or an AI service.
    Unknown items, unsupported modifications and quantities outside 1–9 need
    clarification rather than silently changing the request.
 4. Open **Map options** to investigate an Azure Maps basemap.
 
 The four looping drone icons are illustrative and not assigned to orders. Your
-own order is assigned SKY-05 or SKY-06, which flies a deterministic route from
-Peninsula Kitchen to a fictional drop-off. The drone camera is a three.js scene
+own order is assigned FC-05 or FC-06, which flies a deterministic route from
+ForthCoffee's fictional Coventry Street bar to an Albert Park drop-off. The drone camera is a three.js scene
 with placeholder buildings, not real video. It uses Azure Maps road tiles for the
 ground when Azure Maps is configured, otherwise the illustrated map. If WebGL is
 unavailable, the overhead map still follows the drone.
-Prices, menu ratings, battery levels and all businesses are fictional design data.
+Prices, battery levels and the company are fictional design data.
+Plant milk choices are not an allergen-free guarantee; no dietary suitability is claimed.
 This is not a navigation map or a flight planning tool.
 
 ## Azure Maps feasibility spike
 
 The default original SVG map is approximate, credential-free and not sourced from
 Azure Maps tiles. The alternative uses the Azure Maps Web SDK v3 and actual
-Mornington geography with fictional store/drone markers.
+South Melbourne geography with fictional coffee-bar/drone markers.
 
 To try it, use an **existing** Azure Maps account and an identity with **Azure
 Maps Data Reader** access to that account:
@@ -84,7 +98,7 @@ Maps Data Reader** access to that account:
    The token is retained only in page memory, sent to Azure Maps by its SDK,
    and is not stored by the sample server. Reload or switch to the illustrated
    map to clear it. There is no automatic token renewal in this spike.
-   While an order's drone camera is open, the page also requests 36
+   While an order's drone camera is open, the page also requests up to 64
    zoom-16 road tiles directly from `atlas.microsoft.com` with the same token to
    texture the simulated ground. If any tile fails, the camera says so and falls
    back to the illustrated ground.
@@ -110,7 +124,7 @@ The eventual acceptance path with a current Aspire CLI 17.0 or later is:
 aspire new --template-repository https://github.com/azure/aspire-templates --template-repository-ref feature/drone-delivery
 ```
 
-Select **Mornington drone delivery (design preview)** if prompted. During review,
+Select **ForthCoffee drone delivery (design preview)** if prompted. During review,
 use the PR's head branch instead of `feature/drone-delivery`; the feature branch
 does not contain these files until the PR is merged.
 
@@ -118,8 +132,8 @@ For a local template-engine smoke check from the repository root:
 
 ```bash
 dotnet new install ./templates/aspire-drone-delivery
-dotnet new aspire-drone-delivery --name MyMornington --output ./MyMornington
-cd MyMornington
+dotnet new aspire-drone-delivery --name MyCoffeeRun --output ./MyCoffeeRun
+cd MyCoffeeRun
 aspire run
 ```
 
@@ -139,15 +153,16 @@ npm test
 npm run build
 ```
 
-The tests cover conservative transcript matching, confirmation-only order
-creation, invalid bags, the simulation lifecycle, the order's drone flight and
-demo stage skipping. The Azure Maps SDK and three.js are loaded only when needed;
+The tests cover payload capacity, variant identity/pricing, customization snapshots,
+conservative transcript matching, confirmation-only order creation, invalid
+configurations, the simulation lifecycle, the order's drone flight, South Melbourne
+coordinate mapping and demo stage skipping. The Azure Maps SDK and three.js are loaded only when needed;
 their large vendor chunks produce a Vite size advisory.
 
 ## Not ready yet
 
 `aspire deploy` is **not configured in this design phase**. Real Azure deployment,
-backend-owned orders/simulation, multiple store locations, live updates, genuine
+backend-owned orders/simulation, live updates, genuine
 speech/AI integration and end-to-end template validation are subsequent work.
 Do not treat this preview as meeting the epic's deployment acceptance criteria.
 
