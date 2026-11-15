@@ -9,25 +9,37 @@ Vite proxying. The AppHost references the server from the frontend and publishes
 the frontend's container files into server `wwwroot`, as in the upstream starter.
 The sample's product UI and illustrations are original to this spike.
 
-The design uses published Aspire 13.6.5 packages and .NET 10; it does not claim
-the final Aspire CLI 17.0+ acceptance check has happened. Matching later package/
-CLI versions is a release-readiness item. No existing template is modified.
+The template targets Aspire 17.0 and .NET 10. Until Aspire 17.0.0 is on nuget.org,
+its `NuGet.config` maps `Aspire.*` packages to the Aspire release feed. No existing
+template is modified.
 
 ```mermaid
 flowchart LR
-    Host[C# Aspire AppHost] --> API[C# Minimal API]
-    Host --> Frontend[Vite + React]
-    Frontend -. configured /api proxy .-> API
-    Frontend --> Simulation[Browser-local orders and demo flights]
-    Frontend -. explicit opt-in .-> Maps[Azure Maps Web SDK]
+    Customers[Customer simulator] -- orders --> EH[(Event Hubs)]
+    API[Server + logistics] -- drone-missions --> EH
+    EH -- missions --> Drones[Drone simulator]
+    Drones -- telemetry, photos --> EH
+    EH -- orders, telemetry, photos --> API
+    Drones -- camera images --> Blob[(Blob storage)]
+    API -- photo proxy --> Blob
+    Frontend[Vite + React] -. /api proxy .-> API
+    Frontend --> Simulation[Browser-local demo]
 ```
+
+The workers communicate only through Event Hubs. The drone simulator owns drone
+physics and the camera; the server owns logistics (which drone, when, and the
+estimated delivery); the customer simulator only generates demand. Consumers
+start at the latest event, so restarting a worker does not replay old missions.
 
 ## What exists
 
 | Component | Responsibility | Current boundary |
 | --- | --- | --- |
-| AppHost | Start the API and Vite frontend; expose resources in the dashboard | No deployment target configured |
-| API | Health endpoint, demo metadata and published frontend hosting | No order mutations or persistence |
+| AppHost | Start the emulators, workers, API and Vite frontend | No deployment target configured |
+| Domain library | Drone classes, VTOL flight legs, logistics planner, dispatcher and event contracts | Pure .NET; unit tested |
+| Drone simulator | Fleet of Piccolo/Doppio/Abbondante drones; missions, charging, telemetry, camera shots | In-memory fleet; SVG placeholder images |
+| Customer simulator | Peak-and-quiet demand from many customers at random drop-offs | Synthetic only |
+| API and logistics | Accept orders, assign drones, estimate delivery, expose fleet/orders/photos | In-memory order state; no persistence |
 | React UI | ForthCoffee payload selection, interactive coffee builder, tray, barista queue, confirmed orders/status and scripted transcript matching | In-memory, per browser; hash route only; no real authentication |
 | Simulated drone camera | Lazily loaded three.js view of the assigned drone's route over a map-textured ground plane | Placeholder scenery; not video; Azure Maps tiles only with the reviewer's token |
 | Simulation | Timed preparation, pickup, delivery, synthetic orders and a deterministic flight for customer orders | Other drones are illustrative loops; not real dispatch |
@@ -70,13 +82,12 @@ References:
 [SDK authentication callback](https://learn.microsoft.com/azure/azure-maps/how-to-secure-webapp-users),
 [pricing](https://azure.microsoft.com/pricing/details/azure-maps/).
 
-## Proposed next architecture, not implemented
+## Next architecture steps
 
-Keep the app readable. First move menus/orders and the deterministic simulator
-into the server, including recipe pricing and payload validation; stream state
-updates to the frontend, provisionally with ASP.NET Core SignalR. Keep the
-single-company ForthCoffee scope and add explicit drone
-pickup/delivery/return/charging state before selecting managed service variants.
+Orders, dispatch and the drone fleet now run on the backend. Next, move menus,
+recipe pricing and payload validation into the server, and stream fleet and order
+updates to the frontend, provisionally with ASP.NET Core SignalR, so the UI shows
+the backend simulation instead of its own. Keep the single-company ForthCoffee scope.
 Evaluate persistence and messaging against demonstrable sample value and the
 local prerequisites, rather than adding Azure services solely for a diagram.
 

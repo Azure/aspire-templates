@@ -1,0 +1,112 @@
+using DroneDelivery.Domain;
+
+namespace DroneDelivery.Tests;
+
+public class LogisticsTests
+{
+    static readonly DateTimeOffset Now = new(2026, 11, 16, 8, 0, 0, TimeSpan.Zero);
+    static readonly GeoPoint Store = ServiceArea.Stores[0].Location;
+    static readonly GeoPoint Customer = new(-37.8420, 144.9740);
+
+    static DroneAvailability Drone(string id, DroneClass droneClass, double charge = 100, GeoPoint? at = null) =>
+        new(id, droneClass, at ?? Store, at ?? Store, charge, Now);
+
+    [Fact]
+    public void Legs_climb_and_descend_vertically()
+    {
+        var leg = DroneSpec.For(DroneClass.Doppio).Leg(Store, Customer);
+
+        var climbing = leg.At(leg.VerticalDuration / 2);
+        Assert.Equal((Manoeuvre.VerticalClimb, Store), (climbing.Manoeuvre, climbing.Position));
+        Assert.Equal(DroneSpec.CruiseAltitudeMetres / 2, climbing.AltitudeMetres, 3);
+
+        var cruising = leg.At(leg.VerticalDuration + leg.CruiseDuration / 2);
+        Assert.Equal((Manoeuvre.Cruise, DroneSpec.CruiseAltitudeMetres), (cruising.Manoeuvre, cruising.AltitudeMetres));
+
+        var descending = leg.At(leg.Duration - leg.VerticalDuration / 2);
+        Assert.Equal((Manoeuvre.VerticalDescent, Customer), (descending.Manoeuvre, descending.Position));
+        Assert.Equal((Manoeuvre.OnTheGround, 0d), (leg.At(leg.Duration).Manoeuvre, leg.At(leg.Duration).AltitudeMetres));
+    }
+
+    [Fact]
+    public void Picks_the_smallest_capable_drone_and_never_an_undersized_one()
+    {
+        var fleet = new[] { Drone("ABB-01", DroneClass.Abbondante), Drone("DOP-01", DroneClass.Doppio), Drone("PIC-01", DroneClass.Piccolo) };
+
+        Assert.Equal("PIC-01", LogisticsPlanner.Plan(new("single", 1, Store, Customer, Now), fleet, Now)!.DroneId);
+        Assert.Equal("ABB-01", LogisticsPlanner.Plan(new("quad", 4, Store, Customer, Now), fleet, Now)!.DroneId);
+    }
+
+    [Fact]
+    public void Waits_on_the_pad_until_it_can_arrive_as_the_order_is_ready()
+    {
+        var readyAt = Now.AddMinutes(10);
+        var drone = Drone("PIC-01", DroneClass.Piccolo, at: Customer);
+
+        var plan = LogisticsPlanner.Plan(new("later", 1, Store, Customer, readyAt), [drone], Now)!;
+
+        Assert.Equal(readyAt - DroneSpec.For(DroneClass.Piccolo).Leg(Customer, Store).Duration, plan.DepartAt);
+        Assert.Equal(readyAt + LogisticsPlanner.LoadingTime, plan.PickupAt);
+    }
+
+    [Fact]
+    public void Low_battery_drones_charge_before_departing()
+    {
+        var plan = LogisticsPlanner.Plan(new("order", 1, Store, Customer, Now), [Drone("PIC-01", DroneClass.Piccolo, charge: 5)], Now)!;
+
+        Assert.True(plan.ChargeBeforeDeparture > TimeSpan.Zero);
+        Assert.Equal(Now + plan.ChargeBeforeDeparture, plan.DepartAt);
+    }
+
+    [Fact]
+    public void Quad_orders_queue_behind_the_only_two_capable_drones()
+    {
+        var dispatcher = new Dispatcher();
+        foreach (var (id, droneClass) in new[] { ("ABB-01", DroneClass.Abbondante), ("ABB-02", DroneClass.Abbondante), ("PIC-01", DroneClass.Piccolo), ("PIC-02", DroneClass.Piccolo) })
+            dispatcher.Observe(new DroneTelemetry(id, droneClass, 1, Now, Store, Store, 0, 0, 100, DroneState.Parked, Manoeuvre.OnTheGround, null, null, 0));
+
+        var placed = Enumerable.Range(1, 3)
+            .Select(i => new OrderPlaced($"QUAD-{i}", $"customer-{i}", "Test", Customer, 4, [], Now.AddSeconds(i), "test"))
+            .ToList();
+        placed.ForEach(order => dispatcher.Accept(order));
+        var missions = dispatcher.PlanPending(Now);
+
+        Assert.Equal(3, missions.Count);
+        Assert.All(missions, mission => Assert.StartsWith("ABB-", mission.DroneId));
+        Assert.Equal(2, missions.Take(2).Select(mission => mission.DroneId).Distinct().Count());
+
+        var first = dispatcher.Order(missions.First(mission => mission.DroneId == missions[2].DroneId).OrderId)!;
+        var third = dispatcher.Order("QUAD-3")!;
+        Assert.True(third.DepartAt > first.EstimatedDelivery, "the third order waits for a drone to finish its first delivery");
+        Assert.True(third.EstimatedDelivery > dispatcher.Order("QUAD-2")!.EstimatedDelivery);
+        Assert.StartsWith("Queued for Abbondante", third.Note);
+    }
+
+    [Fact]
+    public void Orders_no_drone_can_carry_are_unserviceable()
+    {
+        var dispatcher = new Dispatcher();
+        dispatcher.Observe(new DroneTelemetry("PIC-01", DroneClass.Piccolo, 1, Now, Store, Store, 0, 0, 100, DroneState.Parked, Manoeuvre.OnTheGround, null, null, 0));
+        dispatcher.Accept(new OrderPlaced("QUAD-1", "c", "Test", Customer, 4, [], Now, "test"));
+
+        Assert.Empty(dispatcher.PlanPending(Now));
+        Assert.Equal(OrderStatus.Unserviceable, dispatcher.Order("QUAD-1")!.Status);
+    }
+
+    [Fact]
+    public void A_returned_drone_is_available_again_from_its_pad()
+    {
+        var dispatcher = new Dispatcher();
+        dispatcher.Observe(new DroneTelemetry("PIC-01", DroneClass.Piccolo, 1, Now, Customer, Store, 0, 0, 100, DroneState.Parked, Manoeuvre.OnTheGround, null, null, 0));
+        dispatcher.Accept(new OrderPlaced("A", "c", "Test", Customer, 1, [], Now, "test"));
+        var mission = Assert.Single(dispatcher.PlanPending(Now));
+
+        dispatcher.Observe(new MissionProgress(mission.MissionId, "A", "PIC-01", MissionMilestone.Delivered, Now.AddMinutes(5), Customer), Now.AddMinutes(5));
+        dispatcher.Observe(new MissionProgress(mission.MissionId, "A", "PIC-01", MissionMilestone.ReturnedToPad, Now.AddMinutes(8), Store), Now.AddMinutes(8));
+        dispatcher.Accept(new OrderPlaced("B", "c", "Test", Customer, 1, [], Now.AddMinutes(8), "test"));
+        var next = Assert.Single(dispatcher.PlanPending(Now.AddMinutes(8)));
+
+        Assert.Equal(OrderStatus.Delivered, dispatcher.Order("A")!.Status);
+        Assert.True(next.DepartAt <= Now.AddMinutes(9), "no longer waiting on the first mission's projected return");
+    }
+}

@@ -8,8 +8,9 @@ No real orders, payments, microphone recordings or drone flights occur.
 
 ## Run the design
 
-Prerequisites: .NET SDK 10.0 or later, Node.js 22.13 or later, npm, and Aspire CLI.
-No Azure account or container runtime is needed for the default illustrated map.
+Prerequisites: .NET SDK 10.0 or later, Node.js 22.13 or later, npm, Aspire CLI 17.0
+or later and a container runtime such as Docker Desktop. No Azure account is needed:
+Event Hubs and Blob Storage run as local emulators.
 
 From this directory:
 
@@ -17,9 +18,17 @@ From this directory:
 aspire run
 ```
 
-Open the frontend endpoint from the Aspire dashboard. The AppHost starts a C#
-Minimal API and the Vite/React frontend, using the same orchestration and
-frontend-publishing pattern as Aspire's `aspire-ts-cs-starter`.
+Open the frontend endpoint from the Aspire dashboard. The AppHost starts:
+
+| Resource | What it does |
+| --- | --- |
+| `eventhubs` | Event Hubs emulator with `orders`, `drone-missions`, `drone-telemetry` and `drone-photos` hubs |
+| `storage` | Azurite with the `drone-photo-store` blob container for simulated camera images |
+| `drone-simulator` | Worker that owns the fleet: flies missions, sends telemetry and uploads camera shots |
+| `server` | Minimal API plus the logistics worker that assigns drones and estimates delivery times |
+| `customer-simulator` | Worker that places orders from many customers at random South Melbourne locations |
+| `frontend` | Vite/React UI, published into the server's `wwwroot` like Aspire's `aspire-ts-cs-starter` |
+
 The development launch profile uses localhost HTTP endpoints; its unsecured
 transport opt-in is local development configuration, not a deployment setting.
 
@@ -36,6 +45,49 @@ exist only in browser memory and reset on reload. Each browser has an independen
 simulation. The minimal API's `/api/demo` and `/health` endpoints are available
 when the server is running; the UX spike does not require the API for its mock
 data.
+
+## Simulated fleet and demand
+
+The fleet has three drone classes, named after coffee serving sizes:
+
+| Class | Payload bays | Cruise speed | Battery use |
+| --- | --- | --- | --- |
+| Piccolo | 1 | 16 m/s | 3% per km |
+| Doppio | 2 | 14 m/s | 4.5% per km |
+| Abbondante | 4 | 12 m/s | 7% per km |
+
+At startup the drone simulator parks each drone on a random pad in the service
+area with 35-100% charge. Drones only fly when they have a mission: they climb
+and descend vertically (VTOL), return to their pad afterwards and charge while
+parked. Telemetry is sent every second in flight and every 10 seconds on the pad.
+The camera captures a shot at the start and end of each takeoff and landing and
+periodically in cruise; the landing at the customer is the proof-of-delivery shot.
+Images are illustrated SVGs labelled as simulated, not real photos.
+
+When an order arrives, the server's logistics worker picks the capable drone that
+can deliver it soonest, preferring the smallest class. It accounts for battery
+(with a 15% reserve and charging time), preparation time and drones already
+committed to earlier missions, so with two Abbondante drones a third four-bay
+order queues and gets a later estimate.
+
+Tune the simulation with environment variables in `DroneDelivery.AppHost/AppHost.cs`:
+
+| Variable | Worker | Default |
+| --- | --- | --- |
+| `FLEET_PICCOLO`, `FLEET_DOPPIO`, `FLEET_ABBONDANTE` | drone simulator | 6, 3, 2 |
+| `FLEET_SEED` | drone simulator | random |
+| `PARKED_TELEMETRY_SECONDS`, `CRUISE_PHOTO_SECONDS` | drone simulator | 10, 20 |
+| `CUSTOMERS_PEAK` | customer simulator | 60 |
+| `ORDERS_PER_CUSTOMER_PER_HOUR` | customer simulator | 3 |
+| `DEMAND_CYCLE_MINUTES`, `DEMAND_QUIET_SHARE` | customer simulator | 15, 0.2 |
+| `CUSTOMER_SEED` | customer simulator | random |
+
+Active customers rise and fall between the quiet share and the peak over each
+demand cycle. Fleet state lives in memory, so it resets when the simulator restarts.
+
+The server exposes `GET /api/fleet`, `GET /api/orders`, `GET /api/orders/{id}`,
+`POST /api/orders` and `GET /api/photos/{droneId}/{fileName}`. The React UI does
+not use these APIs yet; it still runs its own browser simulation.
 
 ## Things to try
 
@@ -139,22 +191,24 @@ aspire run
 ```
 
 The generated tree excludes dependencies, build output, local environment files
-and compiler caches. This design spike pins the available Aspire 13.6.5 packages.
-Aspire CLI 17.0+ compatibility and repository-ref generation remain explicit final
-milestone checks, not claims made by this spike.
+and compiler caches. The template requires Aspire 17.0. Until Aspire 17.0.0 is on
+nuget.org, the template's `NuGet.config` adds the Aspire release feed for `Aspire.*`
+packages; remove that source once the packages are on nuget.org.
 
 ## Validation
 
 ```bash
 dotnet build DroneDelivery.AppHost
-dotnet build DroneDelivery.Server
+dotnet test DroneDelivery.Tests
 cd frontend
 npm ci
 npm test
 npm run build
 ```
 
-The tests cover payload capacity, variant identity/pricing, customization snapshots,
+The .NET tests cover VTOL flight legs, drone selection by payload, waiting and
+charging before departure, queueing behind busy drones, unserviceable orders and
+drones becoming available again. The frontend tests cover payload capacity, variant identity/pricing, customization snapshots,
 conservative transcript matching, confirmation-only order creation, invalid
 configurations, the simulation lifecycle, the order's drone flight, South Melbourne
 coordinate mapping and demo stage skipping. The Azure Maps SDK and three.js are loaded only when needed;
@@ -163,7 +217,7 @@ their large vendor chunks produce a Vite size advisory.
 ## Not ready yet
 
 `aspire deploy` is **not configured in this design phase**. Real Azure deployment,
-backend-owned orders/simulation, live updates, genuine
+wiring the UI to the backend orders and fleet, live updates, genuine
 speech/AI integration and end-to-end template validation are subsequent work.
 Do not treat this preview as meeting the epic's deployment acceptance criteria.
 
