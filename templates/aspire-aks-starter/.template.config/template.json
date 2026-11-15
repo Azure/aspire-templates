@@ -64,28 +64,28 @@
     "HostingAppHostVersion": {
       "type": "parameter",
       "datatype": "string",
-      "defaultValue": "13.6.5",
+      "defaultValue": "17.0.0",
       "description": "The version of Aspire.Hosting.AppHost.",
       "replaces": "HostingAppHostPackageVersion"
     },
     "HostingDotnetVersion": {
       "type": "parameter",
       "datatype": "string",
-      "defaultValue": "13.6.5-preview.1.26559.7",
+      "defaultValue": "17.0.0",
       "description": "The version of Aspire.Hosting.Dotnet.",
       "replaces": "HostingDotnetPackageVersion"
     },
     "HostingAzureKubernetesVersion": {
       "type": "parameter",
       "datatype": "string",
-      "defaultValue": "13.6.5-preview.1.26559.7",
-      "description": "The version of the preview Aspire.Hosting.Azure.Kubernetes integration.",
+      "defaultValue": "17.0.0",
+      "description": "The version of Aspire.Hosting.Azure.Kubernetes.",
       "replaces": "HostingAzureKubernetesPackageVersion"
     },
     "HostingAzureNetworkVersion": {
       "type": "parameter",
       "datatype": "string",
-      "defaultValue": "13.6.5",
+      "defaultValue": "17.0.0",
       "description": "The version of Aspire.Hosting.Azure.Network.",
       "replaces": "HostingAzureNetworkPackageVersion"
     },
@@ -93,7 +93,7 @@
       "type": "parameter",
       "datatype": "string",
       "isEnabled": "UseRedisCache",
-      "defaultValue": "13.6.5",
+      "defaultValue": "17.0.0",
       "description": "The version of Aspire.Hosting.Azure.Redis.",
       "replaces": "HostingAzureRedisPackageVersion"
     },
@@ -101,7 +101,7 @@
       "type": "parameter",
       "datatype": "string",
       "isEnabled": "UseRedisCache",
-      "defaultValue": "13.6.5",
+      "defaultValue": "17.0.0",
       "description": "The version of Aspire.Microsoft.Azure.StackExchangeRedis.",
       "replaces": "AzureRedisClientPackageVersion"
     },
@@ -109,7 +109,7 @@
       "type": "parameter",
       "datatype": "string",
       "isEnabled": "UseRedisCache",
-      "defaultValue": "13.6.5",
+      "defaultValue": "17.0.0",
       "description": "The version of Aspire.StackExchange.Redis.OutputCaching.",
       "replaces": "RedisOutputCachingPackageVersion"
     },
@@ -117,7 +117,7 @@
       "type": "parameter",
       "datatype": "string",
       "isEnabled": "(TestFx != None)",
-      "defaultValue": "13.6.5",
+      "defaultValue": "17.0.0",
       "description": "The version of Aspire.Hosting.Testing.",
       "replaces": "HostingTestingPackageVersion"
     },

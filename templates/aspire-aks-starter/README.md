@@ -29,12 +29,23 @@ default**. With `UseRedisCache` enabled, `RunAsContainer()` runs Redis locally
 Managed Redis and uses workload identity for passwordless access. With caching
 disabled, the frontend uses in-process output caching and no Redis is provisioned.
 
-The SDK and stable Aspire packages use **13.6.5**. AKS, its transitive Kubernetes
-integration, and the .NET project integration use matching
-**13.6.5-preview.1.26559.7** packages. AKS is preview; subnet APIs are experimental
-(`ASPIREAZURE003`). Keep these packages in the same release family when updating.
-The patch level includes the hosting fix for
-[CVE-2026-120006](https://github.com/advisories/GHSA-f7vh-h5g3-7jrh).
+Use the **Aspire 17 CLI**. `aspire new` resolves the highest available version of
+each Aspire package from the CLI-selected feeds and applicable NuGet configuration.
+The host metadata accepts `[17.0.0-0,18.0.0-0)`, including prereleases: 17.0 and
+newer 17.x versions are eligible, but 13.x and 18.x (including previews) are not.
+Prereleases are enabled for all Aspire packages so daily builds can use a coherent
+package family, including preview-only AKS packages. Resolution is per package;
+use feeds containing a compatible set and review the generated versions.
+An unavailable matching version fails generation rather than falling back to 13.x.
+
+`dotnet new` does not use this CLI resolver; its version-symbol defaults are the
+matching **17.0.0** packages. Until these are available on nuget.org, configure the
+generated project's NuGet sources to use the same release feed as your Aspire 17
+CLI. The verified release/17.0 build is available from the public
+[a509f094 staging feed](https://pkgs.dev.azure.com/dnceng/public/_packaging/darc-pub-microsoft-aspire-a509f094/nuget/v3/index.json).
+The AppHost uses explicit `Aspire.Hosting.AppHost` and `Aspire.Hosting.Dotnet`
+references without the obsolete `Aspire.AppHost.Sdk`. AKS and subnet APIs remain
+experimental; keep the hosting packages compatible when updating.
 
 ## Deployment model
 
@@ -68,7 +79,11 @@ explicitly supports the assigned AGC FQDN without DNS API access.
 [Microsoft's AGC cert-manager guide](https://learn.microsoft.com/azure/application-gateway/for-containers/how-to-cert-manager-lets-encrypt-gateway-api)
 describes the Gateway HTTP-01 challenge flow. Actual issuance still depends on public
 reachability, [CAA policy](https://letsencrypt.org/docs/caa/), and CA rate limits.
-While experimenting, change `WithLetsEncryptProduction` to `WithLetsEncryptStaging`
+The Aspire 17 issuer uses `WithAcmeServer(acmeServer, acmeEmail)`, following the
+[release/17.0 E2E example](https://github.com/microsoft/aspire/blob/a509f094e0ee87d17dc0e1cc9bca84f7ca2623da/tests/Aspire.Deployment.EndToEnd.Tests/AksAzureKubernetesEnvironmentCertManagerDeploymentTests.cs#L137-L148).
+`Parameters:acme-server` defaults to Let's Encrypt production in the AppHost's
+`appsettings.json`. While experimenting, set
+`Parameters__acme_server=https://acme-staging-v02.api.letsencrypt.org/directory`
 to avoid production rate limits; staging certificates are not browser-trusted.
 
 ## Publish without provisioning

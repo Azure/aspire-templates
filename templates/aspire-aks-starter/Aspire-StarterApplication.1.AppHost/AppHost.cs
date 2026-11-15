@@ -34,9 +34,10 @@ aks.AddNodePool("workload", nodeVmSize, minCount: 1, maxCount: 3);
 var publicLb = aks.AddLoadBalancer("public", albSubnet);
 
 var acmeEmail = builder.AddParameter("acme-email");
+var acmeServer = builder.AddParameter("acme-server");
 var certManager = aks.AddCertManager("cert-manager");
 var letsencrypt = certManager.AddIssuer("letsencrypt-prod")
-    .WithLetsEncryptProduction(acmeEmail)
+    .WithAcmeServer(acmeServer, acmeEmail)
     .WithHttp01Solver();
 
 aks.AddGateway("web")
