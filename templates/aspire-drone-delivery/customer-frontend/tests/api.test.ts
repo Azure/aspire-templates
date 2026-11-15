@@ -66,3 +66,19 @@ test('receipt identity, recipes and partial quad capacity are preserved', () => 
   assert.deepEqual(customerOrder(snapshot, quad, now).bag, receipt.bag);
   assert.throws(() => customerOrder({ ...snapshot, order: { ...snapshot.order, orderId: 'FC-OTHER' } }, receipt, now), /receipt/);
 });
+
+test('current stage progress follows live telemetry instead of jumping to complete', () => {
+  const store = snapshot.store.location, drop = snapshot.order.dropOff;
+  const along = (t: number) => ({ latitude: store.latitude + (drop.latitude - store.latitude) * t, longitude: store.longitude + (drop.longitude - store.longitude) * t });
+  const delivering = (t: number) => customerOrder({ ...snapshot, status: 'PickedUp',
+    telemetry: { ...telemetry, state: 'FlyingToCustomer', position: along(t) } }, receipt, now).stageProgress!;
+  assert.closeTo(delivering(.25), .25, .01);
+  assert.closeTo(delivering(.75), .75, .01);
+  const preparing = customerOrder({ ...snapshot, status: 'AwaitingFleet', telemetry: null, readyAt: new Date(now + 90000).toISOString() }, receipt, now);
+  assert.equal(preparing.stage, 'Preparing');
+  assert.closeTo(preparing.stageProgress!, .5, .01);
+  const inbound = customerOrder(snapshot, receipt, now);
+  assert.isAbove(inbound.stageProgress!, 0);
+  assert.isBelow(inbound.stageProgress!, 1);
+  assert.equal(customerOrder({ ...snapshot, status: 'Delivered' }, receipt, now).stageProgress, 1);
+});

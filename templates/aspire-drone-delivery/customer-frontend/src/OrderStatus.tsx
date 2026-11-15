@@ -74,7 +74,7 @@ export default function OrderStatus({ order, orderId, settings, onSettings, onAd
     <ol className="status-steps" aria-label="Order progress">{stages.map((stage, index) => {
       const Icon = stageIcons[index];
       const state = index < current ? 'done' : index === current ? 'current' : 'upcoming';
-      const fill = state === 'done' ? 1 : state === 'current' ? (stage === 'Delivered' ? 1 : order.backend ? 0 : Math.min(1, order.elapsed / duration[stage])) : 0;
+      const fill = state === 'done' ? 1 : state === 'current' ? (stage === 'Delivered' ? 1 : order.backend ? order.stageProgress ?? 0 : Math.min(1, order.elapsed / duration[stage])) : 0;
       return <li key={stage} className={state} aria-current={state === 'current' ? 'step' : undefined}>
         <span className="step-icon">{state === 'done' ? <Check size={16} /> : <Icon size={16} />}</span>
         <span className="step-label">{stage}</span>

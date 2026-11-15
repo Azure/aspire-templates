@@ -123,7 +123,7 @@ export function addToBag(bag: Bag, line: BagLine, payload: PayloadSize): Bag {
 
 export type Stage = 'Preparing' | 'Ready for pickup' | 'Delivering' | 'Delivered';
 export type DroneAssignment = { id: string; pickupOrigin: Point; assignedAt: number };
-export type Order = { id: string; customer: string; bag: Bag; payload: PayloadSize; stage: Stage; elapsed: number; manual: boolean; drone?: DroneAssignment; backend?: boolean; tracking?: OrderFlight; pickup?: Destination; dropOff?: Destination; note?: string | null; etaSeconds?: number; photo?: { url: string; timestamp: string; proofOfDelivery: boolean } };
+export type Order = { id: string; customer: string; bag: Bag; payload: PayloadSize; stage: Stage; elapsed: number; manual: boolean; drone?: DroneAssignment; backend?: boolean; stageProgress?: number; tracking?: OrderFlight; pickup?: Destination; dropOff?: Destination; note?: string | null; etaSeconds?: number; photo?: { url: string; timestamp: string; proofOfDelivery: boolean } };
 export type DemoState = { orders: Order[]; nextId: number; ticks: number; dronePads: Record<string, Point> };
 export const initialState: DemoState = {
   nextId: 1044, ticks: 0,

@@ -69,14 +69,29 @@ export function trackingFor(snapshot: OrderSnapshot, now = Date.now()): OrderFli
   };
 }
 
+const fraction = (value: number) => Math.max(0, Math.min(1, value));
+// Progress through the current stage, driven by the server snapshot and live drone telemetry.
+export function stageProgressFor(snapshot: OrderSnapshot, tracking: OrderFlight | undefined, now = Date.now()): number {
+  const stage = stageFor(snapshot, now);
+  if (stage === 'Delivered') return 1;
+  if (stage === 'Preparing') {
+    const placed = Date.parse(snapshot.order.placedAt), ready = Date.parse(snapshot.readyAt);
+    return ready > placed ? fraction((now - placed) / (ready - placed)) : 0;
+  }
+  const inbound = tracking?.phase === 'To pickup' || tracking?.phase === 'On the pad';
+  if (stage === 'Ready for pickup') return tracking && inbound ? tracking.progress : 0;
+  return tracking && !inbound ? tracking.progress : 0;
+}
+
 export function customerOrder(snapshot: OrderSnapshot, receipt: Receipt, now = Date.now()): Order {
   if (snapshot.order.orderId !== receipt.id) throw new Error('Order response does not match your receipt.');
+  const tracking = trackingFor(snapshot, now);
   const photo = snapshot.photos.filter(frame => snapshot.droneId && frame.blobName.startsWith(`${snapshot.droneId}/`)).at(-1);
   return {
     id: receipt.id, customer: 'You', bag: receipt.bag, payload: receipt.payload, manual: true, backend: true,
     stage: stageFor(snapshot, now), elapsed: Math.max(0, (now - Date.parse(snapshot.order.placedAt)) / 1000),
     drone: snapshot.droneId ? { id: snapshot.droneId, pickupOrigin: point(snapshot.store.location), assignedAt: 0 } : undefined,
-    tracking: trackingFor(snapshot, now), pickup: { ...point(snapshot.store.location), label: snapshot.store.name },
+    tracking, stageProgress: stageProgressFor(snapshot, tracking, now), pickup: { ...point(snapshot.store.location), label: snapshot.store.name },
     dropOff: { ...point(snapshot.order.dropOff), label: receipt.dropOff.label }, note: snapshot.note,
     etaSeconds: snapshot.estimatedDelivery ? Math.max(0, Math.ceil((Date.parse(snapshot.estimatedDelivery) - now) / 1000)) : undefined,
     photo: photo ? { url: `/api/photos/${photo.blobName.split('/').map(encodeURIComponent).join('/')}`, timestamp: photo.timestamp, proofOfDelivery: photo.proofOfDelivery } : undefined,
