@@ -35,9 +35,6 @@ em { font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
 .wordmark { text-decoration: none; font-size: 34px; font-weight: 650; letter-spacing: -1.6px; display: flex; align-items: center; }
 .brand-symbol { display: grid; place-items: center; width: 42px; height: 42px; background: #e7ecdf; border-radius: 50%; margin-right: 10px; }
 .brand-period { color: #99ad75; }
-.portal-switch { background: #edeee7; padding: 4px; border-radius: 7px; display: flex; gap: 4px; margin-left: 35px; }
-.portal-switch button { background: none; border-radius: 5px; font-size: 11px; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 15px; color: #6b7469; }
-.portal-switch button.selected { background: #fffefa; color: var(--forest); box-shadow: 0 1px 5px #273c1c12; }
 .header-actions { display: flex; align-items: center; gap: 22px; }
 .location { display: flex; align-items: center; gap: 7px; font-size: 11px; }
 .bag-button { display: flex; align-items: center; gap: 9px; font-size: 11px; background: none; padding: 8px 0 8px 20px; border-left: 1px solid var(--line); }
@@ -120,12 +117,6 @@ footer { border-top: 1px solid var(--line); display: flex; align-items: center; 
 footer button { display: flex; align-items: center; gap: 7px; background: none; color: #727d66; font-size: 9px; margin-left: auto; }
 .footer-coordinates { font-size: 7px; letter-spacing: 1px; }
 .help-button { position: fixed; bottom: 20px; right: 20px; display: grid; place-items: center; width: 37px; height: 37px; color: #fffef5; background: var(--forest); box-shadow: 0 4px 12px #163c2533; border-radius: 50%; z-index: 5; }
-.vendor-main { padding: 35px 5.2% 32px; }
-.vendor-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; }
-.vendor-heading h1 { font-size: 42px; font-weight: 500; line-height: 1.1; letter-spacing: -1.6px; margin: 12px 0; }
-.vendor-heading h1 em { color: #7c875d; }
-.vendor-heading > div > p { font-size: 11px; color: #7e8675; }
-.vendor-controls { display: flex; align-items: center; gap: 10px; padding-bottom: 6px; }
 .live-pill { display: flex; align-items: center; gap: 7px; padding: 9px 12px; border-radius: 4px; background: #eaf0e1; font-size: 9px; color: #648054; }
 .outline-button { display: inline-flex; align-items: center; gap: 7px; font-size: 10px; border: 1px solid #dde2d2; border-radius: 4px; padding: 8px 11px; background: transparent; }
 .icon-button { display: inline-flex; align-items: center; justify-content: center; background: transparent; border-radius: 5px; padding: 8px; }
@@ -280,7 +271,6 @@ footer button { display: flex; align-items: center; gap: 7px; background: none; 
 .wordmark-light { font-weight: 400; }
 .brand-symbol { border-radius: 8px; width: 35px; height: 35px; margin-right: 9px; background: #e8ebdf; }
 .brand-period { color: #b68b49; }
-.portal-switch { margin-left: 0; }
 .coffee-cup { width: 100%; display: block; }
 .coffee-steam { animation: steam 3.5s ease-in-out infinite; }
 @keyframes steam { 50% { opacity: .3; transform: translateY(-4px); } }
@@ -377,7 +367,6 @@ footer button { display: flex; align-items: center; gap: 7px; background: none; 
 .kitchen-food .coffee-cup { transform: scale(1.25); }
 @media (min-width: 1600px) { .site-header, .demo-strip, footer { padding-left: max(5.2%, calc((100% - 1434px) / 2)); padding-right: max(5.2%, calc((100% - 1434px) / 2)); } }
 @media (max-width: 1100px) {
-  .portal-switch { margin-left: 0; }
   .location { display: none; }
   .operations-grid { grid-template-columns: 1.5fr 1fr; gap: 14px; }
   .status-grid { grid-template-columns: 1fr; }
@@ -391,8 +380,6 @@ footer button { display: flex; align-items: center; gap: 7px; background: none; 
   .brand-symbol { width: 34px; height: 34px; }
   .header-actions { margin-left: auto; }
   .bag-button { border: 0; }
-  .portal-switch { order: 3; width: 100%; }
-  .portal-switch button { flex: 1; padding: 10px; }
   .strip-message { display: none; }
   .customer-hero { grid-template-columns: 1fr; }
   .floating-delivery { bottom: 46px; }
@@ -413,11 +400,6 @@ footer button { display: flex; align-items: center; gap: 7px; background: none; 
   footer { padding: 22px 5%; gap: 15px; flex-wrap: wrap; }
   footer > span { font-size: 8px; }
   footer button { margin-left: 0; width: 100%; font-size: 9px; }
-  .vendor-main { padding: 27px 5%; }
-  .vendor-heading { flex-wrap: wrap; }
-  .vendor-heading h1 { font-size: 36px; }
-  .vendor-controls { width: 100%; }
-  .vendor-controls .icon-button { margin-left: auto; }
   .stat-grid { grid-template-columns: 1fr 1fr; margin-top: 17px; }
   .stat-grid > div { padding: 16px; }
   .stat-grid > div:nth-child(2) { border-right: 0; }
