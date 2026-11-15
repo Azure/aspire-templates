@@ -75,7 +75,8 @@ The same browser-local order state is shared by the two views.
 Six fictional drones are represented: four independent looping map markers and
 two roster drones (FC-05/06). A customer-placed order is assigned one of the
 roster drones, which waits on the coffee bar's pad while the order is ready and flies
-a deterministic straight route to a fictional drop-off while delivering. The
+a deterministic route to one of several fictional drop-offs while delivering,
+climbing and descending vertically at each end. The
 other map paths are visual scaffolding. Actual dispatch, return-to-base and battery state
 transitions are later work.
 

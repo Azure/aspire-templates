@@ -68,7 +68,8 @@ data.
 
 The four looping drone icons are illustrative and not assigned to orders. Your
 own order is assigned FC-05 or FC-06, which flies a deterministic route from
-ForthCoffee's fictional Coventry Street bar to an Albert Park drop-off. The drone camera is a three.js scene
+ForthCoffee's fictional Coventry Street bar to one of seven South Melbourne drop-offs, taking off and
+landing vertically. The drone camera points straight down during take-off and landing. It is a three.js scene
 with placeholder buildings, not real video. It uses Azure Maps road tiles for the
 ground when Azure Maps is configured, otherwise the illustrated map. If WebGL is
 unavailable, the overhead map still follows the drone.
