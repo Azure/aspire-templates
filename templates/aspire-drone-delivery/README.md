@@ -88,6 +88,9 @@ At startup the drone simulator parks each drone on a random pad in the service
 area with 35-100% charge. Drones only fly when they have a mission: they climb
 and descend vertically (VTOL), return to their pad afterwards and charge while
 parked. Telemetry is sent every second in flight and every 10 seconds on the pad.
+Pickup and delivery progress uses the simulator's elapsed fraction of the complete
+flight leg, including climb and descent, rather than horizontal distance alone.
+Missing, stale or unrelated telemetry never advances a flight bar.
 The camera captures a shot at the start and end of each takeoff and landing and
 periodically in cruise; the landing at the customer is the proof-of-delivery shot.
 Images are illustrated SVGs labelled as simulated, not real photos.

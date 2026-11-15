@@ -71,18 +71,19 @@ public sealed record FlightLeg(DroneSpec Spec, GeoPoint From, GeoPoint To)
         var vertical = VerticalDuration.TotalSeconds;
         var cruise = CruiseDuration.TotalSeconds;
         var t = Math.Clamp(elapsed.TotalSeconds, 0, Duration.TotalSeconds);
+        var progress = Duration == TimeSpan.Zero ? 1 : t / Duration.TotalSeconds;
         if (t < vertical)
-            return new(From, DroneSpec.CruiseAltitudeMetres * t / vertical, Manoeuvre.VerticalClimb, From.HeadingTo(To));
+            return new(From, DroneSpec.CruiseAltitudeMetres * t / vertical, Manoeuvre.VerticalClimb, From.HeadingTo(To), progress);
         if (t <= vertical + cruise)
         {
             var fraction = cruise == 0 ? 1 : (t - vertical) / cruise;
-            return new(From.Towards(To, fraction), DroneSpec.CruiseAltitudeMetres, Manoeuvre.Cruise, From.HeadingTo(To));
+            return new(From.Towards(To, fraction), DroneSpec.CruiseAltitudeMetres, Manoeuvre.Cruise, From.HeadingTo(To), progress);
         }
         var remaining = Duration.TotalSeconds - t;
         return remaining <= 0
-            ? new(To, 0, Manoeuvre.OnTheGround, From.HeadingTo(To))
-            : new(To, DroneSpec.CruiseAltitudeMetres * remaining / vertical, Manoeuvre.VerticalDescent, From.HeadingTo(To));
+            ? new(To, 0, Manoeuvre.OnTheGround, From.HeadingTo(To), progress)
+            : new(To, DroneSpec.CruiseAltitudeMetres * remaining / vertical, Manoeuvre.VerticalDescent, From.HeadingTo(To), progress);
     }
 }
 
-public readonly record struct FlightSample(GeoPoint Position, double AltitudeMetres, Manoeuvre Manoeuvre, double Heading);
+public readonly record struct FlightSample(GeoPoint Position, double AltitudeMetres, Manoeuvre Manoeuvre, double Heading, double Progress);

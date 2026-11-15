@@ -8,7 +8,7 @@ const telemetry: Telemetry = {
   droneId: 'PIC-01', class: 'Piccolo', sequence: 2, timestamp: new Date(now).toISOString(),
   position: { latitude: -37.838, longitude: 144.967 }, homePad: { latitude: -37.842, longitude: 144.972 },
   altitudeMetres: 60, heading: 310, batteryPercent: 80, state: 'FlyingToPickup', manoeuvre: 'Cruise',
-  orderId: 'FC-TEST', queuedMissions: 0,
+  orderId: 'FC-TEST', queuedMissions: 0, flightProgress: .4,
 };
 const snapshot: OrderSnapshot = {
   order: { orderId: 'FC-TEST', customerName: 'You', dropOff: { latitude: -37.840, longitude: 144.970 },
@@ -71,7 +71,7 @@ test('current stage progress follows live telemetry instead of jumping to comple
   const store = snapshot.store.location, drop = snapshot.order.dropOff;
   const along = (t: number) => ({ latitude: store.latitude + (drop.latitude - store.latitude) * t, longitude: store.longitude + (drop.longitude - store.longitude) * t });
   const delivering = (t: number) => customerOrder({ ...snapshot, status: 'PickedUp',
-    telemetry: { ...telemetry, state: 'FlyingToCustomer', position: along(t) } }, receipt, now).stageProgress!;
+    telemetry: { ...telemetry, state: 'FlyingToCustomer', position: along(t), flightProgress: t } }, receipt, now).stageProgress!;
   assert.closeTo(delivering(.25), .25, .01);
   assert.closeTo(delivering(.75), .75, .01);
   const preparing = customerOrder({ ...snapshot, status: 'AwaitingFleet', telemetry: null, readyAt: new Date(now + 90000).toISOString() }, receipt, now);
@@ -81,4 +81,29 @@ test('current stage progress follows live telemetry instead of jumping to comple
   assert.isAbove(inbound.stageProgress!, 0);
   assert.isBelow(inbound.stageProgress!, 1);
   assert.equal(customerOrder({ ...snapshot, status: 'Delivered' }, receipt, now).stageProgress, 1);
+});
+
+test('pickup and delivery bars advance during vertical phases using simulator progress only', () => {
+  for (const state of ['FlyingToPickup', 'FlyingToCustomer'] as const) {
+    const status = state === 'FlyingToPickup' ? 'Scheduled' : 'PickedUp';
+    for (const [manoeuvre, progress] of [['VerticalClimb', .15], ['Cruise', .5], ['VerticalDescent', .85]] as const) {
+      const update: OrderSnapshot = { ...snapshot, status, telemetry: {
+        ...telemetry, state, manoeuvre, flightProgress: progress,
+        // No horizontal movement during climb/descent: position cannot determine total leg progress.
+        position: snapshot.store.location,
+      } };
+      assert.equal(customerOrder(update, receipt, now).stageProgress, progress);
+      assert.equal(customerOrder(update, receipt, now + 1000).stageProgress, progress, 'browser time cannot invent flight progress');
+    }
+  }
+  for (const fix of [
+    { ...telemetry, flightProgress: null },
+    { ...telemetry, flightProgress: undefined },
+    { ...telemetry, orderId: 'OTHER' },
+    { ...telemetry, droneId: 'OTHER' },
+    { ...telemetry, timestamp: new Date(now - 31000).toISOString() },
+    { ...telemetry, state: 'ReturningToPad' as const },
+  ]) assert.equal(customerOrder({ ...snapshot, telemetry: fix }, receipt, now).stageProgress, 0);
+  assert.equal(customerOrder({ ...snapshot, status: 'PickedUp' }, receipt, now).stageProgress, 0, 'previous pickup leg cannot fill delivery');
+  assert.equal(customerOrder({ ...snapshot, telemetry: { ...telemetry, state: 'Loading', flightProgress: 1 } }, receipt, now).stageProgress, 1);
 });

@@ -8,6 +8,7 @@ export type Telemetry = {
   position: GeoPoint; homePad: GeoPoint; altitudeMetres: number; heading: number; batteryPercent: number;
   state: 'Charging' | 'Parked' | 'FlyingToPickup' | 'Loading' | 'FlyingToCustomer' | 'Unloading' | 'ReturningToPad';
   manoeuvre: 'OnTheGround' | 'VerticalClimb' | 'Cruise' | 'VerticalDescent'; orderId: string | null; queuedMissions: number;
+  flightProgress?: number | null;
 };
 export type OrderSnapshot = {
   order: { orderId: string; customerName: string; dropOff: GeoPoint; payloadBays: PayloadSize; lines: { item: string; bays: number }[]; placedAt: string };
@@ -55,13 +56,12 @@ export function trackingFor(snapshot: OrderSnapshot, now = Date.now()): OrderFli
   const target = inbound ? { ...point(snapshot.store.location), label: 'ForthCoffee pickup' } : destination;
   const location = point(drone.position);
   const remaining = Math.hypot(target.x - location.x, target.y - location.y);
-  const total = Math.hypot(target.x - origin.x, target.y - origin.y);
   const manoeuvre = ({ OnTheGround: 'On the ground', VerticalClimb: 'Vertical climb', Cruise: 'Cruise', VerticalDescent: 'Vertical descent' } as const)[drone.manoeuvre];
   const phase = drone.state === 'FlyingToPickup' ? 'To pickup' : drone.state === 'Loading' ? 'On the pad'
     : drone.state === 'FlyingToCustomer' ? 'In flight' : 'Landed';
   return {
     ...location, droneId: drone.droneId, phase, manoeuvre, origin, target, destination,
-    progress: total ? Math.max(0, Math.min(1, 1 - remaining / total)) : 1,
+    progress: drone.flightProgress === undefined || drone.flightProgress === null ? 0 : fraction(drone.flightProgress),
     heading: (drone.heading - 90) * Math.PI / 180, altitude: Math.round(drone.altitudeMetres),
     cameraDown: manoeuvre === 'Cruise' ? 0 : 1,
     remainingMetres: Math.round(remaining * metresPerUnit),

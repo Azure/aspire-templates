@@ -13,6 +13,7 @@ public sealed class SimulatedDrone(string id, DroneSpec spec, GeoPoint homePad, 
     public GeoPoint Position { get; set; } = homePad;
     public double AltitudeMetres { get; set; }
     public double Heading { get; set; }
+    public double? FlightProgress { get; set; }
     public double BatteryPercent { get; set; } = battery;
     public DroneState State { get; set; } = battery < 100 ? DroneState.Charging : DroneState.Parked;
     public Manoeuvre Manoeuvre { get; set; } = Manoeuvre.OnTheGround;
@@ -22,13 +23,14 @@ public sealed class SimulatedDrone(string id, DroneSpec spec, GeoPoint homePad, 
     public DroneTelemetry Telemetry(DateTimeOffset now) => new(
         Id, Spec.Class, Interlocked.Increment(ref sequence), now, Position, HomePad,
         Math.Round(AltitudeMetres, 1), Math.Round(Heading), Math.Round(BatteryPercent, 1),
-        State, Manoeuvre, Mission?.MissionId, Mission?.OrderId, Queue.Count);
+        State, Manoeuvre, Mission?.MissionId, Mission?.OrderId, Queue.Count, FlightProgress);
 
     /// <summary>Parked drones sit on their charging pad and top up.</summary>
     public void ChargeFor(TimeSpan elapsed)
     {
         BatteryPercent = Math.Min(100, BatteryPercent + Spec.ChargePerMinute * elapsed.TotalMinutes);
         State = BatteryPercent < 100 ? DroneState.Charging : DroneState.Parked;
+        FlightProgress = null;
     }
 
     public static IReadOnlyList<SimulatedDrone> CreateFleet(FleetOptions options)

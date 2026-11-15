@@ -137,12 +137,12 @@ public sealed class DroneFleetSimulator(
             var now = time.GetUtcNow();
             var elapsed = now - start;
             var sample = leg.At(elapsed);
-            var fraction = leg.Duration == TimeSpan.Zero ? 1 : Math.Min(1, elapsed / leg.Duration);
+            drone.FlightProgress = sample.Progress;
             drone.Position = sample.Position;
             drone.AltitudeMetres = sample.AltitudeMetres;
             drone.Heading = sample.Heading;
             drone.Manoeuvre = sample.Manoeuvre;
-            drone.BatteryPercent = startBattery - leg.BatteryPercent * fraction;
+            drone.BatteryPercent = startBattery - leg.BatteryPercent * sample.Progress;
 
             var trigger = (previous, sample.Manoeuvre) switch
             {

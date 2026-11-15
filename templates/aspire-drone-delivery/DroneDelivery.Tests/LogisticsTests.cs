@@ -29,6 +29,26 @@ public class LogisticsTests
     }
 
     [Fact]
+    public void Flight_progress_covers_vertical_phases_even_without_horizontal_travel()
+    {
+        foreach (var target in new[] { Customer, Store })
+        {
+            var leg = DroneSpec.For(DroneClass.Doppio).Leg(Store, target);
+            var climb = leg.At(leg.VerticalDuration / 2);
+            var cruise = leg.At(leg.VerticalDuration + leg.CruiseDuration / 2);
+            var descent = leg.At(leg.Duration - leg.VerticalDuration / 2);
+
+            Assert.Equal(Manoeuvre.VerticalClimb, climb.Manoeuvre);
+            Assert.True(climb.Progress > 0 && climb.Progress < .5);
+            Assert.Equal(.5, cruise.Progress, 6);
+            Assert.Equal(Manoeuvre.VerticalDescent, descent.Manoeuvre);
+            Assert.True(descent.Progress > .5 && descent.Progress < 1);
+            Assert.Equal(0, leg.At(TimeSpan.FromSeconds(-1)).Progress);
+            Assert.Equal(1, leg.At(leg.Duration + TimeSpan.FromSeconds(1)).Progress);
+        }
+    }
+
+    [Fact]
     public void Picks_the_smallest_capable_drone_and_never_an_undersized_one()
     {
         var fleet = new[] { Drone("ABB-01", DroneClass.Abbondante), Drone("DOP-01", DroneClass.Doppio), Drone("PIC-01", DroneClass.Piccolo) };

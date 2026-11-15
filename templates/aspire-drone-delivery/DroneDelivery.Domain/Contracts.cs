@@ -52,7 +52,8 @@ public sealed record DroneTelemetry(
     Manoeuvre Manoeuvre,
     string? MissionId,
     string? OrderId,
-    int QueuedMissions);
+    int QueuedMissions,
+    double? FlightProgress = null);
 
 public enum MissionMilestone
 {
