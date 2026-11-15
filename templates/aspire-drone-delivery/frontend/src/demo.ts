@@ -8,16 +8,16 @@ export type MenuItem = {
   units: number;
 };
 
-// Four quarter-well units make one cup well. These are demo packaging rules, not flight weights.
+// Every item fills one whole payload bay (four units). These are demo packaging rules, not flight weights.
 export const menu: MenuItem[] = [
   { id: 'flat-white', name: 'Flat white', detail: 'Double espresso, silky microfoam. A Melbourne essential.', price: 5, kind: 'coffee', tag: 'THE LOCAL FAVOURITE', units: 4 },
   { id: 'latte', name: 'Latte', detail: 'Our house espresso with a little more milk and a soft finish.', price: 5, kind: 'coffee', tag: 'SMOOTH & BALANCED', units: 4 },
   { id: 'cappuccino', name: 'Cappuccino', detail: 'Espresso, cloud-like foam and a dusting of cocoa.', price: 5, kind: 'coffee', tag: 'A LITTLE INDULGENCE', units: 4 },
   { id: 'long-black', name: 'Long black', detail: 'Hot water meets double espresso. Let the beans do the talking.', price: 4.5, kind: 'coffee', tag: 'BOLD & BRIGHT', units: 4 },
   { id: 'espresso', name: 'Espresso', detail: 'A small, beautifully concentrated moment. Our house blend.', price: 4, kind: 'coffee', tag: 'SMALL BUT MIGHTY', units: 4 },
-  { id: 'biscuit', name: 'Choc-chip biscuit', detail: 'Golden edges, chocolate chunks. A very good coffee companion.', price: 3, kind: 'biscuit', tag: '¼ CUP WELL', units: 1 },
-  { id: 'cake', name: 'Lemon drizzle cake', detail: 'A sunny slice of lemon cake with a tangy drizzle.', price: 6, kind: 'cake', tag: '½ CUP WELL', units: 2 },
-  { id: 'croissant', name: 'Butter croissant', detail: 'Flaky, golden and ready to make your morning.', price: 5.5, kind: 'croissant', tag: '½ CUP WELL', units: 2 },
+  { id: 'biscuit', name: 'Choc-chip biscuit', detail: 'Golden edges, chocolate chunks. A very good coffee companion.', price: 3, kind: 'biscuit', tag: 'ONE BAY', units: 4 },
+  { id: 'cake', name: 'Lemon drizzle cake', detail: 'A sunny slice of lemon cake with a tangy drizzle.', price: 6, kind: 'cake', tag: 'ONE BAY', units: 4 },
+  { id: 'croissant', name: 'Butter croissant', detail: 'Flaky, golden and ready to make your morning.', price: 5.5, kind: 'croissant', tag: 'ONE BAY', units: 4 },
 ];
 
 export const payloadSizes = [1, 2, 4] as const;
@@ -70,7 +70,36 @@ export const coffeeDescription = (options: CoffeeOptions) =>
 export const bagCount = (bag: Bag) => bag.reduce((sum, line) => sum + line.quantity, 0);
 export const bagUnits = (bag: Bag) => bag.reduce((sum, line) => sum + menuItem(line.itemId).units * line.quantity, 0);
 export const bagTotal = (bag: Bag) => bag.reduce((sum, line) => sum + linePrice(line) * line.quantity, 0);
-export const spaceLabel = (units: number) => `${units / 4} cup well${units === 4 ? '' : 's'}`;
+export const spaceLabel = (units: number) => `${units / 4} bay${units === 4 ? '' : 's'}`;
+
+/** A payload's bays, in order. Each bay holds one coffee or one treat, or is empty. */
+export type Bays = (BagLine | null)[];
+export const emptyBays = (size: PayloadSize): Bays => Array.from({ length: size }, () => null);
+
+export function bagFromBays(bays: Bays): Bag {
+  const bag: Bag = [];
+  for (const line of bays) {
+    if (!line) continue;
+    const existing = bag.find(entry => entry.id === line.id);
+    if (existing) existing.quantity++;
+    else bag.push({ ...line, quantity: 1, ...(line.coffee ? { coffee: { ...line.coffee } } : {}) });
+  }
+  return bag;
+}
+
+export function baysFromBag(bag: Bag, size: PayloadSize): Bays {
+  const items = bag.flatMap(line => Array.from({ length: line.quantity }, () => ({ ...line, quantity: 1 })));
+  if (items.length > size) throw new Error('These items need more bays. Choose a larger payload.');
+  return [...items, ...emptyBays(size).slice(items.length)];
+}
+
+/** Resizes a payload, keeping each item in its bay when it still exists, otherwise packing items into the first free bays. */
+export function resizeBays(bays: Bays, size: PayloadSize): Bays {
+  const items = bays.filter((line): line is BagLine => line !== null);
+  if (items.length > size) throw new Error('Remove some items before choosing a smaller payload.');
+  if (bays.every((line, index) => !line || index < size)) return [...bays.slice(0, size), ...emptyBays(size).slice(bays.length)];
+  return [...items, ...emptyBays(size).slice(items.length)];
+}
 
 export function validBag(bag: Bag, payload?: PayloadSize) {
   if (!bag.length || new Set(bag.map(line => line.id)).size !== bag.length) return false;

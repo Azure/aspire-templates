@@ -29,15 +29,16 @@ The map is illustrative and cannot support navigation or real flight planning.
 1. The landing experience opens directly into the customer menu, with a clear
    **Barista & fleet** switch. This substitutes for demo sign-in during the spike;
    no real account is required.
-2. Choose a single, double or quad payload first: one, two or four cup wells.
-   Each coffee occupies one well; a biscuit takes ¼ and cake or croissant ½.
+2. Choose a single, double or quad payload first: one, two or four bays. The
+   landing page is the payload builder itself; tapping a bay opens a tabbed
+   selector (coffee builder or treats) and each bay holds one coffee or one treat.
    These are illustrative packaging rules, not engineering constraints. A live
    tray shows occupancy, permits removal and coffee editing, and refuses overflow
    or downsizing below its contents. Unused capacity is allowed.
    Build coffee interactively by choosing style, size, milk, espresso shots,
    sugar and hot/iced temperature. The illustration, description and price update.
-   Keep different recipes separate and merge identical recipes. Categories and
-   search find coffees and treats; checkout permits quantity/recipe edits and
+   Keep different recipes separate and merge identical recipes; checkout permits
+   quantity/recipe edits and
    shows AUD prices and full customization details before confirmation.
 3. Confirm a demo order explicitly. The customer lands on a dedicated order
    status page (`#/order/<id>`) with a four-step progress indicator, ETA, items

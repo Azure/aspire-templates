@@ -39,12 +39,12 @@ data.
 
 ## Things to try
 
-1. Choose a **Single**, **Double** or **Quad** flight box (one, two or four cup
-   wells). Build a coffee: pick its style, size, milk, shots, sugar and temperature.
-   The cup illustration and price update as you go. Different combinations stay
-   separate; identical coffees combine. Fill spare space with biscuits (¼ well),
-   cake (½ well) or croissants (½ well). Each coffee, regardless of size, uses one
-   well. These are illustrative packaging rules, not real payload engineering.
+1. Choose a **Single**, **Double** or **Quad** flight box (one, two or four
+   bays), then tap a bay. Each bay holds exactly one coffee or one treat: use the
+   **Coffee builder** tab to pick a coffee's style, size, milk, shots, sugar and
+   temperature (the cup illustration and price update as you go), or the
+   **Treats** tab for a biscuit, cake or croissant. Tap a filled bay to change it.
+   These are illustrative packaging rules, not real payload engineering.
    The tray shows capacity and blocks overfilling or shrinking a box below its
    contents. You can leave space unused. Tap a packed coffee to edit it, or remove
    an item from the tray. Review quantities, options and AUD prices, then explicitly

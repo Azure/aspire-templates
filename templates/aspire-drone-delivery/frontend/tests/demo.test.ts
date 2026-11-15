@@ -1,8 +1,8 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { addToBag, bagTotal, bagUnits, defaultCoffee, demoFlights, demoReducer, dropOff, initialState, kitchen, linePrice, makeLine, matchSpokenOrder, orderFlight, stageTicks, validBag } from '../src/demo.ts';
+import { addToBag, bagFromBays, baysFromBag, bagTotal, emptyBays, resizeBays, bagUnits, defaultCoffee, demoFlights, demoReducer, dropOff, initialState, kitchen, linePrice, makeLine, matchSpokenOrder, orderFlight, stageTicks, validBag } from '../src/demo.ts';
 import { fromLonLat, toLonLat } from '../src/mapGeometry.ts';
-import type { Bag, CoffeeOptions, Order } from '../src/demo.ts';
+import type { Bag, Bays, CoffeeOptions, Order } from '../src/demo.ts';
 
 test('voice proposes default coffees and treats without placing an order', () => {
   const proposal = [makeLine('latte'), { ...makeLine('biscuit'), quantity: 2 }];
@@ -22,19 +22,37 @@ test('ambiguous, unknown, modified and invalid quantities need clarification', (
   }
 });
 
-test('single, double and quad packing rules reject overflow, but allow partly filled payloads', () => {
+test('every coffee or treat fills exactly one bay of a single, double or quad payload', () => {
   const coffee = makeLine('flat-white');
   assert.ok(validBag([coffee], 1));
   assert.ok(validBag([coffee], 4));
   assert.ok(!validBag([coffee, makeLine('biscuit')], 1));
+  assert.ok(validBag([coffee, makeLine('biscuit')], 2));
   const packed = [coffee, makeLine('cake'), { ...makeLine('biscuit'), quantity: 2 }];
-  assert.equal(bagUnits(packed), 8);
-  assert.ok(validBag(packed, 2));
-  assert.ok(!validBag([...packed, makeLine('croissant')], 2));
-  assert.ok(validBag([{ ...coffee, quantity: 4 }], 4));
+  assert.equal(bagUnits(packed), 16);
+  assert.ok(!validBag(packed, 2));
+  assert.ok(validBag(packed, 4));
+  assert.ok(!validBag([...packed, makeLine('croissant')], 4));
   assert.ok(!validBag([{ ...coffee, quantity: 5 }], 4));
-  assert.throws(() => addToBag([coffee], makeLine('biscuit'), 1), /does not fit/);
-  assert.deepEqual(addToBag([makeLine('biscuit')], makeLine('biscuit'), 1), [{ ...makeLine('biscuit'), quantity: 2 }]);
+  assert.throws(() => addToBag([makeLine('biscuit')], makeLine('biscuit'), 1), /does not fit/);
+  assert.deepEqual(addToBag([makeLine('biscuit')], makeLine('biscuit'), 2), [{ ...makeLine('biscuit'), quantity: 2 }]);
+});
+
+test('bays hold one item each, keep their positions and round-trip to an order bag', () => {
+  const latte = makeLine('latte');
+  let bays: Bays = emptyBays(4);
+  bays[2] = latte; bays[0] = makeLine('cake'); bays[3] = latte;
+  assert.deepEqual(bagFromBays(bays), [makeLine('cake'), { ...latte, quantity: 2 }]);
+  assert.deepEqual(resizeBays(bays, 4), bays);
+  bays = [makeLine('cake'), null, latte, null];
+  assert.deepEqual(resizeBays(bays, 2), [makeLine('cake'), latte]);
+  assert.deepEqual(resizeBays([latte], 2), [latte, null]);
+  assert.throws(() => resizeBays([latte, latte, latte, null], 2), /smaller payload/);
+  assert.deepEqual(baysFromBag([{ ...latte, quantity: 2 }], 4), [latte, latte, null, null]);
+  assert.throws(() => baysFromBag([{ ...latte, quantity: 3 }], 2), /more bays/);
+  const bag = bagFromBays([latte, latte]);
+  bag[0].coffee!.milk = 'Soy';
+  assert.equal(latte.coffee?.milk, 'Full cream', 'bags never share coffee options with bays');
 });
 
 test('coffee variants keep separate identities, prices and details while identical cups merge', () => {
@@ -49,7 +67,7 @@ test('coffee variants keep separate identities, prices and details while identic
   assert.equal(bag.length, 2);
   assert.deepEqual(bag.map(line => line.quantity), [2, 1]);
   assert.equal(bagTotal(bag), 18.5);
-  assert.equal(bagUnits(bag), 12, 'size, milk and shots never change the cup well count');
+  assert.equal(bagUnits(bag), 12, 'size, milk and shots never change the bay count');
   assert.equal(makeLine('long-black').coffee?.milk, 'None');
 });
 
