@@ -100,12 +100,16 @@ not use these APIs yet; it still runs its own browser simulation.
    The tray shows capacity and blocks overfilling or shrinking a box below its
    contents. You can leave space unused. Tap a packed coffee to edit it, or remove
    an item from the tray. Review quantities, options and AUD prices, then explicitly
-   confirm a demo order. You land on its status page. Once it is ready, follow the drone on
-   an overhead map and through a simulated drone camera. Use **Skip to next stage
+   confirm a demo order. You land on its status page. Once it is ready and a drone
+   is assigned, follow that drone's inbound flight to the bar on an overhead map
+   and through a simulated drone camera. The order stays **Ready for pickup**
+   until pickup, and both views carry on into delivery. If both drones are busy,
+   the order waits without showing an unrelated drone or camera. Use **Skip to next stage
    (demo)** to move on without waiting.
 2. Switch to **Barista & fleet**. Coffee customizations appear on the docket.
-   Request pickup for an order that is ready.
-   Otherwise it dispatches automatically after 30 seconds; preparation takes
+   Request pickup once the assigned drone has landed at the bar.
+   Otherwise it dispatches automatically after 30 seconds and drone arrival;
+   the inbound flight takes 24 seconds from assignment. Preparation takes
    20 seconds and simulated delivery another 35. New orders arrive every 45
    simulation seconds. Pause/resume or reset the scene.
 3. Choose **Try a voice-order preview**. Edit “one latte and two biscuits”,
@@ -118,8 +122,10 @@ not use these APIs yet; it still runs its own browser simulation.
    clarification rather than silently changing the request.
 4. Open **Map options** to investigate an Azure Maps basemap.
 
-The four looping drone icons are illustrative and not assigned to orders. Your
-own order is assigned FC-05 or FC-06, which flies a deterministic route from
+The four looping drone icons are illustrative and not assigned to orders. Ready
+orders reserve an available FC-05 or FC-06, which flies from its last drop-off
+(or its initial demo pad) back to ForthCoffee before pickup. The assignment and
+camera persist into the deterministic delivery route from
 ForthCoffee's fictional Coventry Street bar to one of seven South Melbourne drop-offs, taking off and
 landing vertically. The drone camera points straight down during take-off and landing. It is a three.js scene
 with placeholder buildings, not real video. It uses Azure Maps road tiles for the

@@ -3,14 +3,14 @@ import { ArrowLeft, ArrowRight, Check, ChefHat, Drone, FastForward, House, Layer
 import { AzureBasemap, MapArtwork } from './DeliveryMap';
 import type { MapSettings } from './DeliveryMap';
 import FoodArt, { CoffeeCup } from './FoodArt';
-import { bagCount, bagTotal, coffeeDescription, kitchen, linePrice, menuItem, money, orderFlight, payloadNames, stages, stageTicks } from './demo';
+import { bagCount, bagTotal, coffeeDescription, linePrice, menuItem, money, orderFlight, payloadNames, stages, stageTicks } from './demo';
 import type { Order, OrderFlight } from './demo';
 
 const DroneCam = lazy(() => import('./DroneCam'));
 const stageIcons = [ChefHat, Package, Drone, House];
 const stageCopy = {
   Preparing: { title: 'Your barista is on it.', detail: 'ForthCoffee is brewing your coffee run, just the way you like it.' },
-  'Ready for pickup': { title: 'Ready. Your drone is warming up.', detail: 'Packed, sealed and on the pad. Take a look through the drone camera.' },
+  'Ready for pickup': { title: 'Ready. Your drone is on its way to the bar.', detail: 'Packed and sealed. Follow your assigned drone as it flies to ForthCoffee for pickup.' },
   Delivering: { title: 'Look up. It’s on its way.', detail: 'Follow your drone overhead and through its camera.' },
   Delivered: { title: 'Your morning has landed.', detail: 'Your drone has landed at the drop-off. Enjoy your ForthCoffee moment.' },
 } as const;
@@ -23,17 +23,18 @@ function eta(seconds: number) {
 }
 
 function FollowMap({ flight, settings, onSettings }: { flight: OrderFlight; settings: MapSettings | null; onSettings: () => void }) {
+  if (!flight.droneId) return null;
   const angle = flight.heading * 180 / Math.PI;
   const width = 560, height = 440;
   return <div className="follow-map">
-    {settings ? <AzureBasemap settings={settings} flights={[{ id: flight.droneId, x: flight.x, y: flight.y, status: flight.phase }]} follow={flight} route={flight.destination} />
+    {settings ? <AzureBasemap settings={settings} flights={[{ id: flight.droneId, x: flight.x, y: flight.y, status: flight.phase }]} follow={flight} route={flight.target} routeOrigin={flight.origin} />
       : <svg viewBox={`${flight.x - width / 2} ${flight.y - height / 2} ${width} ${height}`} preserveAspectRatio="xMidYMid slice" role="img" aria-label={`Overhead illustrated map centred on drone ${flight.droneId}`}>
         <MapArtwork routes={false} />
-        <line x1={kitchen.x} y1={kitchen.y} x2={flight.destination.x} y2={flight.destination.y} stroke="#184b38" strokeWidth="2.5" strokeDasharray="6 6" opacity=".55" />
-        <line x1={kitchen.x} y1={kitchen.y} x2={flight.x} y2={flight.y} stroke="#184b38" strokeWidth="3.5" strokeLinecap="round" />
-        <g transform={`translate(${flight.destination.x} ${flight.destination.y})`}>
+        <line x1={flight.origin.x} y1={flight.origin.y} x2={flight.target.x} y2={flight.target.y} stroke="#184b38" strokeWidth="2.5" strokeDasharray="6 6" opacity=".55" />
+        <line x1={flight.origin.x} y1={flight.origin.y} x2={flight.x} y2={flight.y} stroke="#184b38" strokeWidth="3.5" strokeLinecap="round" />
+        <g transform={`translate(${flight.target.x} ${flight.target.y})`}>
           <circle r="15" fill="#e9b44c" opacity=".25" className="drop-pulse" /><circle r="7" fill="#e9b44c" stroke="#fff" strokeWidth="2.5" />
-          <rect x="20" y="-9" width="84" height="17" rx="8" fill="#fffdf5" /><text x="62" y="3" textAnchor="middle" className="tiny-label">Your drop-off</text>
+          <rect x="20" y="-9" width="112" height="17" rx="8" fill="#fffdf5" /><text x="76" y="3" textAnchor="middle" className="tiny-label">{flight.target.label === 'ForthCoffee pickup' ? 'ForthCoffee pickup' : 'Your drop-off'}</text>
         </g>
         <g transform={`translate(${flight.x} ${flight.y})`}>
           <circle r="17" fill="#fff" opacity=".7" />
@@ -55,14 +56,18 @@ export default function OrderStatus({ order, orderId, settings, onSettings, onAd
 
   const flight = orderFlight(order);
   const current = stages.indexOf(order.stage);
-  const followable = current >= 1;
-  const copy = stageCopy[order.stage];
+  const followable = current >= 1 && flight.droneId !== null;
+  const copy = order.stage === 'Ready for pickup' && !flight.droneId
+    ? { title: 'Ready. Waiting for a drone.', detail: 'Your coffee run is packed and sealed. The map and camera will appear once a drone is assigned.' }
+    : order.stage === 'Ready for pickup' && flight.phase === 'On the pad'
+    ? { title: 'Ready. Your drone is at the bar.', detail: 'Your drone has landed at ForthCoffee. Next stop: your drop-off.' }
+    : stageCopy[order.stage];
   const items = bagCount(order.bag);
   return <main className="status-page">
     <button className="text-button back-link" onClick={onBack}><ArrowLeft size={15} />Back to the menu</button>
     <section className="status-header" aria-live="polite">
       <div><div className="eyebrow">ORDER {order.id} · FORTHCOFFEE · {payloadNames[order.payload].toUpperCase()} PAYLOAD</div><h1>{copy.title}</h1><p>{copy.detail}</p></div>
-      <div className="status-eta"><span>{order.stage === 'Delivered' ? 'DELIVERED' : 'ESTIMATED ARRIVAL'}</span><strong>{eta(flight.etaSeconds)}</strong><small>Accelerated demo time</small></div>
+      <div className="status-eta"><span>{order.stage === 'Delivered' ? 'DELIVERED' : 'ESTIMATED ARRIVAL'}</span><strong>{flight.droneId ? eta(flight.etaSeconds) : 'Awaiting drone'}</strong><small>Accelerated demo time</small></div>
     </section>
     <ol className="status-steps" aria-label="Order progress">{stages.map((stage, index) => {
       const Icon = stageIcons[index];
@@ -83,7 +88,7 @@ export default function OrderStatus({ order, orderId, settings, onSettings, onAd
             <Suspense fallback={<div className="drone-cam"><div className="cam-fallback" role="status">Starting simulated camera…</div></div>}><DroneCam order={order} settings={settings} /></Suspense></div>
         </div> : <div className="kitchen-card">
           <div className="kitchen-food">{order.bag.slice(0, 3).map(line => <div key={line.id}>{line.coffee ? <CoffeeCup options={line.coffee} style={line.itemId} /> : <FoodArt kind={menuItem(line.itemId).kind} />}</div>)}</div>
-          <div><span className="eyebrow">ON THE COFFEE BAR</span><h2>Made your way.<br /><em>Then on its way.</em></h2><p>When your flight box is packed, {flight.droneId} takes over. Follow it above South Melbourne and through a live (simulated) camera.</p></div>
+          <div><span className="eyebrow">ON THE COFFEE BAR</span><h2>Made your way.<br /><em>Then on its way.</em></h2><p>{order.stage === 'Ready for pickup' ? 'Packed and waiting for an available drone. No drone is assigned yet.' : 'Your barista is preparing your flight box. Once a drone is assigned, follow its pickup and delivery through the map and simulated camera.'}</p></div>
         </div>}
       </section>
       <aside className="status-summary">
@@ -91,13 +96,13 @@ export default function OrderStatus({ order, orderId, settings, onSettings, onAd
         <ul>{order.bag.map(line => <li key={line.id}><span>{line.quantity} × {menuItem(line.itemId).name}{line.coffee && <small className="summary-coffee-options">{coffeeDescription(line.coffee)}</small>}</span><strong>{money(linePrice(line) * line.quantity)}</strong></li>)}</ul>
         <div className="summary-total"><span>Total · {items} {items === 1 ? 'item' : 'items'}</span><strong>{money(bagTotal(order.bag))}</strong></div>
         <dl>
-          <div><dt>Drone</dt><dd>{flight.droneId}</dd></div>
+          <div><dt>Drone</dt><dd>{flight.droneId ?? 'Not yet assigned'}</dd></div>
           <div><dt>Payload</dt><dd>{payloadNames[order.payload]}</dd></div>
           <div><dt>From</dt><dd>ForthCoffee, Coventry Street</dd></div>
           <div><dt>To</dt><dd>{flight.destination.label}</dd></div>
-          {order.stage === 'Delivering' && <div><dt>Distance left</dt><dd>{flight.remainingMetres} m</dd></div>}
+          {(order.stage === 'Delivering' || flight.phase === 'To pickup') && <div><dt>{flight.phase === 'To pickup' ? 'To pickup' : 'Distance left'}</dt><dd>{flight.remainingMetres} m</dd></div>}
         </dl>
-        {order.stage !== 'Delivered' ? <button className="outline-button full-width" onClick={onAdvance}><FastForward size={14} />Skip to next stage (demo)</button>
+        {order.stage !== 'Delivered' ? <button className="outline-button full-width" disabled={order.stage === 'Ready for pickup' && !flight.droneId} onClick={onAdvance}><FastForward size={14} />Skip to next stage (demo)</button>
           : <button className="primary-button full-width" onClick={onBack}>Order something else <ArrowRight size={15} /></button>}
         <p className="privacy-note"><ShieldCheck size={14} />Simulated order and flight. No payment, drone or camera is involved.</p>
       </aside>

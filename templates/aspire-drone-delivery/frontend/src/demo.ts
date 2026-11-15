@@ -122,19 +122,35 @@ export function addToBag(bag: Bag, line: BagLine, payload: PayloadSize): Bag {
 }
 
 export type Stage = 'Preparing' | 'Ready for pickup' | 'Delivering' | 'Delivered';
-export type Order = { id: string; customer: string; bag: Bag; payload: PayloadSize; stage: Stage; elapsed: number; manual: boolean };
-export type DemoState = { orders: Order[]; nextId: number; ticks: number };
+export type DroneAssignment = { id: string; pickupOrigin: Point; assignedAt: number };
+export type Order = { id: string; customer: string; bag: Bag; payload: PayloadSize; stage: Stage; elapsed: number; manual: boolean; drone?: DroneAssignment };
+export type DemoState = { orders: Order[]; nextId: number; ticks: number; dronePads: Record<string, Point> };
 export const initialState: DemoState = {
   nextId: 1044, ticks: 0,
+  dronePads: { 'FC-05': { x: 742, y: 504 }, 'FC-06': { x: 620, y: 560 } },
   orders: [
     { id: 'FC-1041', customer: 'Alex M.', bag: [makeLine('flat-white'), makeLine('biscuit')], payload: 2, stage: 'Preparing', elapsed: 0, manual: false },
-    { id: 'FC-1042', customer: 'Jess R.', bag: [makeLine('latte')], payload: 1, stage: 'Ready for pickup', elapsed: 0, manual: false },
-    { id: 'FC-1043', customer: 'Sam T.', bag: [makeLine('long-black'), makeLine('cake')], payload: 2, stage: 'Delivering', elapsed: 12, manual: false },
+    { id: 'FC-1042', customer: 'Jess R.', bag: [makeLine('latte')], payload: 1, stage: 'Ready for pickup', elapsed: 0, manual: false, drone: { id: 'FC-05', pickupOrigin: { x: 742, y: 504 }, assignedAt: 0 } },
+    { id: 'FC-1043', customer: 'Sam T.', bag: [makeLine('long-black'), makeLine('cake')], payload: 2, stage: 'Delivering', elapsed: 12, manual: false, drone: { id: 'FC-06', pickupOrigin: { x: 620, y: 560 }, assignedAt: 0 } },
   ],
 };
 
-export const stageTicks = { preparing: 20, ready: 30, flight: 35 } as const;
+export const stageTicks = { preparing: 20, ready: 30, pickupFlight: 24, flight: 35 } as const;
 export const stages: Stage[] = ['Preparing', 'Ready for pickup', 'Delivering', 'Delivered'];
+export const canPickup = (order: Order) => order.stage === 'Ready for pickup' && !!order.drone &&
+  order.elapsed - order.drone.assignedAt >= stageTicks.pickupFlight;
+
+function assignDrones(orders: Order[], dronePads: DemoState['dronePads']): Order[] {
+  const occupied = new Set(orders.filter(order => order.stage !== 'Delivered').map(order => order.drone?.id));
+  return orders.map(order => {
+    if (order.stage !== 'Ready for pickup' || order.drone) return order;
+    const id = ['FC-05', 'FC-06'].find(candidate => !occupied.has(candidate));
+    if (!id) return order;
+    occupied.add(id);
+    const pickupOrigin = dronePads[id];
+    return { ...order, drone: { id, pickupOrigin, assignedAt: order.elapsed } };
+  });
+}
 export type Action = { type: 'tick' } | { type: 'confirm'; bag: Bag; payload: PayloadSize } | { type: 'pickup'; id: string } | { type: 'advance'; id: string } | { type: 'reset' };
 export function demoReducer(state: DemoState, action: Action): DemoState {
   if (action.type === 'reset') return initialState;
@@ -146,26 +162,34 @@ export function demoReducer(state: DemoState, action: Action): DemoState {
     };
   }
   if (action.type === 'pickup') return {
-    ...state, orders: state.orders.map(order => order.id === action.id && order.stage === 'Ready for pickup' ? { ...order, stage: 'Delivering', elapsed: 0 } : order),
+    ...state, orders: state.orders.map(order => order.id === action.id && canPickup(order) ? { ...order, stage: 'Delivering', elapsed: 0 } : order),
   };
-  if (action.type === 'advance') return {
-    ...state, orders: state.orders.map(order => order.id === action.id && order.stage !== 'Delivered'
-      ? { ...order, stage: stages[stages.indexOf(order.stage) + 1], elapsed: 0 } : order),
-  };
+  if (action.type === 'advance') {
+    const orders = state.orders.map(order => order.id === action.id && order.stage !== 'Delivered' &&
+      (order.stage !== 'Ready for pickup' || order.drone)
+      ? { ...order, stage: stages[stages.indexOf(order.stage) + 1], elapsed: 0 } : order);
+    const landed = orders.find(order => order.id === action.id && order.stage === 'Delivered' && order.drone);
+    const dronePads = landed?.drone ? { ...state.dronePads, [landed.drone.id]: destinationFor(landed) } : state.dronePads;
+    return { ...state, dronePads, orders: assignDrones(orders, dronePads) };
+  }
   const ticks = state.ticks + 1;
-  const orders = state.orders.map(order => {
+  const dronePads = { ...state.dronePads };
+  const orders = assignDrones(state.orders.map(order => {
     const elapsed = order.elapsed + 1;
     if (order.stage === 'Preparing' && elapsed >= stageTicks.preparing) return { ...order, stage: 'Ready for pickup' as const, elapsed: 0 };
-    if (order.stage === 'Ready for pickup' && elapsed >= stageTicks.ready) return { ...order, stage: 'Delivering' as const, elapsed: 0 };
-    if (order.stage === 'Delivering' && elapsed >= stageTicks.flight) return { ...order, stage: 'Delivered' as const, elapsed: 0 };
+    if (elapsed >= stageTicks.ready && canPickup({ ...order, elapsed })) return { ...order, stage: 'Delivering' as const, elapsed: 0 };
+    if (order.stage === 'Delivering' && elapsed >= stageTicks.flight) {
+      if (order.drone) dronePads[order.drone.id] = destinationFor(order);
+      return { ...order, stage: 'Delivered' as const, elapsed: 0 };
+    }
     return { ...order, elapsed };
-  }).filter(order => order.stage !== 'Delivered' || order.manual || order.elapsed < 25).slice(0, 20);
+  }).filter(order => order.stage !== 'Delivered' || order.manual || order.elapsed < 25).slice(0, 20), dronePads);
   if (ticks % 45 === 0 && orders.filter(order => order.stage !== 'Delivered').length < 8) {
     const item = menu[Math.floor(ticks / 45) % menu.length];
     orders.push({ id: `FC-${state.nextId}`, customer: ['Olivia W.', 'Charlie B.', 'Amelia L.'][Math.floor(ticks / 45) % 3], bag: [makeLine(item.id)], payload: 1, stage: 'Preparing', elapsed: 0, manual: false });
-    return { orders, nextId: state.nextId + 1, ticks };
+    return { orders, nextId: state.nextId + 1, ticks, dronePads };
   }
-  return { ...state, orders, ticks };
+  return { ...state, orders, ticks, dronePads };
 }
 
 export function matchSpokenOrder(transcript: string): { bag: Bag; error?: string } {
@@ -216,11 +240,10 @@ const cruiseAltitude = 60;
 export const verticalShare = .15;
 /** Share of the flight spent swinging the camera between straight down and level, either side of the cruise. */
 const cameraSwingShare = .06;
-/** Ticks before an automatic dispatch when the camera starts tilting down to the pad. */
-const preTakeoffSwing = 4;
 export type Manoeuvre = 'On the ground' | 'Vertical climb' | 'Cruise' | 'Vertical descent';
 export type OrderFlight = Point & {
-  droneId: string; phase: 'Awaiting drone' | 'On the pad' | 'In flight' | 'Landed'; manoeuvre: Manoeuvre;
+  droneId: string | null; phase: 'Awaiting drone' | 'To pickup' | 'On the pad' | 'In flight' | 'Landed'; manoeuvre: Manoeuvre;
+  origin: Point; target: Destination;
   destination: Destination; progress: number; heading: number; altitude: number;
   /** Camera tilt below the horizon: 0 looks ahead, 1 looks straight down. */
   cameraDown: number; remainingMetres: number; etaSeconds: number;
@@ -229,27 +252,33 @@ const clamp = (value: number) => Math.min(1, Math.max(0, value));
 const ease = (value: number) => value * value * (3 - 2 * value);
 export function orderFlight(order: Order, fraction = 0): OrderFlight {
   const destination = destinationFor(order);
-  const dx = destination.x - kitchen.x, dy = destination.y - kitchen.y;
+  const inbound = order.stage === 'Ready for pickup' && !!order.drone;
+  const origin = inbound && order.drone ? order.drone.pickupOrigin : kitchen;
+  const target = inbound ? { ...kitchen, label: 'ForthCoffee pickup' } : destination;
+  const dx = target.x - origin.x, dy = target.y - origin.y;
   const length = Math.hypot(dx, dy), heading = Math.atan2(dy, dx);
   const elapsed = Math.max(0, order.elapsed + clamp(fraction));
-  const progress = order.stage === 'Delivered' ? 1 : order.stage === 'Delivering' ? Math.min(1, elapsed / stageTicks.flight) : 0;
-  // VTOL: climb vertically over the bar, cruise level, then descend vertically over the drop-off.
+  const pickupElapsed = Math.max(0, elapsed - (order.drone?.assignedAt ?? elapsed));
+  const progress = order.stage === 'Delivered' ? 1 : inbound ? clamp(pickupElapsed / stageTicks.pickupFlight)
+    : order.stage === 'Delivering' ? Math.min(1, elapsed / stageTicks.flight) : 0;
+  const flying = order.stage === 'Delivering' || (inbound && progress < 1);
+  // Both legs climb vertically at their origin and descend vertically at their target.
   const travel = clamp((progress - verticalShare) / (1 - 2 * verticalShare));
-  const altitude = order.stage !== 'Delivering' ? 0
+  const altitude = !flying ? 0
     : progress < verticalShare ? cruiseAltitude * ease(progress / verticalShare)
     : progress > 1 - verticalShare ? cruiseAltitude * ease((1 - progress) / verticalShare) : cruiseAltitude;
-  const manoeuvre: Manoeuvre = order.stage !== 'Delivering' ? 'On the ground'
+  const manoeuvre: Manoeuvre = !flying ? 'On the ground'
     : progress < verticalShare ? 'Vertical climb' : progress > 1 - verticalShare ? 'Vertical descent' : 'Cruise';
-  const cameraDown = order.stage === 'Delivered' ? 1
-    : order.stage === 'Ready for pickup' ? ease(clamp((elapsed - (stageTicks.ready - preTakeoffSwing)) / preTakeoffSwing))
-    : order.stage !== 'Delivering' ? 0
+  const cameraDown = order.stage === 'Delivered' || (inbound && progress === 1) ? 1
+    : !flying ? 0
     : ease(clamp(Math.max(verticalShare + cameraSwingShare - progress, progress - (1 - verticalShare - cameraSwingShare)) / cameraSwingShare));
-  const phase = order.stage === 'Preparing' ? 'Awaiting drone' : order.stage === 'Ready for pickup' ? 'On the pad' : order.stage === 'Delivering' ? 'In flight' : 'Landed';
+  const phase = !order.drone ? 'Awaiting drone' : inbound ? (progress < 1 ? 'To pickup' : 'On the pad')
+    : order.stage === 'Delivering' ? 'In flight' : order.stage === 'Delivered' ? 'Landed' : 'Awaiting drone';
   const flightSecondsLeft = stageTicks.flight * (1 - progress);
   const etaSeconds = order.stage === 'Preparing' ? Math.max(0, stageTicks.preparing - elapsed) + stageTicks.ready + stageTicks.flight
-    : order.stage === 'Ready for pickup' ? Math.max(0, stageTicks.ready - elapsed) + stageTicks.flight : order.stage === 'Delivering' ? flightSecondsLeft : 0;
-  return { droneId: `FC-${String(5 + Number(order.id.replace(/\D/g, '')) % 2).padStart(2, '0')}`,
-    phase, manoeuvre, destination, progress, heading, x: kitchen.x + dx * travel, y: kitchen.y + dy * travel,
+    : order.stage === 'Ready for pickup' ? Math.max(0, stageTicks.ready - elapsed, stageTicks.pickupFlight - pickupElapsed) + stageTicks.flight : order.stage === 'Delivering' ? flightSecondsLeft : 0;
+  return { droneId: order.drone?.id ?? null,
+    phase, manoeuvre, origin, target, destination, progress, heading, x: origin.x + dx * travel, y: origin.y + dy * travel,
     altitude: Math.round(altitude), cameraDown,
     remainingMetres: Math.round(length * (1 - travel) * metresPerUnit), etaSeconds: Math.ceil(etaSeconds) };
 }

@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { addToBag, bagFromBays, baysFromBag, bagTotal, emptyBays, resizeBays, bagUnits, defaultCoffee, demoFlights, demoReducer, destinationFor, dropOffs, initialState, kitchen, linePrice, makeLine, matchSpokenOrder, orderFlight, stageTicks, validBag } from '../src/demo.ts';
+import { addToBag, bagFromBays, baysFromBag, bagTotal, canPickup, emptyBays, resizeBays, bagUnits, defaultCoffee, demoFlights, demoReducer, destinationFor, dropOffs, initialState, kitchen, linePrice, makeLine, matchSpokenOrder, orderFlight, stageTicks, validBag } from '../src/demo.ts';
 import { fromLonLat, toLonLat } from '../src/mapGeometry.ts';
 import type { Bag, Bays, CoffeeOptions, Order } from '../src/demo.ts';
 
@@ -106,7 +106,7 @@ test('confirmation preserves the payload and snapshots every coffee customizatio
 });
 
 test('manual pickup and automatic fulfillment share a complete delivery lifecycle', () => {
-  let state = demoReducer(initialState, { type: 'pickup', id: 'FC-1042' });
+  let state = demoReducer({ ...initialState, orders: initialState.orders.map(order => order.id === 'FC-1042' ? { ...order, elapsed: stageTicks.pickupFlight } : order) }, { type: 'pickup', id: 'FC-1042' });
   assert.equal(state.orders[1].stage, 'Delivering');
   state = demoReducer(state, { type: 'pickup', id: 'FC-1041' });
   assert.equal(state.orders[0].stage, 'Preparing');
@@ -133,25 +133,27 @@ test('long-running synthetic activity stays bounded and uses valid coffee payloa
   }
 });
 
-test('an order flight waits at the bar, flies to the drop-off and lands', () => {
+test('an order waits for assignment, follows its inbound leg, flies to the drop-off and lands', () => {
   const order: Order = { id: 'FC-1044', customer: 'You', bag: [makeLine('flat-white')], payload: 1, stage: 'Preparing', elapsed: 0, manual: true };
   const preparing = orderFlight(order);
   assert.equal(preparing.phase, 'Awaiting drone');
   assert.equal(preparing.etaSeconds, stageTicks.preparing + stageTicks.ready + stageTicks.flight);
-  const ready = orderFlight({ ...order, stage: 'Ready for pickup', elapsed: 10 });
+  assert.equal(preparing.droneId, null);
+  const drone = { id: 'FC-05', pickupOrigin: dropOffs[0], assignedAt: 0 };
+  const ready = orderFlight({ ...order, drone, stage: 'Ready for pickup', elapsed: stageTicks.pickupFlight });
   assert.deepEqual([ready.phase, ready.x, ready.y, ready.altitude], ['On the pad', kitchen.x, kitchen.y, 0]);
-  assert.equal(ready.droneId, preparing.droneId);
-  const halfway = orderFlight({ ...order, stage: 'Delivering', elapsed: stageTicks.flight / 2 });
+  assert.equal(ready.droneId, drone.id);
+  const halfway = orderFlight({ ...order, drone, stage: 'Delivering', elapsed: stageTicks.flight / 2 });
   assert.equal(halfway.phase, 'In flight');
   assert.ok(Math.abs(halfway.progress - .5) < 1e-9);
   assert.ok(halfway.altitude > 0 && halfway.remainingMetres > 0);
   assert.ok(orderFlight({ ...order, stage: 'Delivering', elapsed: 3 }, .5).progress > orderFlight({ ...order, stage: 'Delivering', elapsed: 3 }).progress);
-  const landed = orderFlight({ ...order, stage: 'Delivered', elapsed: 0 });
+  const landed = orderFlight({ ...order, drone, stage: 'Delivered', elapsed: 0 });
   assert.deepEqual([landed.phase, landed.x, landed.y, landed.altitude, landed.etaSeconds, landed.remainingMetres], ['Landed', destinationFor(order).x, destinationFor(order).y, 0, 0, 0]);
 });
 
 test('drones take off and land vertically with the camera looking straight down', () => {
-  const order: Order = { id: 'FC-1044', customer: 'You', bag: [makeLine('flat-white')], payload: 1, stage: 'Delivering', elapsed: 0, manual: true };
+  const order: Order = { id: 'FC-1044', customer: 'You', bag: [makeLine('flat-white')], payload: 1, stage: 'Delivering', elapsed: 0, manual: true, drone: { id: 'FC-05', pickupOrigin: dropOffs[0], assignedAt: 0 } };
   const at = (ticks: number) => orderFlight({ ...order, elapsed: ticks });
   const destination = destinationFor(order);
   for (const ticks of [0, 1, 2, 3, 4, 5]) {
@@ -168,7 +170,7 @@ test('drones take off and land vertically with the camera looking straight down'
   assert.deepEqual([cruise.manoeuvre, cruise.altitude, cruise.cameraDown], ['Cruise', 60, 0]);
   assert.equal(at(stageTicks.flight * .9).manoeuvre, 'Vertical descent');
   const ready = orderFlight({ ...order, stage: 'Ready for pickup', elapsed: 0 });
-  assert.equal(ready.cameraDown, 0);
+  assert.equal(ready.cameraDown, 1);
   assert.equal(orderFlight({ ...order, stage: 'Ready for pickup', elapsed: stageTicks.ready }).cameraDown, 1);
 });
 
@@ -183,14 +185,83 @@ test('consecutive orders fly to different drop-offs', () => {
 });
 
 test('demo skip-ahead advances only the chosen undelivered order', () => {
-  let state = demoReducer(initialState, { type: 'confirm', bag: [makeLine('latte')], payload: 1 });
+  const opening = { ...initialState, orders: [] };
+  let state = demoReducer(opening, { type: 'confirm', bag: [makeLine('latte')], payload: 1 });
   const id = state.orders[0].id;
   for (const expected of ['Ready for pickup', 'Delivering', 'Delivered', 'Delivered']) {
     state = demoReducer(state, { type: 'advance', id });
     assert.equal(state.orders[0].stage, expected);
     assert.equal(state.orders[0].elapsed, 0);
   }
-  assert.deepEqual(state.orders.slice(1), initialState.orders);
+  assert.deepEqual(state.orders.slice(1), opening.orders);
+});
+
+test('ready tracking follows only its assigned drone toward pickup, not the customer', () => {
+  const order = initialState.orders[1];
+  const start = orderFlight(order);
+  const cruise = orderFlight({ ...order, elapsed: stageTicks.pickupFlight / 2 });
+  assert.equal(cruise.phase, 'To pickup');
+  assert.equal(cruise.droneId, order.drone?.id);
+  assert.deepEqual(cruise.origin, order.drone?.pickupOrigin);
+  assert.deepEqual([cruise.target.x, cruise.target.y], [kitchen.x, kitchen.y]);
+  assert.notDeepEqual(cruise.target, cruise.destination);
+  assert.deepEqual([cruise.x, cruise.y], [(start.x + kitchen.x) / 2, (start.y + kitchen.y) / 2]);
+  assert.ok(cruise.remainingMetres < start.remainingMetres);
+  assert.ok(orderFlight({ ...order, elapsed: 8 }, .5).progress > orderFlight({ ...order, elapsed: 8 }).progress);
+  assert.equal(order.stage, 'Ready for pickup');
+});
+
+test('inbound VTOL lands with a downward camera and tracking continues through pickup', () => {
+  const order = initialState.orders[1];
+  for (const elapsed of [0, 1, 2, 3]) {
+    const climb = orderFlight({ ...order, elapsed });
+    assert.deepEqual([climb.x, climb.y], [order.drone?.pickupOrigin.x, order.drone?.pickupOrigin.y]);
+    assert.equal(climb.cameraDown, 1);
+    const descent = orderFlight({ ...order, elapsed: stageTicks.pickupFlight - elapsed });
+    assert.deepEqual([descent.x, descent.y], [kitchen.x, kitchen.y]);
+    assert.equal(descent.cameraDown, 1);
+  }
+  const atPad = { ...order, elapsed: stageTicks.pickupFlight };
+  const inbound = orderFlight(atPad);
+  const pickedUp = demoReducer({ ...initialState, orders: [atPad] }, { type: 'pickup', id: order.id }).orders[0];
+  const outbound = orderFlight(pickedUp);
+  assert.deepEqual([inbound.droneId, inbound.x, inbound.y, inbound.altitude, inbound.cameraDown],
+    [outbound.droneId, outbound.x, outbound.y, outbound.altitude, outbound.cameraDown]);
+  assert.deepEqual(pickedUp.drone, order.drone);
+  assert.equal(outbound.phase, 'In flight');
+  assert.deepEqual(outbound.origin, kitchen);
+  assert.deepEqual(outbound.target, outbound.destination);
+});
+
+test('unassigned ready orders have no live drone and wait without dispatching', () => {
+  const waiting: Order = { ...initialState.orders[0], stage: 'Ready for pickup', elapsed: 80 };
+  assert.equal(orderFlight(waiting).droneId, null);
+  assert.equal(orderFlight(waiting).phase, 'Awaiting drone');
+  assert.equal(canPickup(waiting), false);
+  for (const type of ['pickup', 'advance'] as const) {
+    assert.equal(demoReducer({ ...initialState, orders: [...initialState.orders.slice(1), waiting] }, { type, id: waiting.id }).orders[2].stage, 'Ready for pickup');
+  }
+  const state = demoReducer({ ...initialState, orders: [...initialState.orders.slice(1), waiting] }, { type: 'tick' });
+  assert.equal(state.orders[2].drone, undefined, 'busy drones are not assigned to another order');
+  assert.equal(state.orders[2].stage, 'Ready for pickup');
+});
+
+test('late assignment waits for the whole inbound leg and uses the drone’s last landing', () => {
+  const delivered = { ...initialState.orders[2], elapsed: stageTicks.flight - 1 };
+  const waiting: Order = { ...initialState.orders[0], stage: 'Ready for pickup', elapsed: 80 };
+  let state = demoReducer({ ...initialState, orders: [initialState.orders[1], delivered, waiting] }, { type: 'tick' });
+  const assigned = state.orders[2];
+  assert.equal(assigned.drone?.id, delivered.drone?.id);
+  assert.deepEqual(assigned.drone?.pickupOrigin, destinationFor(delivered));
+  assert.equal(assigned.drone?.assignedAt, 81);
+  assert.equal(orderFlight(assigned).progress, 0);
+  assert.equal(demoReducer(state, { type: 'pickup', id: assigned.id }).orders[2].stage, 'Ready for pickup');
+  for (let i = 0; i < stageTicks.pickupFlight - 1; i++) state = demoReducer(state, { type: 'tick' });
+  assert.equal(state.orders[2].stage, 'Ready for pickup');
+  assert.equal(canPickup(state.orders[2]), false);
+  state = demoReducer(state, { type: 'tick' });
+  assert.equal(state.orders[2].stage, 'Delivering');
+  assert.equal(state.orders[2].drone?.id, assigned.drone?.id);
 });
 
 test('both map modes use South Melbourne coordinates and round-trip the delivery route', () => {

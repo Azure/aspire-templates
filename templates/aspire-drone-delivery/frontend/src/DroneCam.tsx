@@ -198,10 +198,10 @@ export default function DroneCam({ order, settings }: { order: Order; settings: 
       const flight = orderFlight(current, still ? 0 : (now - changedAt) / 1000);
       const forwardX = Math.cos(flight.heading), forwardZ = Math.sin(flight.heading);
       const t = now / 1000;
-      const flying = flight.phase === 'In flight';
+      const flying = flight.phase === 'In flight' || flight.phase === 'To pickup';
       const bob = still || !flying ? 0 : Math.sin(t * 2.1) * .25;
       const height = Math.max(3, flight.altitude / metresPerUnit) + bob;
-      target.position.set(flight.destination.x, .05, flight.destination.y);
+      target.position.set(flight.target.x, .05, flight.target.y);
       camera.position.set(flight.x, height, flight.y);
       // Tilt from a forward view (looking slightly down at the ground ahead) to straight down for vertical take-off and landing.
       const level = Math.atan2(height, flying ? 30 : 24);
@@ -234,7 +234,7 @@ export default function DroneCam({ order, settings }: { order: Order; settings: 
       <span className="cam-rec"><i />SIMULATED FEED</span>
       <span className="cam-id">{flight.droneId} · CAM 1</span>
       <span className="cam-cross" />
-      <span className="cam-readout">ALT {flight.altitude} m · {flight.manoeuvre === 'Cruise' ? `${flight.remainingMetres} m to go` : flight.phase === 'In flight' ? flight.manoeuvre : flight.phase} · CAM {flight.cameraDown > .5 ? 'DOWN' : 'FWD'}</span>
+      <span className="cam-readout">ALT {flight.altitude} m · {flight.manoeuvre === 'Cruise' ? `${flight.remainingMetres} m ${flight.phase === 'To pickup' ? 'to pickup' : 'to go'}` : flight.phase === 'In flight' || flight.phase === 'To pickup' ? flight.manoeuvre : flight.phase} · CAM {flight.cameraDown > .5 ? 'DOWN' : 'FWD'}</span>
     </div>
     <span className="cam-credit">{ground === 'azure' ? '© Microsoft, © TomTom · Azure Maps tiles · simulated view' : 'Illustrated ground · placeholder structures · not real video'}</span>
     {groundNote && <span className="cam-note" role="status">{groundNote}</span>}

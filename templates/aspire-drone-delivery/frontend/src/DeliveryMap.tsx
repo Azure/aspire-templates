@@ -11,16 +11,21 @@ export type Flight = { id: string; x: number; y: number; status: string };
 const position = (point: Point) => toLonLat(point.x, point.y);
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-/** Customer-placed orders get a deterministic flight that joins the illustrative fleet while delivering. */
+/** Assigned drones share the same pickup and delivery positions in both map views. */
 export function liveFlights(tick: number, orders: Order[]): Flight[] {
-  return [...demoFlights(tick), ...orders.filter(order => order.customer === 'You' && order.stage === 'Delivering').slice(0, 1)
-    .map(order => { const flight = orderFlight(order); return { id: flight.droneId, x: flight.x, y: flight.y, status: `Delivering ${order.id}` }; })];
+  return [...demoFlights(tick), ...orders.flatMap(order => {
+    if (!order.drone || order.stage === 'Preparing' || order.stage === 'Delivered') return [];
+    const flight = orderFlight(order);
+    return [{ id: order.drone.id, x: flight.x, y: flight.y, status: `${flight.phase} · ${order.id}` }];
+  })];
 }
 
-export function AzureBasemap({ settings, flights, follow, route }: { settings: MapSettings; flights: Flight[]; follow?: Point; route?: Point }) {
+export function AzureBasemap({ settings, flights, follow, route, routeOrigin = kitchen }: { settings: MapSettings; flights: Flight[]; follow?: Point; route?: Point & { label?: string }; routeOrigin?: Point }) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<{ map: Atlas.Map; atlas: typeof Atlas } | null>(null);
   const markers = useRef(new Map<string, Atlas.HtmlMarker>());
+  const routeSource = useRef<Atlas.source.DataSource | null>(null);
+  const routeMarker = useRef<Atlas.HtmlMarker | null>(null);
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
   const initialCenter = useRef(follow ?? kitchen);
@@ -47,26 +52,36 @@ export function AzureBasemap({ settings, flights, follow, route }: { settings: M
         store.className = 'azure-store';
         store.textContent = 'ForthCoffee';
         map.markers.add(new atlas.HtmlMarker({ position: position(kitchen), htmlContent: store }));
-        if (route) {
-          const source = new atlas.source.DataSource();
-          map.sources.add(source);
-          source.add(new atlas.data.LineString([position(kitchen), position(route)]));
-          map.layers.add(new atlas.layer.LineLayer(source, undefined, { strokeColor: '#184b38', strokeWidth: 3, strokeDashArray: [2, 2] }));
-          const home = document.createElement('div');
-          home.className = 'azure-store';
-          home.textContent = 'Your drop-off';
-          map.markers.add(new atlas.HtmlMarker({ position: position(route), htmlContent: home }));
-        }
+        const source = new atlas.source.DataSource();
+        map.sources.add(source);
+        map.layers.add(new atlas.layer.LineLayer(source, undefined, { strokeColor: '#184b38', strokeWidth: 3, strokeDashArray: [2, 2] }));
+        routeSource.current = source;
         mapRef.current = { map, atlas };
         setReady(true);
       });
     }).catch((reason: unknown) => {
       if (!cancelled) setError(`Map SDK could not load: ${reason instanceof Error ? reason.message : String(reason)}`);
     });
-    return () => { cancelled = true; mapRef.current = null; markers.current.clear(); map?.dispose(); };
+    return () => { cancelled = true; mapRef.current = null; routeSource.current = null; routeMarker.current = null; markers.current.clear(); map?.dispose(); };
     // Recreate the map only when credentials or the map mode change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings, Boolean(follow), route?.x, route?.y]);
+  }, [settings, Boolean(follow)]);
+  useEffect(() => {
+    const current = mapRef.current, source = routeSource.current;
+    if (!ready || !current || !source) return;
+    source.clear();
+    if (routeMarker.current) {
+      current.map.markers.remove(routeMarker.current);
+      routeMarker.current = null;
+    }
+    if (!route) return;
+    source.add(new current.atlas.data.LineString([position(routeOrigin), position(route)]));
+    const home = document.createElement('div');
+    home.className = 'azure-store';
+    home.textContent = route.label === 'ForthCoffee pickup' ? route.label : 'Your drop-off';
+    routeMarker.current = new current.atlas.HtmlMarker({ position: position(route), htmlContent: home });
+    current.map.markers.add(routeMarker.current);
+  }, [ready, route?.x, route?.y, route?.label, routeOrigin.x, routeOrigin.y]);
   useEffect(() => {
     const current = mapRef.current;
     if (!ready || !current) return;
