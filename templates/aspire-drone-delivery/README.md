@@ -304,7 +304,7 @@ Tracing and metrics limits:
    30 seconds for loading. Preparation takes 45 seconds plus 15 per payload bay;
    flight duration depends on distance and drone class. There are no browser
    skip/pickup/pause/reset controls that could contradict server state.
-3. Open **Map options** to investigate an Azure Maps basemap.
+3. Both maps are OpenStreetMap basemaps with simulated drone positions on top.
 
 Only API-reported drones appear in the operations map. Customer tracking uses the
 assigned drone's actual simulator telemetry, with no browser-generated flight leg.
@@ -312,8 +312,8 @@ The three.js camera stays mounted through inbound flight, loading and delivery
 and smoothly follows the simulator's camera orientation during take-off and landing. It has placeholder buildings,
 not real video. A separately labelled last captured frame comes from the server's
 blob-photo proxy, including proof of delivery when available.
-The rendered camera uses Azure Maps road tiles for the
-ground when Azure Maps is configured, otherwise the illustrated map. If WebGL is
+The rendered camera uses OpenStreetMap tiles for the
+ground, falling back to an illustrated map if they can't load. If WebGL is
 unavailable, the overhead map still follows the drone.
 Prices, battery levels and the company are fictional design data.
 Plant milk choices are not an allergen-free guarantee; no dietary suitability is claimed.
@@ -325,45 +325,25 @@ Run `npm test` (Vitest) and `npm run build` in both `customer-frontend` and `ope
 Run `dotnet test DroneDelivery.Tests` and
 `dotnet build DroneDelivery.AppHost/DroneDelivery.AppHost.csproj` from this directory.
 
-## Azure Maps feasibility spike
+## OpenStreetMap basemap
 
-The default original SVG map is approximate, credential-free and not sourced from
-Azure Maps tiles. The alternative uses the Azure Maps Web SDK v3 and actual
-South Melbourne geography with fictional coffee-bar/drone markers.
+Both sites draw their overhead maps with [Leaflet](https://leafletjs.com) and
+standard [OpenStreetMap](https://www.openstreetmap.org/copyright) raster tiles
+from `tile.openstreetmap.org`, credited "© OpenStreetMap contributors". The
+drone simulator's coordinates are real South Melbourne longitudes and latitudes;
+the stores, drones and routes drawn on top are fictional. No account, key or
+token is needed.
 
-To try it, use an **existing** Azure Maps account and an identity with **Azure
-Maps Data Reader** access to that account:
+While a drone camera is open, the page also fetches the zoom-16 tiles that
+cover the delivery corridor (at most 64, two at a time, once per page load) to
+texture the simulated ground. If any tile fails, the camera says so and keeps
+its illustrated ground.
 
-1. Obtain the account's **client ID** from its Azure portal authentication page
-   (this is not an Entra application registration ID).
-2. With the Azure CLI authenticated as that identity, obtain a short-lived access
-   token for `https://atlas.microsoft.com/`. For example:
-   ```bash
-   az account get-access-token --resource https://atlas.microsoft.com/ --query accessToken -o tsv
-   ```
-   Treat the output as a credential. Paste it only into the local preview's
-   password field, never an issue, PR, screenshot or committed file.
-3. Enter both values in **Map options** and choose **Explore Azure Maps**.
-   The token is retained only in page memory, sent to Azure Maps by its SDK,
-   and is not stored by the sample server. Reload or switch to the illustrated
-   map to clear it. There is no automatic token renewal in this spike.
-   While an order's drone camera is open, the page also requests up to 64
-   zoom-16 road tiles directly from `atlas.microsoft.com` with the same token to
-   texture the simulated ground. If any tile fails, the camera says so and falls
-   back to the illustrated ground.
-
-The account must be reachable from the browser and its policies must allow the
-requested access. Token/account/network failures appear on the map rather than
-being reported as success. Switching back to the illustrated map is explicit.
-No resource is provisioned by this UI; **using your existing account may incur
-Azure Maps charges**. See the [pricing page](https://azure.microsoft.com/pricing/details/azure-maps/).
-
-The production direction is a backend token endpoint using managed identity and
-least-privilege RBAC, not a long-lived account key in Vite configuration. A public
-token endpoint needs its own abuse/rate controls even without real demo identity.
-See the [authentication guidance](https://learn.microsoft.com/azure/azure-maps/azure-maps-authentication).
-Live basemap access has not been validated without an authorized Azure Maps
-account. SDK integration and UI feasibility are not proof of working Azure access.
+The public OSM tile server is a volunteer-run service suitable for demos and
+development traffic only. Its [tile usage policy](https://operations.osmfoundation.org/policies/tiles/)
+requires visible attribution and forbids bulk downloading or heavy use. Before
+deploying this for real traffic, switch `osmTileUrl` in `frontend-shared/osm.ts`
+to a commercial or self-hosted tile provider.
 
 ## Generate a project
 
@@ -413,8 +393,8 @@ confirmation-only order creation, invalid
 configurations, the simulation lifecycle, the order's drone flight, South Melbourne
 coordinate mapping, demo stage skipping and browser action spans. The .NET tests
 also cover trace context crossing Event Hubs properties and keeping customer
-details out of spans. The Azure Maps SDK and three.js are loaded only when needed;
-their large vendor chunks produce a Vite size advisory.
+details out of spans. three.js is loaded only when a camera opens; the
+large vendor chunks produce a Vite size advisory.
 
 ## Not ready yet
 

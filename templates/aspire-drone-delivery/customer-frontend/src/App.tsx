@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Coffee, Drone, MapPin, Minus, Package, Plus, ShieldCheck, X } from 'lucide-react';
-import type { MapSettings } from './DeliveryMap';
 import BaySelector from './BaySelector';
 import FoodArt, { CoffeeCup } from './FoodArt';
 import OrderStatus from './OrderStatus';
@@ -10,7 +9,7 @@ import type { Bag, BagLine, Bays, PayloadSize } from './demo';
 import { placeOrder } from './api';
 import { useCustomerOrders } from './useApi';
 
-type Modal = 'bag' | 'bay' | 'maps' | 'about' | null;
+type Modal = 'bag' | 'bay' | 'about' | null;
 
 const bayLabel = (bays: number) => `${bays} bay${bays === 1 ? '' : 's'}`;
 
@@ -22,10 +21,6 @@ export default function App() {
   const [payload, setPayload] = useState<PayloadSize | null>(null);
   const [modal, setModal] = useState<Modal>(null);
   const [activeBay, setActiveBay] = useState(0);
-  const [maps, setMaps] = useState<MapSettings | null>(null);
-  const [mapClientId, setMapClientId] = useState('');
-  const [mapToken, setMapToken] = useState('');
-  const [mapError, setMapError] = useState('');
   const [route, setRoute] = useState(() => window.location.hash);
   const opener = useRef<HTMLElement | null>(null);
   const dialog = useRef<HTMLDivElement>(null);
@@ -121,7 +116,7 @@ export default function App() {
     {apiError && <p className="form-error" role="alert">{apiError}</p>}
     {apiStatus && (!statusId || orders.some(order => order.id === statusId)) && <p className="small-print" role="status">{apiStatus}</p>}
     {statusId ? (orders.find(order => order.id === statusId) || !receipts.some(receipt => receipt.id === statusId)
-      ? <OrderStatus order={orders.find(order => order.id === statusId)} orderId={statusId} settings={maps} onSettings={() => setModal('maps')} onBack={() => navigate('')} />
+      ? <OrderStatus order={orders.find(order => order.id === statusId)} orderId={statusId} onBack={() => navigate('')} />
       : <main className="status-page"><p role="status">{apiError ? 'Order updates are unavailable. Your receipt is saved.' : 'Confirming your order…'}</p></main>)
       : <main>
         <section className="customer-intro"><div className="eyebrow"><span className="small-line" /> SOUTH MELBOURNE, MEET YOUR NEW COFFEE RUN.</div><h1>Good coffee. Great company. <em>A little <span className="altitude" aria-label="altitude">a<span className="proof-insert" aria-hidden="true"><span className="proof-l">l</span><span className="proof-caret">^</span></span>titude.</span></em></h1></section>
@@ -146,7 +141,6 @@ export default function App() {
           {submitError && <p className="form-error" role="alert">{submitError}</p>}
           <button className="primary-button full-width" disabled={submitting || !payload || !validBag(bag, payload)} onClick={() => void confirm()}>{submitting ? 'Confirming…' : 'Confirm demo order'} <ArrowRight size={16} /></button><button className="text-button full-width" onClick={() => setModal(null)}>Keep packing <Plus size={14} /></button><p className="privacy-note"><ShieldCheck size={14} />Fictional order. No payment, no real flight. Dietary suitability is not guaranteed.</p></>}
       </>}
-      {modal === 'maps' && <><span className="dialog-symbol"><MapPin size={28} /></span><div className="eyebrow">A REAL PLACE. A FICTIONAL COFFEE BAR.</div><h2 id="modal-heading">A South Melbourne perspective.</h2><p>The illustrated map needs no credentials. Explore Azure Maps with your own existing account. Usage may incur charges; no resources are provisioned.</p><label className="field-label" htmlFor="client-id">Azure Maps account client ID (not an app registration ID)</label><input id="client-id" value={mapClientId} onChange={event => setMapClientId(event.target.value)} placeholder="Your Maps account client ID" /><label className="field-label" htmlFor="map-token">Short-lived Entra access token for Azure Maps</label><input id="map-token" type="password" autoComplete="off" value={mapToken} onChange={event => setMapToken(event.target.value)} placeholder="Token with Azure Maps Data Reader access" /><p className="small-print">Kept only in this page’s memory. Reloading clears it. Token refresh is not implemented. Never paste an account key.</p>{mapError && <p className="form-error" role="alert">{mapError}</p>}<button className="primary-button full-width" onClick={() => { if (!mapClientId.trim() || !mapToken.trim()) { setMapError('Both the account client ID and a short-lived access token are required.'); return; } setMaps({ clientId: mapClientId.trim(), token: mapToken.trim() }); setMapToken(''); setMapError(''); setModal(null); }}>Explore Azure Maps <ArrowRight size={16} /></button><button className="text-button full-width" onClick={() => { setMaps(null); setMapToken(''); setMapError(''); setModal(null); }}>Use the illustrated map instead</button></>}
       {modal === 'about' && <><span className="dialog-symbol"><Coffee size={28} /></span><div className="eyebrow">AN ASPIRE DESIGN SPIKE</div><h2 id="modal-heading">Good coffee. New possibilities.</h2><p>ForthCoffee is one fictional company exploring drone-delivered coffee in South Melbourne. No real company, shop, order or flight is represented.</p><div className="about-features"><span><Package size={18} />Choose a single, double or quad payload.</span><span><Coffee size={18} />Build each coffee and tuck in some treats.</span><span><Drone size={18} />Follow your order overhead and through a simulated camera.</span></div><p>Orders and drone telemetry come from the demo server. This browser saves your order receipts; the server resets on restart. Packaging is illustrative. No real payment or flight occurs.</p><button className="primary-button full-width" onClick={() => setModal(null)}>Back to your coffee run <ArrowLeft size={16} /></button></>}
     </div></div>}
   </div>;

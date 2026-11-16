@@ -51,10 +51,10 @@ start at the latest event, so restarting a worker does not replay old missions.
 | Customer React site | Payload selection, coffee builder, tray, own orders/tracking | POST orders; scoped realtime receipt subscriptions; up to 20 localStorage receipts; no real authentication |
 | Operator React site | All stores, fleet, dispatch queue, battery, queued work and a per-drone camera/command drawer | Initial REST snapshot plus operator realtime stream; latest 100 orders; commands go through the backend |
 | CustomerServer / OperatorServer | Serve independent frontends and proxy backend REST/negotiate routes | No Event Hubs consumers, dispatch logic or authoritative state |
-| Simulated drone camera | Shared, lazily loaded Three.js renderer; buffered position/heading/camera-pitch telemetry, with actual nearby fleet models | Placeholder scenery; not video; independent SVG Blob captures; Azure Maps tiles only with the reviewer's token |
+| Simulated drone camera | Shared, lazily loaded Three.js renderer; buffered position/heading/camera-pitch telemetry, with actual nearby fleet models | Placeholder scenery on OpenStreetMap ground tiles; not video; independent SVG Blob captures |
 | Frontend source | Independent sites with customer-only menu/receipt helpers and common `frontend-shared` camera/pose/artwork source | Build from the template tree; emitted site assets are self-contained |
 | ServiceDefaults and tracing | OpenTelemetry for every .NET project; `DroneDelivery` spans across HTTP, Event Hubs (`traceparent` in event properties), dispatch, mission legs, camera/blob work, SignalR publishes and browser receipt of stage changes; `DroneDelivery` meter for position ingestion and SignalR sends | Browser spans relayed through `/otlp` by the Vite dev server or, for built sites, the UI server; SignalR service internals not traceable; no PII in span attributes or IDs in metric tags |
-| Azure Maps adapter | Real basemap and fictional animated markers | Opt-in reviewer token, no refresh or resource provisioning |
+| OpenStreetMap basemap | Leaflet with OSM raster tiles and fictional drone/store/route markers | Public tile server for demo/dev traffic only; attribution required |
 
 Customer receipts are capped at 20 entries, and quantities at nine per recipe or treat. Confirmed orders snapshot
 the payload size and each coffee's size, milk, shots, sugar and temperature.
@@ -130,32 +130,21 @@ separate bounded 64-frame queue so it cannot block flight updates. SVG images
 snapshot the capture-time pose, remain explicitly illustrative, and are not
 browser-canvas screenshots.
 
-## Azure Maps findings
+## Map provider
 
-The Web SDK supports the required browser basemap and moving HTML markers.
-South Melbourne is centered near longitude 144.96, latitude -37.83. The fictional
-positions use a small approximate rectangle around that area, not surveyed
-store/flight data. The SVG default is independently illustrated approximate
-geography and does not fetch mapping tiles.
+Both sites use a shared Leaflet component (`frontend-shared/OsmMap.tsx`) over
+standard OpenStreetMap raster tiles, with themed drone, store and route overlays
+driven by the same telemetry as before. The illustrated coordinate space maps to
+real South Melbourne coordinates (`frontend-shared/mapGeometry.ts`). The camera
+ground fetches a bounded set of zoom-16 tiles once per page, two requests at a
+time, and falls back to the illustrated ground on failure. Browser tracing
+ignores tile fetches.
 
-The SDK can use an Azure Maps account client ID with anonymous callback-based
-delivery of an Entra access token. The spike accepts a manually obtained
-short-lived token, keeps it only in memory and shows SDK errors. This establishes
-an integration path, not authenticated production readiness; it has not been
-tested against a live account.
-
-Production direction: a backend token endpoint using managed identity with
-**Azure Maps Data Reader** scoped to the Maps account. An anonymous demo must
-not become an unrestricted token vending service: explicitly design token
-lifetime/refresh, endpoint access, rate controls, allowed origins/account
-settings and spend monitoring. Account client IDs are identifiers; keys and
-bearer tokens must never enter source control or static frontend configuration.
-All Azure provisioning needs separate owner approval.
-
-References:
-[authentication](https://learn.microsoft.com/azure/azure-maps/azure-maps-authentication),
-[SDK authentication callback](https://learn.microsoft.com/azure/azure-maps/how-to-secure-webapp-users),
-[pricing](https://azure.microsoft.com/pricing/details/azure-maps/).
+The public `tile.openstreetmap.org` server suits demo and development traffic
+only ([tile usage policy](https://operations.osmfoundation.org/policies/tiles/)):
+attribution is shown on every map and on the camera, and there is no
+prefetching or bulk download. Production use needs a commercial or self-hosted
+tile provider, which is a one-line URL change in `frontend-shared/osm.ts`.
 
 ## Next architecture steps
 

@@ -45,10 +45,10 @@ The map is illustrative and cannot support navigation or real flight planning.
    and total. Its URL is the way back to it; the menu page lists no past orders.
 4. Once the order is ready and matching assigned-drone telemetry is available,
    the status page adds two follow views: an overhead
-   map centred on the assigned drone (illustrated, or Azure Maps when configured)
+   OpenStreetMap view centred on the assigned drone
    and a simulated drone camera. The camera is a lazily loaded three.js scene: the
-   ground plane is textured with the illustrated map, or Azure Maps road tiles
-   when configured, with temporary placeholder buildings and trees to convey
+   ground plane is textured with OpenStreetMap tiles (or an illustrated map if
+   they can't load), with temporary placeholder buildings and trees to convey
    motion. It is labelled as a simulated feed, not real video. A reduced-motion
    preference removes bob and sub-second interpolation, and the page explains
    when WebGL is unavailable. The inbound leg targets the pickup store, while the
@@ -76,13 +76,11 @@ Battery, drone class, altitude, current order and queued missions are reported
 telemetry, not decorative constants. Browser skip, pickup and reset controls are
 removed because they would contradict the server-owned lifecycle.
 
-## Maps feasibility
+## Maps
 
-Azure Maps is the preferred provider to investigate. The integrated alternative
-renders an actual basemap with fictional overlays using a reviewer-supplied,
-short-lived Entra token. The default illustrated map needs no Azure account.
-Live authentication, account policies and billing cannot be verified without
-authorized account access. See the template README for the exact test path.
+Maps use OpenStreetMap tiles through Leaflet with fictional overlays. No account
+or token is needed. The public tile server is for demo and development traffic;
+see the template README for the tile usage policy and how to swap providers.
 
 ## Immediate review criteria
 
@@ -93,7 +91,7 @@ authorized account access. See the template README for the exact test path.
 - Customer ordering appears in the independent operations queue via the shared API.
 - Ready orders follow only their assigned inbound mission and retain the camera
   through pickup and delivery.
-- Illustrative versus Azure Maps data and the simulation's limitations are clear.
+- OpenStreetMap attribution and the simulation's limitations are clear.
 
 These are interaction checks, not proof of improved developer onboarding.
 Later evaluation should use the entire eligible population of fresh-project

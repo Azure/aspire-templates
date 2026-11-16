@@ -16,7 +16,7 @@ export default defineConfig({
     __OTEL__: JSON.stringify(otlpEndpoint
       ? { serviceName: process.env.OTEL_SERVICE_NAME ?? 'operator-site', attributes: otlpAttributes } : null),
   },
-  resolve: { dedupe: ['react', 'react-dom', 'three'] },
+  resolve: { dedupe: ['react', 'react-dom', 'three', 'leaflet'] },
   server: {
     proxy: {
       ...(otlpEndpoint ? {

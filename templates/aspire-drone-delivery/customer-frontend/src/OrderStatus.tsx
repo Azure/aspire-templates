@@ -1,7 +1,6 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, ChefHat, Drone, FastForward, House, Layers, MapPin, Package, ShieldCheck } from 'lucide-react';
-import { AzureBasemap, MapArtwork } from './DeliveryMap';
-import type { MapSettings } from './DeliveryMap';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, ArrowRight, Check, ChefHat, Drone, FastForward, House, MapPin, Package, ShieldCheck } from 'lucide-react';
+import OsmMap from '../../frontend-shared/OsmMap';
 import FoodArt, { CoffeeCup } from './FoodArt';
 import { baristaFor } from './baristas';
 import { skipOrderStage } from './api';
@@ -42,34 +41,22 @@ function BaristaCard({ orderId }: { orderId: string }) {
   </section>;
 }
 
-function FollowMap({ flight, settings, onSettings }: { flight: OrderFlight; settings: MapSettings | null; onSettings: () => void }) {
+function FollowMap({ flight }: { flight: OrderFlight }) {
+  const pickup = flight.target.label === 'ForthCoffee pickup';
+  const store = pickup ? flight.target : flight.origin;
+  const stores = useMemo(() => [{ x: store.x, y: store.y, label: 'ForthCoffee' }], [store.x, store.y]);
+  const flights = useMemo(() => flight.droneId ? [{ id: flight.droneId, x: flight.x, y: flight.y, status: flight.phase, heading: flight.heading }] : [], [flight.droneId, flight.x, flight.y, flight.phase, flight.heading]);
   if (!flight.droneId) return null;
-  const angle = flight.heading * 180 / Math.PI;
-  const width = 560, height = 440;
   return <div className="follow-map">
-    {settings ? <AzureBasemap settings={settings} flights={[{ id: flight.droneId, x: flight.x, y: flight.y, status: flight.phase }]} follow={flight} route={flight.target} routeOrigin={flight.origin} stores={[{ ...(flight.target.label === 'ForthCoffee pickup' ? flight.target : flight.origin), label: 'ForthCoffee' }]} />
-      : <svg viewBox={`${flight.x - width / 2} ${flight.y - height / 2} ${width} ${height}`} preserveAspectRatio="xMidYMid slice" role="img" aria-label={`Overhead illustrated map centred on drone ${flight.droneId}`}>
-        <MapArtwork routes={false} store={false} />
-        <line x1={flight.origin.x} y1={flight.origin.y} x2={flight.target.x} y2={flight.target.y} stroke="#184b38" strokeWidth="2.5" strokeDasharray="6 6" opacity=".55" />
-        <line x1={flight.origin.x} y1={flight.origin.y} x2={flight.x} y2={flight.y} stroke="#184b38" strokeWidth="3.5" strokeLinecap="round" />
-        <g transform={`translate(${flight.target.x} ${flight.target.y})`}>
-          <circle r="15" fill="#e9b44c" opacity=".25" className="drop-pulse" /><circle r="7" fill="#e9b44c" stroke="#fff" strokeWidth="2.5" />
-          <rect x="20" y="-9" width="112" height="17" rx="8" fill="#fffdf5" /><text x="76" y="3" textAnchor="middle" className="tiny-label">{flight.target.label === 'ForthCoffee pickup' ? 'ForthCoffee pickup' : 'Your drop-off'}</text>
-        </g>
-        <g transform={`translate(${flight.x} ${flight.y})`}>
-          <circle r="17" fill="#fff" opacity=".7" />
-          <g transform={`rotate(${angle})`}><path d="M13 0 L-7 -9 L-3 0 L-7 9Z" fill="#184b38" stroke="#fff" strokeWidth="1.5" /></g>
-          <rect x="-24" y="-35" width="48" height="16" rx="7" fill="#184b38" /><text y="-24" textAnchor="middle" fill="#fff" className="drone-label">{flight.droneId}</text>
-        </g>
-      </svg>}
+    <OsmMap center={flight} follow={flight} zoom={16} flights={flights} stores={pickup ? [] : stores}
+      route={{ origin: flight.origin, target: flight.target, targetLabel: pickup ? 'ForthCoffee pickup' : 'Your drop-off', current: flight }}
+      ariaLabel={`OpenStreetMap overhead view centred on drone ${flight.droneId}`} />
     <div className="map-location"><span className="live-dot" /> Following {flight.droneId}</div>
-    <button className="map-layers" onClick={onSettings}><Layers size={15} />{settings ? 'Azure Maps' : 'Map options'}</button>
-    <div className="map-credit">{settings ? 'Azure Maps · simulated position' : 'Illustrated overhead view · simulated position'}</div>
   </div>;
 }
 
-export default function OrderStatus({ order, orderId, settings, onSettings, onBack }: {
-  order: Order | undefined; orderId: string; settings: MapSettings | null; onSettings: () => void; onBack: () => void;
+export default function OrderStatus({ order, orderId, onBack }: {
+  order: Order | undefined; orderId: string; onBack: () => void;
 }) {
   const [skipping, setSkipping] = useState(false);
   const [skipError, setSkipError] = useState('');
@@ -125,9 +112,9 @@ export default function OrderStatus({ order, orderId, settings, onSettings, onBa
     <div className="status-grid">
       <section className="status-stage">
         {followable ? <div className="follow-views">
-          <div className="follow-panel"><div className="follow-heading"><span><MapPin size={14} />Overhead</span><small>{flight.phase}</small></div><FollowMap flight={flight} settings={settings} onSettings={onSettings} /></div>
+          <div className="follow-panel"><div className="follow-heading"><span><MapPin size={14} />Overhead</span><small>{flight.phase}</small></div><FollowMap flight={flight} /></div>
           <div className="follow-panel"><div className="follow-heading"><span><span className="rec-dot" />Drone camera</span><small>Simulated</small></div>
-            <Suspense fallback={<div className="drone-cam"><div className="cam-fallback" role="status">Starting simulated camera…</div></div>}>{order.cameraPose && <DroneCam pose={order.cameraPose} nearby={order.nearbyDrones} target={order.tracking?.target} settings={settings} />}</Suspense></div>
+            <Suspense fallback={<div className="drone-cam"><div className="cam-fallback" role="status">Starting simulated camera…</div></div>}>{order.cameraPose && <DroneCam pose={order.cameraPose} nearby={order.nearbyDrones} target={order.tracking?.target} />}</Suspense></div>
         </div> : <div className="kitchen-card">
           <div className="kitchen-food" data-count={Math.min(order.bag.length, 4)}>{order.bag.slice(0, 4).map(line => <div key={line.id}>{line.coffee ? <CoffeeCup options={line.coffee} style={line.itemId} /> : <FoodArt kind={menuItem(line.itemId).kind} />}</div>)}</div>
           <div><span className="eyebrow">YOUR COFFEE RUN</span><h2>{order.failure ? 'Delivery interrupted.' : <>Made your way.<br /><em>Then on its way.</em></>}</h2><p>{order.failure ? 'Fleet operations has stopped this delivery. No delivery or live customer flight is claimed.' : order.stage === 'Ready for pickup' ? (order.drone ? 'Your drone is assigned. Waiting for current telemetry for this order; no unrelated flight is shown.' : 'Packed and waiting for an available drone. No drone is assigned yet.') : order.stage === 'Preparing' ? 'Your barista is preparing your flight box. Once a drone is assigned, follow its pickup and delivery through the map and simulated camera.' : order.stage === 'Delivered' ? 'Your coffee run has landed. Enjoy your ForthCoffee moment.' : 'Waiting for current telemetry from your assigned drone.'}</p>{order.note && <p role="status">{order.note}</p>}</div>

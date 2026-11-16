@@ -1,4 +1,4 @@
-@import 'azure-maps-control/dist/atlas.min.css';
+@import 'leaflet/dist/leaflet.css';
 
 :root {
   font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
@@ -79,13 +79,20 @@ main { max-width: 1600px; margin: auto; }
 .customer-map-section .delivery-map { border-radius: 7px; border: 1px solid var(--line); }
 .delivery-map { height: 470px; position: relative; overflow: hidden; background: #c7ddda; }
 .delivery-map.compact { height: 290px; }
-.city-map { width: 100%; height: 100%; object-fit: cover; display: block; }
+.osm-map { position: absolute; inset: 0; z-index: 0; background: #c7ddda; font: inherit; }
+.osm-map .leaflet-tile-pane { filter: saturate(.55) sepia(.12) contrast(.96) brightness(1.03); }
+.osm-map .leaflet-control-attribution { font-size: 9px; background: #fffef5d9; color: #53614c; }
+.osm-map .leaflet-control-attribution a { color: #184b38; }
+.osm-map .leaflet-bar a { color: #184b38; background: #fffdf5; }
+.osm-marker { background: none; border: 0; }
+.osm-drone { position: absolute; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 3px; }
+.osm-drone-badge { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #fffdf7; border: 1.5px solid #2b654d; color: #21553e; box-shadow: 0 0 0 6px #ffffffa6; }
+.osm-drone-badge svg { transition: transform .4s ease; }
+.osm-drone-label { position: absolute; top: 34px; background: #184b38; color: #fff; font-size: 10px; line-height: 1; padding: 4px 7px; border-radius: 8px; white-space: nowrap; }
+.osm-store, .osm-target { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; background: #fffef5; color: #184b38; padding: 4px 8px; border: 2px solid #184b38; border-radius: 5px; font-size: 10px; font-weight: 600; box-shadow: 0 2px 6px #30492a26; }
+.osm-target { border-color: #e9b44c; }
 .map-location { position: absolute; top: 18px; left: 20px; display: flex; align-items: center; gap: 7px; background: #fffdf5f0; box-shadow: 0 2px 6px #30492a0a; padding: 10px 12px; border-radius: 4px; font-size: 9px; color: #53644c; }
 .map-location-detail { font-size: 7px; letter-spacing: 1px; color: #859178; margin-left: 7px; }
-.map-layers { position: absolute; right: 20px; bottom: 29px; display: flex; align-items: center; gap: 7px; background: #fffef5; font-size: 9px; padding: 10px; border-radius: 4px; box-shadow: 0 2px 5px #30492a10; z-index: 2; }
-.map-zoom { position: absolute; right: 20px; top: 18px; background: #fffdf5; border-radius: 5px; display: grid; box-shadow: 0 2px 5px #30492a10; }
-.map-zoom button { display: grid; place-items: center; background: none; width: 32px; height: 32px; }
-.map-zoom button:first-child { border-bottom: 1px solid var(--line); }
 .map-fleet { position: absolute; bottom: 28px; left: 20px; background: #fffdf6f2; border: 1px solid #fdfcf3; padding: 17px 19px; border-radius: 6px; box-shadow: 0 4px 14px #3951320a; }
 .map-fleet > div:first-child { display: flex; align-items: center; gap: 6px; font-size: 7px; letter-spacing: 1.2px; color: #79896b; margin-bottom: 9px; }
 .map-fleet strong { font-size: 13px; font-weight: 500; }
@@ -103,9 +110,6 @@ main { max-width: 1600px; margin: auto; }
 .tiny-label { font-size: 9px; fill: #7e8f74; }
 .store-label { font-size: 10px; fill: #516e44; }
 .drone-label { font-size: 8px; letter-spacing: .5px; }
-.azure-map { width: 100%; height: 100%; }
-.azure-drone { background: #184b38; color: #fffef5; padding: 6px 8px; border: 2px solid #fff; border-radius: 15px; font-size: 10px; }
-.azure-store { background: #fffef5; color: #184b38; padding: 9px 12px; border: 2px solid #184b38; border-radius: 5px; font-size: 11px; }
 .map-error { position: absolute; top: 80px; left: 20px; right: 20px; background: #fff2df; border: 1px solid #c89759; color: #77542b; padding: 12px; font-size: 12px; z-index: 3; }
 .map-loading { position: absolute; top: 80px; left: 20px; padding: 12px; background: #fffdf5; border-radius: 4px; font-size: 12px; }
 footer { border-top: 1px solid var(--line); display: flex; align-items: center; gap: 24px; padding: 26px 5.2%; font-size: 9px; color: #929581; }
@@ -230,7 +234,6 @@ footer button { display: flex; align-items: center; gap: 7px; background: none; 
 .follow-heading small { font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: #7f8a73; }
 .rec-dot { width: 8px; height: 8px; border-radius: 50%; background: #c84a3a; animation: pulse 1.6s infinite; }
 .follow-map { position: relative; height: 430px; overflow: hidden; background: #c7ddda; }
-.follow-map > svg { width: 100%; height: 100%; display: block; }
 .drop-pulse { animation: pulse 1.8s infinite; }
 .kitchen-card { display: flex; align-items: center; gap: 30px; background: #fffefa; border: 1px solid var(--line); border-radius: 7px; padding: 34px; min-height: 300px; }
 .kitchen-card h2 { font-family: Georgia, serif; font-weight: 400; font-size: 30px; margin: 12px 0; }
@@ -374,9 +377,7 @@ footer button { display: flex; align-items: center; gap: 7px; background: none; 
   .section-heading h2 { font-size: 28px; }
   .map-location { left: 12px; top: 12px; }
   .map-location-detail { display: none; }
-  .map-zoom { right: 12px; top: 12px; }
   .delivery-map.compact { height: 245px; }
-  .city-map { width: auto; min-width: 100%; position: absolute; height: 100%; left: 50%; transform: translateX(-50%); }
   footer { padding: 22px 5%; gap: 15px; flex-wrap: wrap; }
   footer > span { font-size: 8px; }
   footer button { margin-left: 0; width: 100%; font-size: 9px; }

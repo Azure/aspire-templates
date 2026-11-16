@@ -7,7 +7,8 @@
     "paths": {
       "react": ["./node_modules/@types/react"],
       "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime"],
-      "three": ["./node_modules/@types/three"]
+      "three": ["./node_modules/@types/three"],
+      "leaflet": ["./node_modules/@types/leaflet"]
     },
     "jsx": "react-jsx",
     "strict": true,

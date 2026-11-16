@@ -1,7 +1,6 @@
-import { useCallback, useState } from 'react';
-import { Coffee, Drone, Layers, MapPin, ShieldCheck, X } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
+import { Coffee, Drone, MapPin, ShieldCheck } from 'lucide-react';
 import DeliveryMap from './DeliveryMap';
-import type { MapSettings } from './DeliveryMap';
 import { fleetRequest, ordersRequest, stageFor, storesRequest } from './api';
 import { fromLonLat } from './mapGeometry';
 import { useRealtimeSnapshot } from './useApi';
@@ -14,10 +13,7 @@ export default function App() {
     return { fleet, orders, stores };
   }, []);
   const { data, error, loading } = useRealtimeSnapshot(load, { fleet: [], orders: [], stores: [] });
-  const [maps, setMaps] = useState<MapSettings | null>(null);
-  const [mapDialog, setMapDialog] = useState(false);
-  const [clientId, setClientId] = useState('');
-  const [token, setToken] = useState('');
+  const stores = useMemo(() => data.stores.map(store => ({ ...fromLonLat(store.location.longitude, store.location.latitude), label: store.name })), [data.stores]);
   const [selected, setSelected] = useState<string | null>(null);
   const selectedDrone = data.fleet.find(drone => drone.droneId === selected);
   const active = data.orders.filter(snapshot => !['Delivered', 'Failed', 'Unserviceable'].includes(snapshot.status));
@@ -34,8 +30,8 @@ export default function App() {
         <div><span>DELIVERED</span><strong>{data.orders.filter(snapshot => snapshot.status === 'Delivered').length}</strong><small>In the latest order snapshot</small></div>
       </div>
       <div className="operations-grid">
-        <section className="operations-map"><div className="panel-heading"><h2>Our patch of sky</h2><button className="icon-button" aria-label="Map settings" onClick={() => setMapDialog(true)}><Layers size={17} /></button></div>
-          <DeliveryMap fleet={fleetMap(data.fleet)} stores={data.stores.map(store => ({ ...fromLonLat(store.location.longitude, store.location.latitude), label: store.name }))} settings={maps} onSettings={() => setMapDialog(true)} />
+        <section className="operations-map"><div className="panel-heading"><h2>Our patch of sky</h2></div>
+          <DeliveryMap fleet={fleetMap(data.fleet)} stores={stores} />
           <div className="map-legend"><span>Actual simulator positions · all reported drones</span></div>
         </section>
         <aside className="dispatch-panel"><div className="panel-heading"><h2>On the docket <span className="count-badge">{active.length}</span></h2><span className="eyebrow">DISPATCH QUEUE</span></div><p className="queue-intro">Prepared at the store. Dispatched by logistics.</p>
@@ -56,7 +52,6 @@ export default function App() {
       <p className="privacy-note"><ShieldCheck size={14} />Fictional orders and flights. Logistics handles dispatch; operator commands affect the simulation only.</p>
     </main>
     <footer><span className="footer-brand">ForthCoffee.</span><span>Fleet operations · Built with Aspire.</span></footer>
-    {selectedDrone && <DroneDrawer key={selectedDrone.droneId} drone={selectedDrone} fleet={data.fleet} settings={maps} onSelect={setSelected} onClose={() => setSelected(null)} />}
-    {mapDialog && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-labelledby="maps-title"><button className="modal-close icon-button" aria-label="Close map settings" onClick={() => setMapDialog(false)}><X /></button><h2 id="maps-title">Map perspective</h2><p>Use the credential-free illustrated map, or your existing Azure Maps account. Tokens stay in page memory; usage may incur charges.</p><label className="field-label" htmlFor="client">Account client ID</label><input id="client" value={clientId} onChange={event => setClientId(event.target.value)} /><label className="field-label" htmlFor="token">Short-lived Entra token</label><input id="token" type="password" autoComplete="off" value={token} onChange={event => setToken(event.target.value)} /><button className="primary-button full-width" disabled={!clientId.trim() || !token.trim()} onClick={() => { setMaps({ clientId: clientId.trim(), token: token.trim() }); setToken(''); setMapDialog(false); }}>Explore Azure Maps</button><button className="text-button full-width" onClick={() => { setMaps(null); setToken(''); setMapDialog(false); }}>Use illustrated map</button></div></div>}
+    {selectedDrone && <DroneDrawer key={selectedDrone.droneId} drone={selectedDrone} fleet={data.fleet} onSelect={setSelected} onClose={() => setSelected(null)} />}
   </div>;
 }

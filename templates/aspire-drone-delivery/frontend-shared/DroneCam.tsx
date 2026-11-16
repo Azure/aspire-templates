@@ -3,15 +3,15 @@ import * as THREE from 'three';
 import { PoseBuffer } from './pose';
 import type { CameraPose } from './pose';
 import './camera.css';
-import { coastPath, fromLonLat, landmarks, lakePath, landPath, mapLabels, parkPath, pierPath, roadPaths, toLonLat } from './mapGeometry';
+import { coastPath, fromLonLat, landmarks, lakePath, landPath, mapLabels, parkPath, pierPath, roadPaths } from './mapGeometry';
+import { fetchTile, tilesFor, tileToLonLat } from './osm';
 
 // Ground region (illustrated-map units) around the kitchen-to-drop-off corridor.
 const region = { x: 280, y: 100, width: 720, height: 550 };
 const kitchen = { x: 510, y: 318 };
 const metresPerUnit = 4.2;
-type MapSettings = { clientId: string; token: string };
 const tileZoom = 16;
-type GroundSource = 'illustrated' | 'azure';
+type GroundSource = 'illustrated' | 'osm';
 
 function drawIllustratedGround(ctx: CanvasRenderingContext2D, scale: number) {
   ctx.save();
@@ -105,39 +105,28 @@ function drawAirspace(canvas: HTMLCanvasElement, readings: readonly CameraPose[]
   return count;
 }
 
-function tileToLonLat(x: number, y: number) {
-  const n = 2 ** tileZoom;
-  return [x / n * 360 - 180, Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI] as const;
-}
-function lonLatToTile(lon: number, lat: number) {
-  const n = 2 ** tileZoom, rad = lat * Math.PI / 180;
-  return [Math.floor((lon + 180) / 360 * n), Math.floor((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2 * n)] as const;
-}
-
-/** Draws Azure Maps road tiles over the corridor. Throws if any tile fails so the caller can fall back to the illustrated ground. */
-async function drawAzureGround(ctx: CanvasRenderingContext2D, scale: number, settings: MapSettings, signal: AbortSignal) {
-  const [west, north] = toLonLat(region.x, region.y);
-  const [east, south] = toLonLat(region.x + region.width, region.y + region.height);
-  const [x0, y0] = lonLatToTile(west, north), [x1, y1] = lonLatToTile(east, south);
-  const tiles: [number, number][] = [];
-  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) tiles.push([x, y]);
-  if (tiles.length > 64) throw new Error('Too many tiles requested for the camera ground.');
-  const queue = [...tiles];
-  await Promise.all(Array.from({ length: 6 }, async () => {
-    for (let tile = queue.shift(); tile; tile = queue.shift()) {
-      const [x, y] = tile;
-      const url = new URL('https://atlas.microsoft.com/map/tile');
-      Object.entries({ 'api-version': '2024-04-01', tilesetId: 'microsoft.base.road', zoom: String(tileZoom), x: String(x), y: String(y), tileSize: '256', language: 'en-AU' })
-        .forEach(([key, value]) => url.searchParams.set(key, value));
-      const response = await fetch(url, { signal, headers: { Authorization: `Bearer ${settings.token}`, 'x-ms-client-id': settings.clientId } });
-      if (!response.ok) throw new Error(`Azure Maps tile request failed (${response.status}).`);
-      const image = await createImageBitmap(await response.blob());
-      const [lonA, latA] = tileToLonLat(x, y), [lonB, latB] = tileToLonLat(x + 1, y + 1);
+/** Draws OpenStreetMap tiles over the corridor (fetched once per page). Throws if any tile fails so the caller can keep the illustrated ground. */
+async function drawOsmGround(ctx: CanvasRenderingContext2D, scale: number, signal: AbortSignal) {
+  const queue = tilesFor(region, tileZoom);
+  // Draw only after every tile arrives so a partial failure never leaves a patchwork ground.
+  const images: { x: number; y: number; image: ImageBitmap }[] = [];
+  try {
+    await Promise.all(Array.from({ length: 2 }, async () => {
+      for (let tile = queue.shift(); tile; tile = queue.shift()) {
+        const [x, y] = tile;
+        const blob = await fetchTile(tileZoom, x, y);
+        if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        images.push({ x, y, image: await createImageBitmap(blob) });
+      }
+    }));
+    for (const { x, y, image } of images) {
+      const [lonA, latA] = tileToLonLat(x, y, tileZoom), [lonB, latB] = tileToLonLat(x + 1, y + 1, tileZoom);
       const a = fromLonLat(lonA, latA), b = fromLonLat(lonB, latB);
       ctx.drawImage(image, (a.x - region.x) * scale, (a.y - region.y) * scale, (b.x - a.x) * scale + 1, (b.y - a.y) * scale + 1);
-      image.close();
     }
-  }));
+  } finally {
+    images.forEach(({ image }) => image.close());
+  }
 }
 
 // Small deterministic generator so the temporary scenery is stable between visits.
@@ -225,8 +214,8 @@ function droneModel(id: string, selected: boolean, disposables: { dispose(): voi
   return group;
 }
 
-export default function DroneCam({ pose, nearby = [], settings, target: destination }: {
-  pose: CameraPose; nearby?: readonly CameraPose[]; settings: MapSettings | null; target?: { x: number; y: number };
+export default function DroneCam({ pose, nearby = [], target: destination }: {
+  pose: CameraPose; nearby?: readonly CameraPose[]; target?: { x: number; y: number };
 }) {
   const host = useRef<HTMLDivElement>(null);
   const buffers = useRef(new Map<string, PoseBuffer>());
@@ -293,16 +282,12 @@ export default function DroneCam({ pose, nearby = [], settings, target: destinat
     target.visible = false;
     const models = new Map<string, THREE.Group>();
     const frustum = new THREE.Frustum(), viewProjection = new THREE.Matrix4();
-    if (settings) {
-      drawAzureGround(ctx, scale, settings, controller.signal)
-        .then(() => { texture.needsUpdate = true; setGround('azure'); setGroundNote(''); })
-        .catch((error: unknown) => {
-          if (controller.signal.aborted) return;
-          drawIllustratedGround(ctx, scale);
-          texture.needsUpdate = true;
-          setGroundNote(`Azure Maps tiles unavailable, showing the illustrated map. ${error instanceof Error ? error.message : ''}`.trim());
-        });
-    }
+    drawOsmGround(ctx, scale, controller.signal)
+      .then(() => { texture.needsUpdate = true; setGround('osm'); setGroundNote(''); })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setGroundNote(`OpenStreetMap tiles unavailable, showing the illustrated ground. ${error instanceof Error ? error.message : ''}`.trim());
+      });
 
     const camera = new THREE.PerspectiveCamera(62, 1, .5, 400);
     const resize = () => {
@@ -386,7 +371,7 @@ export default function DroneCam({ pose, nearby = [], settings, target: destinat
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [settings]);
+  }, []);
 
   return <div className="drone-cam" ref={host} role="img" aria-label={`Simulated camera view from drone ${pose.droneId}, with an airspace overview of actual telemetry positions. Not real video.`}>
     {status === 'unavailable' && <div className="cam-fallback"><strong>Camera preview unavailable</strong><p>This browser could not start WebGL. The overhead map still follows your drone.</p></div>}
@@ -399,7 +384,7 @@ export default function DroneCam({ pose, nearby = [], settings, target: destinat
     </div>
     <div className="cam-transmission" aria-hidden="true" />
     <div className="cam-airspace"><canvas aria-hidden="true" /><span className="cam-airspace-label">AIRSPACE</span></div>
-    <span className="cam-credit">{ground === 'azure' ? '© Microsoft, © TomTom · Azure Maps' : 'Illustrated ground · placeholder structures'} · ~2 s playout · not video</span>
+    <span className="cam-credit">{ground === 'osm' ? '© OpenStreetMap contributors · placeholder structures' : 'Illustrated ground · placeholder structures'} · ~2 s playout · not video</span>
     {groundNote && <span className="cam-note" role="status">{groundNote}</span>}
   </div>;
 }
