@@ -265,8 +265,11 @@ footer button { display: flex; align-items: center; gap: 7px; background: none; 
 .stage-skip:hover, .stage-skip:focus-visible { color: var(--forest); text-decoration: underline; }
 .stage-skip:disabled { opacity: .55; cursor: default; }
 .skip-error { color: #8b3838; font-size: 12px; }
-.kitchen-food { display: flex; }
-.kitchen-food > div { width: 120px; height: 120px; border-radius: 50%; overflow: hidden; border: 4px solid #fffefa; background: #eee8db; margin-left: -26px; box-shadow: 0 4px 14px #30492a14; }
+.kitchen-food { display: flex; --food-size: 120px; --food-overlap: 26px; }
+/* One illustration per payload line (up to a quad payload); each stays a fixed circle and the group shrinks as lines are added. */
+.kitchen-food[data-count="3"] { --food-size: 96px; --food-overlap: 24px; }
+.kitchen-food[data-count="4"] { --food-size: 84px; --food-overlap: 32px; }
+.kitchen-food > div { flex: none; width: var(--food-size); height: var(--food-size); border-radius: 50%; overflow: hidden; border: 4px solid #fffefa; background: #eee8db; margin-left: calc(-1 * var(--food-overlap)); box-shadow: 0 4px 14px #30492a14; }
 .kitchen-food > div:first-child { margin-left: 0; }
 .kitchen-food svg { width: 100%; height: 100%; display: block; transform: scale(1.7); }
 .status-summary { background: #fffefa; border: 1px solid var(--line); border-radius: 7px; padding: 22px; display: grid; gap: 16px; }
@@ -453,7 +456,9 @@ footer button { display: flex; align-items: center; gap: 7px; background: none; 
   .kitchen-card { flex-direction: column; align-items: flex-start; padding: 24px; }
   .barista-card { flex-direction: column; padding: 24px; }
   .barista-card dl { grid-template-columns: 1fr; }
-  .kitchen-food > div { width: 90px; height: 90px; }
+  .kitchen-food { --food-size: 90px; --food-overlap: 20px; }
+  .kitchen-food[data-count="3"] { --food-size: 80px; --food-overlap: 20px; }
+  .kitchen-food[data-count="4"] { --food-size: 72px; --food-overlap: 24px; }
 }
 @media (max-width: 1100px) {
   .packing-section { gap: 30px; }
