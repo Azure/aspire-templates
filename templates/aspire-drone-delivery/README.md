@@ -188,7 +188,8 @@ uploads and `send drone-photos` → backend milestone processing →
   coordinates, order contents, tokens and photo bytes are never recorded.
 - Drone position ticks, operator snapshot broadcasts and other rootless HTTP calls,
   such as the SignalR management SDK's periodic requests, are not traced, so the
-  dashboard isn't flooded. Failed broadcasts still emit an error span.
+  dashboard isn't flooded. Failed broadcasts still emit an error span, even when
+  the order stage has not changed.
 
 In the browser, both sites wrap user actions in spans (`customer place order`,
 `customer skip stage`, `customer load order` and `operator load snapshot`). Fetch

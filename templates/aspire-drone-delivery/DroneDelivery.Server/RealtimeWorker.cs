@@ -45,10 +45,11 @@ public sealed class RealtimeWorker(
             if (dispatcher.Order(orderId) is not { } order)
                 continue;
             var stage = $"{order.Status}{(time.GetUtcNow() >= order.ReadyAt ? "/ready" : "")}";
-            using var activity = published.GetValueOrDefault(orderId) == stage ? null
-                : Tracing.Start("realtime publish order update", dispatcher.TraceOf(orderId), ActivityKind.Producer)
+            Activity? StartPublish() =>
+                Tracing.Start("realtime publish order update", dispatcher.TraceOf(orderId), ActivityKind.Producer)
                     ?.SetTag("drone_delivery.order.id", orderId).SetTag("drone_delivery.order.status", order.Status.ToString())
                     .SetTag("drone_delivery.order.ready", time.GetUtcNow() >= order.ReadyAt).SetTag("messaging.system", "signalr");
+            using var activity = published.GetValueOrDefault(orderId) == stage ? null : StartPublish();
             try
             {
                 await hubs.Customers.Clients.User(orderId).SendAsync("orderUpdated", order, cancellationToken);
@@ -56,7 +57,13 @@ public sealed class RealtimeWorker(
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                activity.Failed(exception);
+                if (activity is not null)
+                    activity.Failed(exception);
+                else
+                {
+                    using var failed = StartPublish();
+                    failed.Failed(exception);
+                }
                 logger.LogError(exception, "Could not broadcast customer update for {OrderId}", orderId);
             }
         }

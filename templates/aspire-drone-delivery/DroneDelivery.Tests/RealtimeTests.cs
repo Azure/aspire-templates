@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using DroneDelivery.Domain;
@@ -89,6 +91,50 @@ public class RealtimeTests
         Assert.Equal(ServiceArea.Stores, snapshot.Stores);
         await contexts.StopAsync(TestContext.Current.CancellationToken);
         Assert.All(manager.Hubs.Values, hub => Assert.True(hub.Disposed));
+    }
+
+    [Fact]
+    public async Task Failed_repeated_customer_broadcast_is_traced_without_tracing_successful_ticks()
+    {
+        var spans = new ConcurrentQueue<Activity>();
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == Tracing.SourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = activity =>
+            {
+                if (activity.OperationName == "realtime publish order update" &&
+                    Equals(activity.GetTagItem("drone_delivery.order.id"), "FC-ABC123"))
+                    spans.Enqueue(activity);
+            },
+        };
+        ActivitySource.AddActivityListener(listener);
+        using var accepted = Tracing.Start("process orders")!;
+        var dispatcher = new Dispatcher();
+        dispatcher.Accept(Order("FC-ABC123"), accepted.Context);
+        var time = new TestTime();
+        var subscriptions = new CustomerSubscriptions(time);
+        subscriptions.TrySubscribe("FC-ABC123");
+        var manager = new TestManager();
+        var contexts = new RealtimeContexts(manager, NullLogger<RealtimeContexts>.Instance);
+        await contexts.StartAsync(TestContext.Current.CancellationToken);
+        var worker = new RealtimeWorker(dispatcher, subscriptions, contexts, time, NullLogger<RealtimeWorker>.Instance);
+
+        await worker.BroadcastAsync(TestContext.Current.CancellationToken);
+        await worker.BroadcastAsync(TestContext.Current.CancellationToken);
+        Assert.Single(spans);
+
+        manager.Hubs["customers"].FailSends = true;
+        await worker.BroadcastAsync(TestContext.Current.CancellationToken);
+        var failed = Assert.Single(spans, span => span.Status == ActivityStatusCode.Error);
+        Assert.Equal(accepted.TraceId, failed.TraceId);
+        Assert.Equal(accepted.SpanId, failed.ParentSpanId);
+        Assert.Equal(2, spans.Count);
+
+        manager.Hubs["customers"].FailSends = false;
+        await worker.BroadcastAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(2, spans.Count);
+        await contexts.StopAsync(TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -253,6 +299,7 @@ public class RealtimeTests
     sealed class TestHub : ServiceHubContext
     {
         public List<(string? User, string Method, object Payload)> Sends { get; } = [];
+        public bool FailSends { get; set; }
         public NegotiationOptions? Negotiation { get; private set; }
         public bool Disposed { get; private set; }
         public override IHubClients Clients => new TestClients(this);
@@ -272,6 +319,8 @@ public class RealtimeTests
     {
         public Task SendCoreAsync(string method, object?[] args, CancellationToken cancellationToken = default)
         {
+            if (hub.FailSends)
+                return Task.FromException(new InvalidOperationException("Test broadcast failure"));
             hub.Sends.Add((user, method, args.Single()!));
             return Task.CompletedTask;
         }
