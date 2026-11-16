@@ -51,7 +51,7 @@ start at the latest event, so restarting a worker does not replay old missions.
 | Customer React site | Payload selection, coffee builder, tray, own orders/tracking | POST orders; scoped realtime receipt subscriptions; up to 20 localStorage receipts; no real authentication |
 | Operator React site | All stores, fleet, dispatch queue, battery, queued work and a per-drone camera/command drawer | Initial REST snapshot plus operator realtime stream; latest 100 orders; commands go through the backend |
 | CustomerServer / OperatorServer | Serve independent frontends and proxy backend REST/negotiate routes | No Event Hubs consumers, dispatch logic or authoritative state |
-| Simulated drone camera | Shared, lazily loaded Three.js renderer; buffered position/heading/camera-pitch telemetry, with actual nearby fleet models | Placeholder scenery on OpenStreetMap ground tiles; not video; independent SVG Blob captures |
+| Simulated drone camera | Shared, lazily loaded Three.js renderer; buffered position/heading/camera-pitch telemetry, with actual nearby fleet models | OSM building footprints (ODbL, bundled extract) on OSM ground tiles; not video; independent SVG Blob captures |
 | Frontend source | Independent sites with customer-only menu/receipt helpers and common `frontend-shared` camera/pose/artwork source | Build from the template tree; emitted site assets are self-contained |
 | ServiceDefaults and tracing | OpenTelemetry for every .NET project; `DroneDelivery` spans across HTTP, Event Hubs (`traceparent` in event properties), dispatch, mission legs, camera/blob work, SignalR publishes and browser receipt of stage changes; `DroneDelivery` meter for position ingestion and SignalR sends | Browser spans relayed through `/otlp` by the Vite dev server or, for built sites, the UI server; SignalR service internals not traceable; no PII in span attributes or IDs in metric tags |
 | OpenStreetMap basemap | Leaflet with OSM raster tiles and fictional drone/store/route markers | Public tile server for demo/dev traffic only; attribution required |
@@ -138,7 +138,11 @@ driven by the same telemetry as before. The illustrated coordinate space maps to
 real South Melbourne coordinates (`frontend-shared/mapGeometry.ts`). The camera
 ground fetches a bounded set of zoom-16 tiles once per page, two requests at a
 time, and falls back to the illustrated ground on failure. Browser tracing
-ignores tile fetches.
+ignores tile fetches. Tiles rely on the browser HTTP cache plus a per-page
+tile and composited-ground cache, so remounts and drone switches don't refetch.
+Camera buildings are a committed, simplified OSM footprint extract
+(`frontend-shared/osm-buildings.json`, ODbL) generated once at authoring time;
+untagged heights use the nearest tagged building, capped at 12 m.
 
 The public `tile.openstreetmap.org` server suits demo and development traffic
 only ([tile usage policy](https://operations.osmfoundation.org/policies/tiles/)):

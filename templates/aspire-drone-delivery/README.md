@@ -309,8 +309,8 @@ Tracing and metrics limits:
 Only API-reported drones appear in the operations map. Customer tracking uses the
 assigned drone's actual simulator telemetry, with no browser-generated flight leg.
 The three.js camera stays mounted through inbound flight, loading and delivery
-and smoothly follows the simulator's camera orientation during take-off and landing. It has placeholder buildings,
-not real video. A separately labelled last captured frame comes from the server's
+and smoothly follows the simulator's camera orientation during take-off and landing. It renders
+real OpenStreetMap building footprints, not real video. A separately labelled last captured frame comes from the server's
 blob-photo proxy, including proof of delivery when available.
 The rendered camera uses OpenStreetMap tiles for the
 ground, falling back to an illustrated map if they can't load. If WebGL is
@@ -337,7 +337,31 @@ token is needed.
 While a drone camera is open, the page also fetches the zoom-16 tiles that
 cover the delivery corridor (at most 64, two at a time, once per page load) to
 texture the simulated ground. If any tile fails, the camera says so and keeps
-its illustrated ground.
+its illustrated ground. Zoom-16 tiles are about 2 m per pixel, so the ground
+looks soft at low altitude; the extruded buildings carry the near-ground detail.
+
+### Caching
+
+Tiles are cached rather than refetched. The app never sends no-cache headers,
+so the browser HTTP cache honours the tile server's `Cache-Control`/`ETag`.
+Camera tiles also go through a per-page in-memory cache (`fetchTile` in
+`frontend-shared/osm.ts`), and the composited camera ground is reused, so
+switching drones or remounting the camera at pickup makes no new requests.
+There is no prefetching beyond the tiles currently on screen.
+
+### Camera buildings
+
+`frontend-shared/osm-buildings.json` holds about 7,500 OpenStreetMap building
+footprints for the camera area, © OpenStreetMap contributors, available under
+the [ODbL](https://opendatacommons.org/licenses/odbl/). It was extracted once with
+`node frontend-shared/scripts/fetch-osm-buildings.mjs` (a single Overpass query,
+then simplified and delta-encoded; about 110 KB gzipped, lazily loaded). The app
+never queries Overpass at runtime. Heights come from `height`, else
+`building:levels` × 3.2 m. Untagged buildings take the height of the nearest
+tagged building within about 170 m, capped at 12 m so a nearby tower doesn't
+turn houses into towers, or 7 m when none is near. Pads and drop-offs can sit
+inside real footprints, so the camera hides a building while a drone is below
+its roof.
 
 The public OSM tile server is a volunteer-run service suitable for demos and
 development traffic only. Its [tile usage policy](https://operations.osmfoundation.org/policies/tiles/)

@@ -48,7 +48,7 @@ The map is illustrative and cannot support navigation or real flight planning.
    OpenStreetMap view centred on the assigned drone
    and a simulated drone camera. The camera is a lazily loaded three.js scene: the
    ground plane is textured with OpenStreetMap tiles (or an illustrated map if
-   they can't load), with temporary placeholder buildings and trees to convey
+   they can't load), with extruded OpenStreetMap building footprints to convey
    motion. It is labelled as a simulated feed, not real video. A reduced-motion
    preference removes bob and sub-second interpolation, and the page explains
    when WebGL is unavailable. The inbound leg targets the pickup store, while the

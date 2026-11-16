@@ -129,49 +129,31 @@ async function drawOsmGround(ctx: CanvasRenderingContext2D, scale: number, signa
   }
 }
 
-// Small deterministic generator so the temporary scenery is stable between visits.
-function random(seed: number) {
-  let value = seed;
-  return () => { value = (value * 1664525 + 1013904223) % 4294967296; return value / 4294967296; };
-}
+/** The composited OSM ground, kept for the page so a remounted camera (e.g. at pickup) shows it immediately. */
+let composedGround: { scale: number; image: HTMLCanvasElement } | null = null;
 
 function buildScenery(scene: THREE.Scene, disposables: { dispose(): void }[]): THREE.Mesh {
-  const probe = document.createElement('canvas').getContext('2d');
-  const land = new Path2D(landPath);
-  const lake = new Path2D(lakePath);
-  const onLand = (x: number, y: number) => probe ? probe.isPointInPath(land, x, y) && !probe.isPointInPath(lake, x, y) : true;
-  const next = random(1046);
-  const boxes: THREE.Matrix4[] = [], trees: THREE.Matrix4[] = [];
-  const colors: THREE.Color[] = [];
-  const palette = ['#f2efe4', '#e6e1d2', '#d9d6c8', '#efe6d4', '#cfd8cc'].map(color => new THREE.Color(color));
-  for (let i = 0; i < 1600 && boxes.length < 420; i++) {
-    const x = region.x + next() * region.width, y = region.y + next() * region.height;
-    if (!onLand(x, y) || Math.hypot(x - kitchen.x, y - kitchen.y) < 22) continue;
-    const tree = next() < .35;
-    const matrix = new THREE.Matrix4();
-    if (tree) {
-      const size = 1.2 + next() * 1.6;
-      matrix.compose(new THREE.Vector3(x, size, y), new THREE.Quaternion(), new THREE.Vector3(size, size * 2, size));
-      trees.push(matrix);
-    } else {
-      const width = 3 + next() * 6, depth = 3 + next() * 6, height = 1.5 + next() * (next() < .08 ? 7 : 3.5);
-      matrix.compose(new THREE.Vector3(x, height / 2, y), new THREE.Quaternion(), new THREE.Vector3(width, height, depth));
-      boxes.push(matrix);
-      colors.push(palette[Math.floor(next() * palette.length)]);
-    }
-  }
-  const boxGeometry = new THREE.BoxGeometry(1, 1, 1), boxMaterial = new THREE.MeshLambertMaterial();
-  const buildings = new THREE.InstancedMesh(boxGeometry, boxMaterial, boxes.length);
-  boxes.forEach((matrix, index) => { buildings.setMatrixAt(index, matrix); buildings.setColorAt(index, colors[index]); });
-  const treeGeometry = new THREE.ConeGeometry(.5, 1, 7), treeMaterial = new THREE.MeshLambertMaterial({ color: '#6f9a6c' });
-  const treeMesh = new THREE.InstancedMesh(treeGeometry, treeMaterial, trees.length);
-  trees.forEach((matrix, index) => treeMesh.setMatrixAt(index, matrix));
   const padGeometry = new THREE.CylinderGeometry(3, 3, .2, 32), padMaterial = new THREE.MeshLambertMaterial({ color: '#184b38' });
   const pad = new THREE.Mesh(padGeometry, padMaterial); pad.position.set(kitchen.x, .15, kitchen.y);
   const targetGeometry = new THREE.RingGeometry(2.2, 3, 40), targetMaterial = new THREE.MeshLambertMaterial({ color: '#e9b44c', side: THREE.DoubleSide });
-  const target = new THREE.Mesh(targetGeometry, targetMaterial); target.rotation.x = -Math.PI / 2; scene.add(buildings, treeMesh, pad, target);
-  disposables.push(boxGeometry, boxMaterial, treeGeometry, treeMaterial, padGeometry, padMaterial, targetGeometry, targetMaterial, buildings, treeMesh);
+  const target = new THREE.Mesh(targetGeometry, targetMaterial); target.rotation.x = -Math.PI / 2; scene.add(pad, target);
+  disposables.push(padGeometry, padMaterial, targetGeometry, targetMaterial);
   return target;
+}
+
+type BuildingLayer = { heights: number[]; under: (x: number, y: number) => number; hidden: number[] };
+
+/** Adds extruded OpenStreetMap building footprints once the bundled extract has loaded. */
+async function addBuildings(scene: THREE.Scene, disposables: { dispose(): void }[], signal: AbortSignal): Promise<BuildingLayer | null> {
+  const [{ default: data }, { buildingGeometry, buildingMaterial, decodeBuildings, footprintIndex }] =
+    await Promise.all([import('./osm-buildings.json'), import('./buildings')]);
+  if (signal.aborted) return null;
+  const footprints = decodeBuildings(data);
+  const geometry = buildingGeometry(footprints, metresPerUnit);
+  const { material, hidden } = buildingMaterial();
+  scene.add(new THREE.Mesh(geometry, material));
+  disposables.push(geometry, material);
+  return { heights: footprints.map(item => item.heightMetres), under: footprintIndex(footprints), hidden };
 }
 
 function droneModel(id: string, selected: boolean, disposables: { dispose(): void }[]) {
@@ -221,7 +203,7 @@ export default function DroneCam({ pose, nearby = [], target: destination }: {
   const buffers = useRef(new Map<string, PoseBuffer>());
   const latest = useRef({ pose, nearby, destination });
   const [status, setStatus] = useState<'loading' | 'live' | 'unavailable'>('loading');
-  const [ground, setGround] = useState<GroundSource>('illustrated');
+  const [ground, setGround] = useState<GroundSource>(() => composedGround ? 'osm' : 'illustrated');
   const [groundNote, setGroundNote] = useState('');
   useEffect(() => {
     latest.current = { pose, nearby, destination };
@@ -279,15 +261,31 @@ export default function DroneCam({ pose, nearby = [], target: destination }: {
     scene.add(plane);
     disposables.push(texture, planeGeometry, planeMaterial);
     const target = buildScenery(scene, disposables);
+    let buildings: BuildingLayer | null = null;
+    addBuildings(scene, disposables, controller.signal)
+      .then(layer => { if (layer) { buildings = layer; element.dataset.buildings = String(layer.heights.length); } })
+      .catch(() => { if (!controller.signal.aborted) element.dataset.buildings = '0'; });
     target.visible = false;
     const models = new Map<string, THREE.Group>();
     const frustum = new THREE.Frustum(), viewProjection = new THREE.Matrix4();
-    drawOsmGround(ctx, scale, controller.signal)
-      .then(() => { texture.needsUpdate = true; setGround('osm'); setGroundNote(''); })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return;
-        setGroundNote(`OpenStreetMap tiles unavailable, showing the illustrated ground. ${error instanceof Error ? error.message : ''}`.trim());
-      });
+    if (composedGround?.scale === scale) {
+      ctx.drawImage(composedGround.image, 0, 0);
+      setGround('osm');
+    } else {
+      drawOsmGround(ctx, scale, controller.signal)
+        .then(() => {
+          texture.needsUpdate = true; setGround('osm'); setGroundNote('');
+          const copy = document.createElement('canvas');
+          copy.width = canvas.width; copy.height = canvas.height;
+          copy.getContext('2d')!.drawImage(canvas, 0, 0);
+          composedGround = { scale, image: copy };
+        })
+        .catch((error: unknown) => {
+          if (controller.signal.aborted) return;
+          setGround('illustrated');
+          setGroundNote(`OpenStreetMap tiles unavailable, showing the illustrated ground. ${error instanceof Error ? error.message : ''}`.trim());
+        });
+    }
 
     const camera = new THREE.PerspectiveCamera(62, 1, .5, 400);
     const resize = () => {
@@ -340,6 +338,19 @@ export default function DroneCam({ pose, nearby = [], target: destination }: {
         model.visible = camera.position.distanceTo(model.position) > 1;
       }
       for (const [id, model] of models) if (!seen.has(id)) model.visible = false;
+      if (buildings) {
+        // Real footprints can cover simulated pads and drop-offs; hide a building while a drone is below its roof.
+        const layer = buildings as BuildingLayer;
+        const low = [{ x: location.x, y: location.y, altitude: sampled.altitudeMetres }, ...[...models.values()]
+          .filter(model => model.visible).map(model => ({ x: model.position.x, y: model.position.z, altitude: model.position.y * metresPerUnit }))];
+        let slot = 0;
+        for (const point of low) {
+          const index = layer.under(point.x, point.y);
+          if (index >= 0 && point.altitude < layer.heights[index] + 2 && slot < layer.hidden.length && !layer.hidden.slice(0, slot).includes(index)) layer.hidden[slot++] = index;
+        }
+        layer.hidden.fill(-1, slot);
+        element.dataset.hiddenBuildings = String(slot);
+      }
       camera.updateMatrixWorld();
       scene.updateMatrixWorld();
       frustum.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
@@ -384,7 +395,7 @@ export default function DroneCam({ pose, nearby = [], target: destination }: {
     </div>
     <div className="cam-transmission" aria-hidden="true" />
     <div className="cam-airspace"><canvas aria-hidden="true" /><span className="cam-airspace-label">AIRSPACE</span></div>
-    <span className="cam-credit">{ground === 'osm' ? '© OpenStreetMap contributors · placeholder structures' : 'Illustrated ground · placeholder structures'} · ~2 s playout · not video</span>
+    <span className="cam-credit">{ground === 'osm' ? 'Map tiles and buildings © OpenStreetMap contributors (ODbL)' : 'Illustrated ground · buildings © OpenStreetMap contributors (ODbL)'} · ~2 s playout · not video</span>
     {groundNote && <span className="cam-note" role="status">{groundNote}</span>}
   </div>;
 }
