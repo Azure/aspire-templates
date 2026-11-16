@@ -27,8 +27,9 @@ public sealed class RealtimeWorker(
     {
         try
         {
-            await hubs.Operators.Clients.All.SendAsync("snapshot",
-                new OperatorSnapshot(dispatcher.Fleet(), dispatcher.Orders(100), ServiceArea.Stores), cancellationToken);
+            var snapshot = new OperatorSnapshot(dispatcher.Fleet(), dispatcher.Orders(100), ServiceArea.Stores);
+            await DeliveryMetrics.SendAsync("operator",
+                () => hubs.Operators.Clients.All.SendAsync("snapshot", snapshot, cancellationToken));
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -38,6 +39,7 @@ public sealed class RealtimeWorker(
         }
 
         var active = subscriptions.Active().ToHashSet();
+        DeliveryMetrics.Subscriptions(active.Count);
         foreach (var gone in published.Keys.Where(orderId => !active.Contains(orderId)).ToList())
             published.Remove(gone);
         foreach (var orderId in active)
@@ -52,7 +54,10 @@ public sealed class RealtimeWorker(
             using var activity = published.GetValueOrDefault(orderId) == stage ? null : StartPublish();
             try
             {
-                await hubs.Customers.Clients.User(orderId).SendAsync("orderUpdated", order, cancellationToken);
+                // A stage change carries its publish span's context so the browser can record receipt in the same trace.
+                var traceParent = activity is null ? null : TraceParent(activity);
+                await DeliveryMetrics.SendAsync("customer",
+                    () => hubs.Customers.Clients.User(orderId).SendAsync("orderUpdated", order, traceParent, cancellationToken));
                 published[orderId] = stage;
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
@@ -67,5 +72,12 @@ public sealed class RealtimeWorker(
                 logger.LogError(exception, "Could not broadcast customer update for {OrderId}", orderId);
             }
         }
+    }
+
+    static string TraceParent(Activity activity)
+    {
+        var properties = new Dictionary<string, object>();
+        Tracing.Inject(activity, properties);
+        return (string)properties[Tracing.TraceParentProperty];
     }
 }

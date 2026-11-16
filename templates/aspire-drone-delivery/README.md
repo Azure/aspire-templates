@@ -188,21 +188,53 @@ uploads and `send drone-photos` → backend milestone processing →
   coordinates, order contents, tokens and photo bytes are never recorded.
 - Drone position ticks, operator snapshot broadcasts and other rootless HTTP calls,
   such as the SignalR management SDK's periodic requests, are not traced, so the
-  dashboard isn't flooded. Failed broadcasts still emit an error span, even when
-  the order stage has not changed.
+  dashboard isn't flooded. They are counted by the metrics below instead. Failed
+  broadcasts still emit an error span, even when the order stage has not changed.
 
 In the browser, both sites wrap user actions in spans (`customer place order`,
 `customer skip stage`, `customer load order` and `operator load snapshot`). Fetch
-instrumentation passes `traceparent` to the same-origin UI server. Browsers can only
-export OTLP over HTTP. The AppHost sets `WithOtlpExporter(OtlpProtocol.HttpProtobuf)`
-on the Vite apps, and each Vite dev server proxies `/otlp` to the dashboard and adds
-the dashboard API key server-side, so the key never reaches the browser.
+instrumentation passes `traceparent` to the same-origin UI server. When the backend
+publishes an order's stage change, the SignalR message carries that publish span's
+`traceparent`, and the customer site records `customer receive order update` as a
+child span when the message arrives. The trace therefore shows each stage reaching
+the browser. Repeated per-second updates carry no trace context and add no spans.
 
-Tracing limits:
+Browsers can only export OTLP over HTTP, and the dashboard API key must stay out of
+the browser:
 
-- Browser spans are exported only while the site runs under the Vite dev server.
-  Published sites have no browser exporter.
-- The SignalR emulator's delivery to the browser over WebSockets is not traced.
+- Under `aspire run`, the AppHost sets `WithOtlpExporter(OtlpProtocol.HttpProtobuf)`
+  on the Vite apps. Each Vite dev server proxies `/otlp` to the dashboard and adds
+  the key.
+- A built site served by `customer-server` or `operator-server` asks its server for
+  `/telemetry-config.json`. The server answers only when its own exporter uses
+  `http/protobuf` (the AppHost sets this on both UI servers). It then relays
+  `POST /otlp/v1/traces` to its OTLP endpoint with the `OTEL_EXPORTER_OTLP_HEADERS`
+  added server-side. The relay accepts protobuf bodies up to 512 KB, does not
+  trace its own requests, and returns `404` when it isn't configured.
+
+## Metrics
+
+The `DroneDelivery` meter covers the high-frequency work that is deliberately not
+traced. Tags are limited to drone class, audience (`customer` or `operator`) and
+outcome (`sent` or `failed`), never order or drone IDs:
+
+| Instrument | What it measures |
+|------------|------------------|
+| `drone_delivery.telemetry.received` | Drone position readings applied by the backend |
+| `drone_delivery.telemetry.age` | Seconds from a drone recording a position to the backend applying it |
+| `drone_delivery.realtime.messages` | SignalR messages handed to the SignalR service |
+| `drone_delivery.realtime.send.duration` | Seconds for the SignalR service to accept a message |
+| `drone_delivery.realtime.customer_subscriptions` | Orders with a live customer subscription |
+
+Tracing and metrics limits:
+
+- The SignalR service or emulator, and its WebSocket delivery to the browser, can't
+  be instrumented. The send metrics measure hand-off to the service. The browser
+  receipt span covers stage changes only; per-second position pushes and operator
+  snapshots are not recorded in the browser.
+- The `/otlp` relay is an unauthenticated write path to the configured OTLP
+  endpoint, like the Vite dev proxy. It suits the demo. A production deployment
+  should relay to a collector that applies its own limits.
 - Blob container creation shows a handled `409` from `CreateIfNotExists`.
 
 ## Things to try

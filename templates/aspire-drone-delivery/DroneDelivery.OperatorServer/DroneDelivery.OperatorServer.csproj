@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../DroneDelivery.CustomerServer/BackendProxy.cs" Link="BackendProxy.cs" />
+    <Compile Include="../DroneDelivery.CustomerServer/BrowserTelemetry.cs" Link="BrowserTelemetry.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../DroneDelivery.ServiceDefaults/DroneDelivery.ServiceDefaults.csproj" />

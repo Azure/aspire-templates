@@ -42,6 +42,7 @@ builder.AddDotnetProject("customer-simulator", "../DroneDelivery.CustomerSimulat
 var customerServer = builder.AddDotnetProject("customer-server", "../DroneDelivery.CustomerServer/DroneDelivery.CustomerServer.csproj")
     .WithTags("servers", "customer")
     .WithHttpEndpoint()
+    .WithOtlpExporter(OtlpProtocol.HttpProtobuf)
     .WithReference(backend)
     .WithEnvironment("BACKEND_HTTP", backend.GetEndpoint("http"))
     .WaitFor(backend)
@@ -51,13 +52,15 @@ var customerServer = builder.AddDotnetProject("customer-server", "../DroneDelive
 var operatorServer = builder.AddDotnetProject("operator-server", "../DroneDelivery.OperatorServer/DroneDelivery.OperatorServer.csproj")
     .WithTags("servers", "operator")
     .WithHttpEndpoint()
+    .WithOtlpExporter(OtlpProtocol.HttpProtobuf)
     .WithReference(backend)
     .WithEnvironment("BACKEND_HTTP", backend.GetEndpoint("http"))
     .WaitFor(backend)
     .WithHttpHealthCheck("/health")
     .WithExternalHttpEndpoints();
 
-// Browsers can only export OTLP over HTTP; each Vite dev server proxies /otlp to the dashboard and adds its API key.
+// Browsers can only export OTLP over HTTP. The Vite dev servers (and, for built sites, the UI servers above)
+// relay /otlp to the dashboard and add its API key server-side.
 var customerSite = builder.AddViteApp("customer-site", "../customer-frontend")
     .WithTags("frontends", "customer")
     .WithOtlpExporter(OtlpProtocol.HttpProtobuf)

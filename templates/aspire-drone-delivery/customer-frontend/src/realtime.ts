@@ -1,14 +1,14 @@
 import { HubConnectionBuilder, HubConnectionState, LogLevel } from '@microsoft/signalr';
 
-export function connectRealtime<T>(url: string, event: string, receive: (value: T) => void,
+export function connectRealtime<T>(url: string, event: string, receive: (value: T, traceparent?: string) => void,
   recover: () => Promise<void>, report: (message: string) => void, signal: AbortSignal,
   status: (message: string) => void = report) {
   const connection = new HubConnectionBuilder().withUrl(url).withAutomaticReconnect([0, 1000, 3000, 10000])
     .configureLogging(LogLevel.Warning).build();
   let retry: ReturnType<typeof setTimeout>;
-  connection.on(event, (value: T) => {
+  connection.on(event, (value: T, traceparent?: string | null) => {
     if (signal.aborted) return;
-    try { receive(value); }
+    try { receive(value, traceparent ?? undefined); }
     catch (reason) { report(`Invalid realtime update: ${reason instanceof Error ? reason.message : String(reason)}`); }
   });
   async function refresh() {

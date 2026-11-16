@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { connectRealtime } from '../src/realtime';
 
 const hub = vi.hoisted(() => ({
-  start: vi.fn(), stop: vi.fn(), state: 'Disconnected', handlers: new Map<string, (value: unknown) => void>(),
+  start: vi.fn(), stop: vi.fn(), state: 'Disconnected', handlers: new Map<string, (value: unknown, traceparent?: string | null) => void>(),
   reconnecting: () => {}, reconnected: () => {}, closed: () => {},
 }));
 vi.mock('@microsoft/signalr', () => ({
@@ -14,7 +14,7 @@ vi.mock('@microsoft/signalr', () => ({
     build() {
       return {
         get state() { return hub.state; }, start: hub.start, stop: hub.stop,
-        on: (name: string, callback: (value: unknown) => void) => hub.handlers.set(name, callback),
+        on: (name: string, callback: (value: unknown, traceparent?: string | null) => void) => hub.handlers.set(name, callback),
         onreconnecting: (callback: () => void) => { hub.reconnecting = callback; },
         onreconnected: (callback: () => void) => { hub.reconnected = callback; },
         onclose: (callback: () => void) => { hub.closed = callback; },
@@ -35,8 +35,10 @@ test('receives subscribed push messages and recovers snapshots after reconnect',
   await vi.advanceTimersByTimeAsync(0);
   expect(recover).toHaveBeenCalledTimes(1);
   expect([...hub.handlers.keys()]).toEqual(['orderUpdated']);
-  hub.handlers.get('orderUpdated')?.({ orderId: 'FC-A' });
-  expect(receive).toHaveBeenCalledWith({ orderId: 'FC-A' });
+  hub.handlers.get('orderUpdated')?.({ orderId: 'FC-A' }, null);
+  expect(receive).toHaveBeenCalledWith({ orderId: 'FC-A' }, undefined);
+  hub.handlers.get('orderUpdated')?.({ orderId: 'FC-A' }, '00-6ae570f3a6ff9b4772041d8d3b1d498b-1111111111111111-01');
+  expect(receive).toHaveBeenLastCalledWith({ orderId: 'FC-A' }, '00-6ae570f3a6ff9b4772041d8d3b1d498b-1111111111111111-01');
   hub.reconnecting();
   expect(report).toHaveBeenCalledWith(expect.stringContaining('Reconnecting'));
   hub.reconnected();

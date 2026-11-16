@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Net;
 using System.Text.Json;
 using DroneDelivery.Domain;
@@ -97,6 +98,22 @@ public class RealtimeTests
     public async Task Failed_repeated_customer_broadcast_is_traced_without_tracing_successful_ticks()
     {
         var spans = new ConcurrentQueue<Activity>();
+        var messages = new ConcurrentQueue<(string Audience, string Outcome)>();
+        using var meters = new MeterListener
+        {
+            InstrumentPublished = (instrument, listener) =>
+            {
+                if (instrument.Meter.Name == DeliveryMetrics.MeterName && instrument.Name == "drone_delivery.realtime.messages")
+                    listener.EnableMeasurementEvents(instrument);
+            },
+        };
+        meters.SetMeasurementEventCallback<long>((_, _, tags, _) =>
+        {
+            var all = tags.ToArray();
+            string Tag(string name) => (string)all.Single(tag => tag.Key == name).Value!;
+            messages.Enqueue((Tag("drone_delivery.realtime.audience"), Tag("drone_delivery.realtime.outcome")));
+        });
+        meters.Start();
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == Tracing.SourceName,
@@ -122,7 +139,11 @@ public class RealtimeTests
 
         await worker.BroadcastAsync(TestContext.Current.CancellationToken);
         await worker.BroadcastAsync(TestContext.Current.CancellationToken);
-        Assert.Single(spans);
+        var published = Assert.Single(spans);
+        // Only the stage change carries trace context to the browser; the repeated tick does not.
+        var sends = manager.Hubs["customers"].Sends;
+        Assert.Equal($"00-{published.TraceId}-{published.SpanId}-01", sends[0].TraceParent);
+        Assert.Null(sends[1].TraceParent);
 
         manager.Hubs["customers"].FailSends = true;
         await worker.BroadcastAsync(TestContext.Current.CancellationToken);
@@ -134,6 +155,10 @@ public class RealtimeTests
         manager.Hubs["customers"].FailSends = false;
         await worker.BroadcastAsync(TestContext.Current.CancellationToken);
         Assert.Equal(2, spans.Count);
+        // Every send is counted, including the untraced ticks.
+        Assert.Equal([("customer", "sent"), ("customer", "sent"), ("customer", "failed"), ("customer", "sent")],
+            messages.Where(message => message.Audience == "customer"));
+        Assert.Equal(4, messages.Count(message => message.Audience == "operator"));
         await contexts.StopAsync(TestContext.Current.CancellationToken);
     }
 
@@ -226,6 +251,61 @@ public class RealtimeTests
         Assert.Equal("application/problem+json", transportError.Content.Headers.ContentType!.MediaType);
     }
 
+    [Theory]
+    [InlineData("http/protobuf", true)]
+    [InlineData("grpc", false)]
+    public async Task Built_sites_relay_bounded_browser_spans_with_server_side_otlp_headers(string protocol, bool enabled)
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseTestServer();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["BACKEND_HTTP"] = "http://backend.test",
+            ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://dashboard.test:4318/",
+            ["OTEL_EXPORTER_OTLP_PROTOCOL"] = protocol,
+            ["OTEL_EXPORTER_OTLP_HEADERS"] = "x-otlp-api-key=s%3Dcret",
+        });
+        builder.AddBackendProxy();
+        builder.AddBrowserTelemetry();
+        var forwarded = new List<(string Uri, string? Key, int Bytes)>();
+        builder.Services.AddHttpClient(nameof(BrowserTelemetry)).ConfigurePrimaryHttpMessageHandler(() => new TestHandler(async request =>
+        {
+            forwarded.Add((request.RequestUri!.AbsoluteUri, request.Headers.GetValues("x-otlp-api-key").Single(),
+                (await request.Content!.ReadAsByteArrayAsync()).Length));
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }));
+        await using var app = builder.Build();
+        app.MapBrowserTelemetry("customer-site");
+        app.MapFallback(() => "index.html");
+        await app.StartAsync(TestContext.Current.CancellationToken);
+        var client = app.GetTestClient();
+        HttpContent Spans(int bytes, string type = "application/x-protobuf")
+        {
+            var content = new ByteArrayContent(new byte[bytes]);
+            content.Headers.ContentType = new(type);
+            return content;
+        }
+
+        var config = await client.GetAsync(BrowserTelemetry.ConfigPath, TestContext.Current.CancellationToken);
+        var export = await client.PostAsync(BrowserTelemetry.TracesPath, Spans(64), TestContext.Current.CancellationToken);
+        if (!enabled)
+        {
+            Assert.Equal(HttpStatusCode.NotFound, config.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, export.StatusCode);
+            Assert.Empty(forwarded);
+            return;
+        }
+        Assert.Equal("{\"serviceName\":\"customer-site\"}", await config.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(HttpStatusCode.OK, export.StatusCode);
+        Assert.Equal(HttpStatusCode.UnsupportedMediaType,
+            (await client.PostAsync(BrowserTelemetry.TracesPath, Spans(64, "application/json"), TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge,
+            (await client.PostAsync(BrowserTelemetry.TracesPath, Spans(BrowserTelemetry.MaxBodyBytes + 1), TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await client.PostAsync("/otlp/v1/logs", Spans(64), TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal([("http://dashboard.test:4318/v1/traces", "s=cret", 64)], forwarded);
+    }
+
     [Fact]
     public async Task Management_transient_transport_serializes_string_enums_and_web_property_names()
     {
@@ -298,7 +378,7 @@ public class RealtimeTests
 
     sealed class TestHub : ServiceHubContext
     {
-        public List<(string? User, string Method, object Payload)> Sends { get; } = [];
+        public List<(string? User, string Method, object Payload, string? TraceParent)> Sends { get; } = [];
         public bool FailSends { get; set; }
         public NegotiationOptions? Negotiation { get; private set; }
         public bool Disposed { get; private set; }
@@ -321,7 +401,7 @@ public class RealtimeTests
         {
             if (hub.FailSends)
                 return Task.FromException(new InvalidOperationException("Test broadcast failure"));
-            hub.Sends.Add((user, method, args.Single()!));
+            hub.Sends.Add((user, method, args[0]!, args.Length > 1 ? (string?)args[1] : null));
             return Task.CompletedTask;
         }
     }

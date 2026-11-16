@@ -5,5 +5,6 @@ import { startTelemetry } from './telemetry';
 import './theme.css';
 import './styles.css';
 
-startTelemetry();
-createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
+// Start tracing first so the initial snapshot fetch joins a trace; render regardless of the outcome.
+void startTelemetry().finally(() =>
+  createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>));

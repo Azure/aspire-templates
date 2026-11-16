@@ -27,6 +27,7 @@ public static class Extensions
 
         builder.Services.AddOpenTelemetry()
             .WithMetrics(metrics => metrics
+                .AddMeter(ActivitySourceName)
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
                 .AddRuntimeInstrumentation())
@@ -36,8 +37,10 @@ public static class Extensions
                 // Timers and SDK pollers make outbound calls with no caller (e.g. the per-second SignalR broadcast);
                 // drop those rootless client spans so traces start where real work starts.
                 .SetSampler(new ParentBasedSampler(new DropRootClientSpans()))
+                // Browser span exports relayed through /otlp would otherwise trace themselves every second.
                 .AddAspNetCoreInstrumentation(options => options.Filter = context =>
-                    !context.Request.Path.StartsWithSegments("/health") && !context.Request.Path.StartsWithSegments("/alive"))
+                    !context.Request.Path.StartsWithSegments("/health") && !context.Request.Path.StartsWithSegments("/alive") &&
+                    !context.Request.Path.StartsWithSegments("/otlp"))
                 .AddHttpClientInstrumentation());
 
         if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))

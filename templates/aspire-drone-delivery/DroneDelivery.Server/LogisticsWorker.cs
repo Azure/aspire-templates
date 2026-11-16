@@ -31,7 +31,10 @@ public sealed class LogisticsWorker(
         telemetry.ConsumeAsync((data, _) =>
         {
             if (data.TryRead<DroneTelemetry>(out var reading))
+            {
                 dispatcher.Observe(reading);
+                DeliveryMetrics.PositionApplied(reading, time.GetUtcNow());
+            }
             else if (data.TryRead<MissionProgress>(out var progress))
             {
                 dispatcher.Observe(progress, time.GetUtcNow());

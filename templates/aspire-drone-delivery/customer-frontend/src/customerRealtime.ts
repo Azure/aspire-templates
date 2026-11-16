@@ -1,6 +1,6 @@
 import type { OrderSnapshot, Receipt } from './api';
 import { connectRealtime } from './realtime';
-import { traced } from './telemetry';
+import { recordReceipt, traced } from './telemetry';
 
 function waitForRegistration(signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.reject(signal.reason);
@@ -19,10 +19,13 @@ export function connectCustomerOrder(receipt: Receipt, receive: (snapshot: Order
   signal.addEventListener('abort', stop, { once: true });
   controller.signal.addEventListener('abort', () => signal.removeEventListener('abort', stop), { once: true });
 
-  function apply(snapshot: OrderSnapshot) {
+  function apply(snapshot: OrderSnapshot, traceparent?: string) {
     if (controller.signal.aborted) return;
     if (snapshot.order.orderId !== receipt.id) throw new Error('Realtime order response does not match your receipt.');
     receive(snapshot);
+    recordReceipt('customer receive order update', traceparent, {
+      'drone_delivery.order.id': receipt.id, 'drone_delivery.order.status': snapshot.status, 'messaging.system': 'signalr',
+    });
     status('');
     if (snapshot.status === 'Delivered') stop();
   }
@@ -39,7 +42,7 @@ export function connectCustomerOrder(receipt: Receipt, receive: (snapshot: Order
         continue;
       }
       if (!response.ok) throw new Error(`Order ${receipt.id} unavailable (${response.status}); the demo server may have restarted.`);
-      apply(await response.json());
+      apply(await response.json() as OrderSnapshot);
       return;
     }
   }
