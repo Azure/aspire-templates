@@ -1,7 +1,8 @@
-import { assert, test } from 'vitest';
-import { customerOrder, stageFor, trackingFor } from '../src/api';
+import { assert, test, vi } from 'vitest';
+import { customerOrder, placeOrder, stageFor, trackingFor } from '../src/api';
 import type { OrderSnapshot, Receipt, Telemetry } from '../src/api';
-import { dropOffs, makeLine, orderFlight } from '../src/demo';
+import { dropOffs, makeLine, orderFlight, randomDropOff } from '../src/demo';
+import { fromLonLat } from '../src/mapGeometry';
 
 const now = Date.parse('2026-11-16T00:00:00Z');
 const telemetry: Telemetry = {
@@ -114,4 +115,31 @@ test('pickup and delivery bars advance during vertical phases using simulator pr
   ]) assert.equal(customerOrder({ ...snapshot, telemetry: fix }, receipt, now).stageProgress, 0);
   assert.equal(customerOrder({ ...snapshot, status: 'PickedUp' }, receipt, now).stageProgress, 0, 'previous pickup leg cannot fill delivery');
   assert.equal(customerOrder({ ...snapshot, telemetry: { ...telemetry, state: 'Loading', flightProgress: 1 } }, receipt, now).stageProgress, 1);
+});
+
+test('a random drop-off is valid and stays the same from receipt to tracking and map', async () => {
+  assert.deepEqual(randomDropOff(() => 0), dropOffs[0]);
+  assert.deepEqual(randomDropOff(() => .9999), dropOffs.at(-1));
+  for (let i = 0; i < 50; i++) assert.ok(dropOffs.includes(randomDropOff()));
+
+  const dropOff = randomDropOff(() => .5);
+  let sent: { dropOff: { latitude: number; longitude: number } } | undefined;
+  vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+    sent = JSON.parse(String(init.body));
+    return new Response(JSON.stringify({ orderId: 'FC-TEST' }), { status: 202 });
+  }));
+  try {
+    const placed = await placeOrder([makeLine('latte')], 1, dropOff);
+    assert.deepEqual(placed.dropOff, dropOff);
+    const { x, y } = fromLonLat(sent!.dropOff.longitude, sent!.dropOff.latitude);
+    assert.ok(Math.hypot(x - dropOff.x, y - dropOff.y) < .5, 'the server receives the receipt drop-off');
+
+    const delivering = { ...snapshot, status: 'PickedUp' as const, order: { ...snapshot.order, dropOff: sent!.dropOff },
+      telemetry: { ...telemetry, state: 'FlyingToCustomer' as const } };
+    const order = customerOrder(delivering, placed, now);
+    assert.equal(order.dropOff?.label, dropOff.label);
+    assert.equal(order.tracking?.destination.label, dropOff.label);
+    assert.equal(order.tracking?.target.label, dropOff.label);
+    assert.ok(Math.hypot(order.tracking!.destination.x - dropOff.x, order.tracking!.destination.y - dropOff.y) < .5);
+  } finally { vi.unstubAllGlobals(); }
 });

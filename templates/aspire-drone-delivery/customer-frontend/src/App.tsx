@@ -5,7 +5,7 @@ import BaySelector from './BaySelector';
 import FoodArt, { CoffeeCup } from './FoodArt';
 import OrderStatus from './OrderStatus';
 import PayloadTray, { PayloadPicker } from './PayloadTray';
-import { addToBag, bagCount, bagFromBays, baysFromBag, bagTotal, coffeeDescription, dropOffs, emptyBays, linePrice, matchSpokenOrder, menuItem, money, payloadNames, resizeBays, validBag } from './demo';
+import { addToBag, bagCount, bagFromBays, baysFromBag, bagTotal, coffeeDescription, emptyBays, linePrice, matchSpokenOrder, menuItem, money, payloadNames, randomDropOff, resizeBays, validBag } from './demo';
 import type { Bag, BagLine, Bays, PayloadSize } from './demo';
 import { placeOrder } from './api';
 import { useCustomerOrders } from './useApi';
@@ -18,7 +18,6 @@ export default function App() {
   const { orders, error: apiError, status: apiStatus, loading, remember, receipts } = useCustomerOrders();
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
-  const [dropOffIndex, setDropOffIndex] = useState(0);
   const [bays, setBays] = useState<Bays>([]);
   const [payload, setPayload] = useState<PayloadSize | null>(null);
   const [modal, setModal] = useState<Modal>(null);
@@ -117,7 +116,7 @@ export default function App() {
     if (!payload || !validBag(bag, payload) || submitting) return;
     setSubmitting(true); setSubmitError('');
     try {
-      const receipt = await placeOrder(bag, payload, dropOffs[dropOffIndex]);
+      const receipt = await placeOrder(bag, payload, randomDropOff());
       remember(receipt);
       setBays(emptyBays(payload)); setModal(null);
       navigate(`#/order/${receipt.id}`);
@@ -174,7 +173,6 @@ export default function App() {
       {modal === 'bag' && <><div className="eyebrow">03 / READY FOR TAKE-OFF?</div><h2 id="modal-heading">Your coffee run.</h2><p>ForthCoffee · South Melbourne · {payload ? `${payloadNames[payload]} payload` : 'No payload selected'}</p>
         {payload ? <><PayloadPicker value={payload} filled={count} onChange={choosePayload} /><p className="packing-hint">{bayLabel(capacity - count)} free. Smaller boxes unlock when their contents fit.</p></> : <button className="primary-button full-width" onClick={chooseFirst}>Choose your payload <ArrowRight size={15} /></button>}
         {!count ? <div className="empty-bag"><Coffee size={40} strokeWidth={1} /><h3>Your next good morning goes here.</h3><button className="outline-button" onClick={() => { setModal(null); navigate(''); window.setTimeout(() => document.getElementById('payload')?.scrollIntoView({ behavior: 'smooth' }), 0); }}>Fill a bay <ArrowRight size={15} /></button></div> : <><div className="bag-items">{bag.map(line => { const item = menuItem(line.itemId); return <div className="bag-item" key={line.id}><div className="bag-food">{line.coffee ? <CoffeeCup options={line.coffee} style={line.itemId} /> : <FoodArt kind={item.kind} />}</div><div><strong>{item.name}</strong>{line.coffee && <small>{coffeeDescription(line.coffee)}</small>}<small>{money(linePrice(line))} each · one bay each</small><div className="bag-line-actions"><div className="quantity-control"><button aria-label={`Remove one ${item.name}`} onClick={() => removeOne(line.id)}><Minus size={13} /></button><span>{line.quantity}</span><button aria-label={`Add one ${item.name}`} disabled={!payload || count >= capacity} onClick={() => { if (payload) setBag(addToBag(bag, { ...line, quantity: 1 }, payload)); }}><Plus size={13} /></button></div>{line.coffee && <button className="edit-coffee" onClick={() => openLine(line)}>Edit coffee</button>}</div></div><strong>{money(linePrice(line) * line.quantity)}</strong></div>; })}</div><div className="bag-summary"><div><span>Payload space</span><span>{count} of {bayLabel(capacity)} filled</span></div><div><span>Demo delivery</span><span>On us</span></div><div className="bag-total"><strong>Total (AUD)</strong><strong>{money(bagTotal(bag))}</strong></div></div>
-          <label className="field-label" htmlFor="drop-off">Your drop-off</label><select id="drop-off" value={dropOffIndex} onChange={event => setDropOffIndex(Number(event.target.value))}>{dropOffs.map((destination, index) => <option key={destination.label} value={index}>{destination.label}</option>)}</select>
           {submitError && <p className="form-error" role="alert">{submitError}</p>}
           <button className="primary-button full-width" disabled={submitting || !payload || !validBag(bag, payload)} onClick={() => void confirm()}>{submitting ? 'Confirming…' : 'Confirm demo order'} <ArrowRight size={16} /></button><button className="text-button full-width" onClick={() => setModal(null)}>Keep packing <Plus size={14} /></button><p className="privacy-note"><ShieldCheck size={14} />Fictional order. No payment, no real flight. Dietary suitability is not guaranteed.</p></>}
       </>}

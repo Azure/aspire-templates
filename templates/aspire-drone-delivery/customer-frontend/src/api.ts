@@ -92,9 +92,15 @@ export function stageProgressFor(snapshot: OrderSnapshot, tracking: OrderFlight 
   return tracking && !inbound ? tracking.progress : 0;
 }
 
+function withDropOffLabel(flight: OrderFlight, label: string): OrderFlight {
+  const destination = { ...flight.destination, label };
+  return { ...flight, destination, target: flight.target === flight.destination ? destination : flight.target };
+}
+
 export function customerOrder(snapshot: OrderSnapshot, receipt: Receipt, now = Date.now()): Order {
   if (snapshot.order.orderId !== receipt.id) throw new Error('Order response does not match your receipt.');
-  const tracking = trackingFor(snapshot, now);
+  const flight = trackingFor(snapshot, now);
+  const tracking = flight && withDropOffLabel(flight, receipt.dropOff.label);
   const frames = snapshot.photos.filter(frame => snapshot.droneId && frame.blobName.startsWith(`${snapshot.droneId}/`));
   const photo = (snapshot.status === 'Delivered' ? frames.filter(frame => frame.proofOfDelivery).at(-1) : undefined) ?? frames.at(-1);
   return {

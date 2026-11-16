@@ -232,6 +232,8 @@ export const dropOffs: Destination[] = [
   { x: 620, y: 560, label: 'Bridport Street' },
   { x: 860, y: 300, label: 'St Kilda Road' },
 ];
+/** Each new order flies to a randomly chosen demo drop-off. */
+export const randomDropOff = (random: () => number = Math.random): Destination => dropOffs[Math.min(dropOffs.length - 1, Math.floor(random() * dropOffs.length))];
 export const destinationFor = (order: Pick<Order, 'id'>): Destination => dropOffs[Number(order.id.replace(/\D/g, '')) % dropOffs.length];
 /** Illustrated-map units are roughly 4.2 m each across the South Melbourne demo area. */
 export const metresPerUnit = 4.2;

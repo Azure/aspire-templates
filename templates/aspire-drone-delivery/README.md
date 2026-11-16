@@ -174,7 +174,8 @@ References: [Aspire SignalR integration](https://aspire.dev/integrations/cloud/a
    and through a simulated drone camera. The order stays **Ready for pickup**
    until pickup, and both views carry on into delivery. A reserved drone serving
    another order, absent telemetry or a fix older than 30 seconds never produces
-   an unrelated live view. Select your drop-off before confirming.
+   an unrelated live view. Each order flies to a randomly chosen South Melbourne
+   drop-off, which stays the same on the receipt, status page and map.
 2. Open the separate **operator-site** endpoint. Coffee customizations appear
    on the docket alongside synthetic orders. Store locations, drone classes,
    battery levels, altitude, current work and queued missions come from the API.
