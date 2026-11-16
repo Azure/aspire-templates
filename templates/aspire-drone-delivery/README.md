@@ -331,7 +331,7 @@ The eventual acceptance path with a current Aspire CLI 17.0 or later is:
 aspire new --template-repository https://github.com/azure/aspire-templates --template-repository-ref feature/drone-delivery
 ```
 
-Select **ForthCoffee drone delivery (design preview)** if prompted. During review,
+Select **forthcoffee-drones** if prompted. During review,
 use the PR's head branch instead of `feature/drone-delivery`; the feature branch
 does not contain these files until the PR is merged.
 
@@ -339,7 +339,7 @@ For a local template-engine smoke check from the repository root:
 
 ```bash
 dotnet new install ./templates/aspire-drone-delivery
-dotnet new aspire-drone-delivery --name MyCoffeeRun --output ./MyCoffeeRun
+dotnet new forthcoffee-drones --name MyCoffeeRun --output ./MyCoffeeRun
 cd MyCoffeeRun
 aspire run
 ```
