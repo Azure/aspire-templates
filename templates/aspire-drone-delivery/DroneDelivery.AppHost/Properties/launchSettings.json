@@ -9,6 +9,7 @@
         "DOTNET_ENVIRONMENT": "Development",
         "ASPIRE_ALLOW_UNSECURED_TRANSPORT": "true",
         "ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL": "http://localhost:19283",
+        "ASPIRE_DASHBOARD_OTLP_HTTP_ENDPOINT_URL": "http://localhost:18283",
         "ASPIRE_RESOURCE_SERVICE_ENDPOINT_URL": "http://localhost:20283"
       }
     }

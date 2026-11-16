@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Azure.Messaging.EventHubs.Producer;
 using Azure.Storage.Blobs;
@@ -5,6 +6,7 @@ using DroneDelivery.Domain;
 using DroneDelivery.Server;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.AddServiceDefaults();
 builder.Services.AddHealthChecks();
 builder.Services.AddProblemDetails();
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -14,9 +16,9 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 
 foreach (var hub in new[] { Hubs.Orders, Hubs.DroneTelemetry, Hubs.DronePhotos })
-    builder.AddKeyedAzureEventHubConsumerClient(hub, settings => settings.ConsumerGroup ??= "$Default");
-builder.AddKeyedAzureEventHubProducerClient(Hubs.Orders);
-builder.AddKeyedAzureEventHubProducerClient(Hubs.DroneMissions);
+    builder.AddKeyedAzureEventHubConsumerClient(hub, settings => { settings.ConsumerGroup ??= "$Default"; settings.DisableTracing = true; });
+builder.AddKeyedAzureEventHubProducerClient(Hubs.Orders, settings => settings.DisableTracing = true);
+builder.AddKeyedAzureEventHubProducerClient(Hubs.DroneMissions, settings => settings.DisableTracing = true);
 builder.AddAzureBlobContainerClient(Hubs.PhotoContainer);
 
 builder.Services.AddSingleton(TimeProvider.System);
@@ -59,8 +61,13 @@ app.MapPost("/api/orders/{orderId}/demo/skip", async (
         return Results.BadRequest();
     if (dispatcher.Order(orderId) is not { } order)
         return Results.NotFound();
+    // The skip is a separate request from the one that placed the order; link the two traces.
+    using var activity = Tracing.Start($"demo skip {request.Stage}", links: [new ActivityLink(dispatcher.TraceOf(orderId))]).Describe(request);
     if (!dispatcher.CanSkip(orderId, request.Stage, time.GetUtcNow()))
+    {
+        activity?.SetStatus(ActivityStatusCode.Error, "Stage cannot be skipped now");
         return Results.Conflict(new { message = "This stage cannot be skipped now. Wait for an assigned drone or the next stage." });
+    }
     await missions.SendAsync(request, order.DroneId ?? orderId, cancellationToken);
     if (request.Stage == DemoStage.Preparing)
         dispatcher.SkipPreparation(orderId, time.GetUtcNow());
@@ -85,6 +92,7 @@ app.MapPost("/api/orders", async (
     var order = new OrderPlaced(
         $"FC-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}", "web", request.CustomerName?.Trim() is { Length: > 0 } name ? name : "You",
         request.DropOff, payloadBays, lines, time.GetUtcNow(), "web");
+    Activity.Current.Describe(order);
     await orders.SendAsync(order, order.CustomerId, cancellationToken);
     return Results.Accepted($"/api/orders/{order.OrderId}", new { order.OrderId });
 });

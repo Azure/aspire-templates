@@ -57,13 +57,16 @@ var operatorServer = builder.AddDotnetProject("operator-server", "../DroneDelive
     .WithHttpHealthCheck("/health")
     .WithExternalHttpEndpoints();
 
+// Browsers can only export OTLP over HTTP; each Vite dev server proxies /otlp to the dashboard and adds its API key.
 var customerSite = builder.AddViteApp("customer-site", "../customer-frontend")
     .WithTags("frontends", "customer")
+    .WithOtlpExporter(OtlpProtocol.HttpProtobuf)
     .WithReference(customerServer)
     .WithEnvironment("SERVER_HTTP", customerServer.GetEndpoint("http"))
     .WaitFor(customerServer);
 var operatorSite = builder.AddViteApp("operator-site", "../operator-frontend")
     .WithTags("frontends", "operator")
+    .WithOtlpExporter(OtlpProtocol.HttpProtobuf)
     .WithReference(operatorServer)
     .WithEnvironment("SERVER_HTTP", operatorServer.GetEndpoint("http"))
     .WaitFor(operatorServer);

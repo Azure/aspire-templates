@@ -1,3 +1,4 @@
+import { traced } from './telemetry';
 export type GeoPoint = { latitude: number; longitude: number };
 export type Telemetry = {
   droneId: string; class: 'Piccolo' | 'Doppio' | 'Abbondante'; sequence: number; timestamp: string;
@@ -14,7 +15,7 @@ export type OrderSnapshot = {
 export type Store = { id: string; name: string; location: GeoPoint };
 
 async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(path, { signal });
+  const response = await traced('operator load snapshot', { 'url.path': path.split('?')[0] }, () => fetch(path, { signal }));
   if (!response.ok) throw new Error(`GET ${path} failed (${response.status}). ${await response.text()}`);
   return response.json() as Promise<T>;
 }

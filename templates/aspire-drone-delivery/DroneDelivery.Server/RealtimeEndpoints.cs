@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using DroneDelivery.Domain;
 using Microsoft.Azure.SignalR.Management;
 
@@ -14,6 +15,7 @@ public static class RealtimeEndpoints
             response.Headers.CacheControl = "no-store";
             if (!CustomerSubscriptions.IsValidOrderId(orderId))
                 return Results.BadRequest(new { error = "A valid ForthCoffee order ID is required." });
+            Activity.Current?.SetTag("drone_delivery.order.id", orderId);
             if (dispatcher.Order(orderId!) is null)
                 return Results.NotFound();
             if (!subscriptions.TrySubscribe(orderId!))

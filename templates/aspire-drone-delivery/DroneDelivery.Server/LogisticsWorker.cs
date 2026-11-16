@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Azure.Messaging.EventHubs.Consumer;
 using Azure.Messaging.EventHubs.Producer;
 using DroneDelivery.Domain;
@@ -21,7 +22,10 @@ public sealed class LogisticsWorker(
         orders.ConsumeAsync((data, _) =>
         {
             if (data.TryRead<OrderPlaced>(out var order))
-                dispatcher.Accept(order);
+                {
+                var accepted = dispatcher.Accept(order, Activity.Current?.Context ?? default);
+                Activity.Current?.SetTag("drone_delivery.order.status", accepted.Status.ToString());
+            }
             return Task.CompletedTask;
         }, logger, stoppingToken),
         telemetry.ConsumeAsync((data, _) =>
@@ -29,7 +33,10 @@ public sealed class LogisticsWorker(
             if (data.TryRead<DroneTelemetry>(out var reading))
                 dispatcher.Observe(reading);
             else if (data.TryRead<MissionProgress>(out var progress))
+            {
                 dispatcher.Observe(progress, time.GetUtcNow());
+                Activity.Current?.SetTag("drone_delivery.order.status", dispatcher.Order(progress.OrderId)?.Status.ToString());
+            }
             return Task.CompletedTask;
         }, logger, stoppingToken),
         photos.ConsumeAsync((data, _) =>
@@ -47,6 +54,9 @@ public sealed class LogisticsWorker(
         {
             foreach (var mission in dispatcher.PlanPending(time.GetUtcNow()))
             {
+                // Planning runs on a timer, so each assignment joins the trace of the order it serves.
+                using var activity = Tracing.Start("dispatch assign drone", dispatcher.TraceOf(mission.OrderId)).Describe(mission);
+                activity?.SetTag("drone_delivery.mission.depart_at", mission.DepartAt.ToString("O"));
                 try
                 {
                     await missions.SendAsync(mission, mission.DroneId, cancellationToken);
@@ -54,6 +64,7 @@ public sealed class LogisticsWorker(
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
+                    activity.Failed(exception);
                     logger.LogError(exception, "Could not send mission {MissionId}", mission.MissionId);
                 }
             }

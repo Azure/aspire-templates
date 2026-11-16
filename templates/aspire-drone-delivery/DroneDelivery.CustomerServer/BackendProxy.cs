@@ -6,10 +6,13 @@ public static class BackendProxy
     {
         "Connection", "Keep-Alive", "Proxy-Authenticate", "Proxy-Authorization",
         "TE", "Trailer", "Transfer-Encoding", "Upgrade", "Host",
+        // The HttpClient instrumentation writes the proxy span's own context; forwarding the caller's would skip it.
+        "traceparent", "tracestate",
     };
 
     public static void AddBackendProxy(this WebApplicationBuilder builder)
     {
+        builder.AddServiceDefaults();
         builder.Services.AddHealthChecks();
         builder.Services.AddProblemDetails();
         builder.Services.AddHttpClient("backend", client =>

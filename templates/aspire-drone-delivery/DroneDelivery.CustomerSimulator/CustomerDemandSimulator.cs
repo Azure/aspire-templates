@@ -32,6 +32,8 @@ public sealed class CustomerDemandSimulator(
                 var order = new OrderPlaced(
                     $"FC-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}",
                     customer.Id, customer.Name, customer.Location, Menu.PayloadFor(lines), lines, now, "customer-simulator");
+                // Each simulated order starts its own trace, just like a web order.
+                using var activity = Tracing.Start("customer simulator place order").Describe(order);
                 try
                 {
                     await orders.SendAsync(order, customer.Id, stoppingToken);
@@ -39,6 +41,7 @@ public sealed class CustomerDemandSimulator(
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
+                    activity.Failed(exception);
                     logger.LogWarning(exception, "Could not publish order {OrderId}", order.OrderId);
                 }
             }

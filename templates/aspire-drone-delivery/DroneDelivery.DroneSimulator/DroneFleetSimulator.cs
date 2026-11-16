@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using Azure.Messaging.EventHubs.Consumer;
 using Azure.Messaging.EventHubs.Producer;
 using DroneDelivery.Domain;
@@ -19,6 +21,8 @@ public sealed class DroneFleetSimulator(
 {
     static readonly TimeSpan Tick = TimeSpan.FromSeconds(1);
     readonly DemoSkips skips = new();
+    // Each mission's spans join the trace that assigned it.
+    readonly ConcurrentDictionary<string, ActivityContext> traces = new();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -33,7 +37,10 @@ public sealed class DroneFleetSimulator(
             else if (data.TryRead<MissionAssigned>(out var mission))
             {
                 if (fleet.TryGetValue(mission.DroneId, out var drone))
+                {
+                    traces[mission.MissionId] = Activity.Current?.Context ?? default;
                     drone.Queue.Enqueue(mission);
+                }
                 else
                     logger.LogWarning("Mission {MissionId} is for unknown drone {DroneId}", mission.MissionId, mission.DroneId);
             }
@@ -79,22 +86,25 @@ public sealed class DroneFleetSimulator(
 
     async Task FlyMissionAsync(SimulatedDrone drone, MissionAssigned mission, CancellationToken cancellationToken)
     {
+        var trace = traces.TryRemove(mission.MissionId, out var context) ? context : default;
+        Activity? Step(string name) => Tracing.Start(name, trace).Describe(mission);
         var toPickup = drone.Spec.Leg(drone.Position, mission.Pickup);
         var toCustomer = drone.Spec.Leg(mission.Pickup, mission.DropOff);
         var toPad = drone.Spec.Leg(mission.DropOff, drone.HomePad);
         var needed = toPickup.BatteryPercent + toCustomer.BatteryPercent + toPad.BatteryPercent + DroneSpec.ReserveBatteryPercent;
         if (!drone.Spec.CanCarry(mission.PayloadBays) || needed > 100)
         {
-            await MilestoneAsync(drone, mission, MissionMilestone.Rejected, cancellationToken,
+            await MilestoneAsync(drone, mission, trace, MissionMilestone.Rejected, cancellationToken,
                 needed > 100 ? "Round trip exceeds battery range" : $"{drone.Spec.Class} has {drone.Spec.Bays} bays");
             return;
         }
 
         drone.Mission = mission;
-        await MilestoneAsync(drone, mission, MissionMilestone.Accepted, cancellationToken);
+        await MilestoneAsync(drone, mission, trace, MissionMilestone.Accepted, cancellationToken);
 
         // Stay on the pad, charging, until it is time to leave and there is enough battery for the whole trip.
         var lastReport = time.GetUtcNow();
+        using (Step("drone await departure"))
         while (time.GetUtcNow() < mission.DepartAt || drone.BatteryPercent < needed)
         {
             if (skips.Contains(mission.OrderId, DemoStage.ReadyForPickup))
@@ -112,23 +122,32 @@ public sealed class DroneFleetSimulator(
             }
         }
 
-        await FlyAsync(drone, toPickup, DroneState.FlyingToPickup, proofOfDelivery: false, cancellationToken);
-        await MilestoneAsync(drone, mission, MissionMilestone.ArrivedAtPickup, cancellationToken);
+        using (Step("drone fly to pickup"))
+            await FlyAsync(drone, toPickup, DroneState.FlyingToPickup, proofOfDelivery: false, cancellationToken);
+        await MilestoneAsync(drone, mission, trace, MissionMilestone.ArrivedAtPickup, cancellationToken);
 
-        drone.State = DroneState.Loading;
-        await ReportAsync(drone, cancellationToken);
-        var loaded = (time.GetUtcNow() > mission.ReadyAt ? time.GetUtcNow() : mission.ReadyAt) + LogisticsPlanner.LoadingTime;
-        await WaitUntilAsync(drone, loaded, DemoStage.ReadyForPickup, cancellationToken);
-        await MilestoneAsync(drone, mission, MissionMilestone.PickedUp, cancellationToken);
+        using (Step("drone load order"))
+        {
+            drone.State = DroneState.Loading;
+            await ReportAsync(drone, cancellationToken);
+            var loaded = (time.GetUtcNow() > mission.ReadyAt ? time.GetUtcNow() : mission.ReadyAt) + LogisticsPlanner.LoadingTime;
+            await WaitUntilAsync(drone, loaded, DemoStage.ReadyForPickup, cancellationToken);
+        }
+        await MilestoneAsync(drone, mission, trace, MissionMilestone.PickedUp, cancellationToken);
 
-        await FlyAsync(drone, toCustomer, DroneState.FlyingToCustomer, proofOfDelivery: true, cancellationToken);
-        drone.State = DroneState.Unloading;
-        await ReportAsync(drone, cancellationToken);
-        await WaitUntilAsync(drone, time.GetUtcNow() + LogisticsPlanner.UnloadingTime, DemoStage.Delivering, cancellationToken);
-        await MilestoneAsync(drone, mission, MissionMilestone.Delivered, cancellationToken);
+        using (Step("drone fly to customer"))
+            await FlyAsync(drone, toCustomer, DroneState.FlyingToCustomer, proofOfDelivery: true, cancellationToken);
+        using (Step("drone unload order"))
+        {
+            drone.State = DroneState.Unloading;
+            await ReportAsync(drone, cancellationToken);
+            await WaitUntilAsync(drone, time.GetUtcNow() + LogisticsPlanner.UnloadingTime, DemoStage.Delivering, cancellationToken);
+        }
+        await MilestoneAsync(drone, mission, trace, MissionMilestone.Delivered, cancellationToken);
 
-        await FlyAsync(drone, toPad, DroneState.ReturningToPad, proofOfDelivery: false, cancellationToken);
-        await MilestoneAsync(drone, mission, MissionMilestone.ReturnedToPad, cancellationToken);
+        using (Step("drone return to pad"))
+            await FlyAsync(drone, toPad, DroneState.ReturningToPad, proofOfDelivery: false, cancellationToken);
+        await MilestoneAsync(drone, mission, trace, MissionMilestone.ReturnedToPad, cancellationToken);
         drone.Mission = null;
         skips.Complete(mission.OrderId);
         drone.ChargeFor(TimeSpan.Zero);
@@ -200,15 +219,17 @@ public sealed class DroneFleetSimulator(
         }
     }
 
+    // Position readings go out every second per drone, so they are not traced; legs and milestones are.
     Task ReportAsync(SimulatedDrone drone, CancellationToken cancellationToken) =>
-        telemetry.SendAsync(drone.Telemetry(time.GetUtcNow()), drone.Id, cancellationToken);
+        telemetry.SendAsync(drone.Telemetry(time.GetUtcNow()), drone.Id, cancellationToken, traced: false);
 
-    Task MilestoneAsync(SimulatedDrone drone, MissionAssigned mission, MissionMilestone milestone, CancellationToken cancellationToken, string? reason = null)
+    Task MilestoneAsync(SimulatedDrone drone, MissionAssigned mission, ActivityContext trace, MissionMilestone milestone, CancellationToken cancellationToken, string? reason = null)
     {
         logger.LogInformation("{DroneId} {Milestone} for {OrderId}", drone.Id, milestone, mission.OrderId);
         return telemetry.SendAsync(
             new MissionProgress(mission.MissionId, mission.OrderId, drone.Id, milestone, time.GetUtcNow(), drone.Position, reason),
             drone.Id,
-            cancellationToken);
+            cancellationToken,
+            trace);
     }
 }

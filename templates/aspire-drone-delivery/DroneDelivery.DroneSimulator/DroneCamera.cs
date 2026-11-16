@@ -18,6 +18,9 @@ public sealed class DroneCamera(
 
     public async Task CaptureAsync(SimulatedDrone drone, PhotoTrigger trigger, bool proofOfDelivery, DateTimeOffset now, CancellationToken cancellationToken)
     {
+        using var activity = Tracing.Start("drone camera capture")
+            ?.SetTag("drone_delivery.drone.id", drone.Id).SetTag("drone_delivery.order.id", drone.Mission?.OrderId)
+            .SetTag("drone_delivery.photo.trigger", trigger.ToString()).SetTag("drone_delivery.photo.proof_of_delivery", proofOfDelivery);
         try
         {
             if (!containerReady)
@@ -39,6 +42,7 @@ public sealed class DroneCamera(
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             // A missed frame should never ground a drone.
+            activity.Failed(exception);
             logger.LogWarning(exception, "Camera capture failed for {DroneId}", drone.Id);
         }
     }

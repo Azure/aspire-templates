@@ -1,6 +1,7 @@
 import { coffeeDescription, menuItem, metresPerUnit } from './demo';
 import type { Bag, Destination, Order, OrderFlight, PayloadSize, Stage } from './demo';
 import { fromLonLat, toLonLat } from './mapGeometry';
+import { traced } from './telemetry';
 
 export type GeoPoint = { latitude: number; longitude: number };
 export type Telemetry = {
@@ -28,21 +29,24 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function skipOrderStage(orderId: string, stage: Stage): Promise<void> {
   if (stage === 'Delivered') throw new Error('Delivered orders have no stage to skip.');
-  const response = await fetch(`/api/orders/${encodeURIComponent(orderId)}/demo/skip`, {
+  const response = await traced('customer skip stage', { 'drone_delivery.order.id': orderId, 'drone_delivery.demo.stage': stage }, () => fetch(`/api/orders/${encodeURIComponent(orderId)}/demo/skip`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ orderId, stage: stage === 'Ready for pickup' ? 'ReadyForPickup' : stage }),
-  });
+  }));
   if (!response.ok) throw new Error(`Cannot skip ${stage}: ${await response.text()}`);
 }
 export async function placeOrder(bag: Bag, payload: PayloadSize, dropOff: Destination): Promise<Receipt> {
   const [longitude, latitude] = toLonLat(dropOff.x, dropOff.y);
-  const result = await request<{ orderId: string }>('/api/orders', {
+  // Span attributes carry sizes only: no names, coordinates or order contents.
+  const result = await traced('customer place order', {
+    'drone_delivery.order.payload_bays': payload, 'drone_delivery.order.lines': bag.reduce((sum, line) => sum + line.quantity, 0),
+  }, () => request<{ orderId: string }>('/api/orders', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       customerName: 'You', dropOff: { latitude, longitude }, payloadBays: payload,
       lines: bag.flatMap(line => Array.from({ length: line.quantity }, () => `${menuItem(line.itemId).name}${line.coffee ? ` · ${coffeeDescription(line.coffee)}` : ''}`)),
     }),
-  });
+  }), placed => ({ 'drone_delivery.order.id': placed.orderId }));
   return { id: result.orderId, bag, payload, dropOff, placedAt: new Date().toISOString() };
 }
 

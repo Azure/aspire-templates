@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using DroneDelivery.Domain;
 using Microsoft.AspNetCore.SignalR;
 
@@ -12,6 +13,9 @@ public sealed class RealtimeWorker(
     Dispatcher dispatcher, CustomerSubscriptions subscriptions, RealtimeContexts hubs,
     TimeProvider time, ILogger<RealtimeWorker> logger) : BackgroundService
 {
+    // Updates go out every second; only a change in an order's stage gets a span, so traces show what customers saw change.
+    readonly Dictionary<string, string> published = [];
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1), time);
@@ -28,19 +32,31 @@ public sealed class RealtimeWorker(
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            using (var failed = Tracing.Start("realtime publish operator snapshot", kind: ActivityKind.Producer))
+                failed.Failed(exception);
             logger.LogError(exception, "Could not broadcast operator snapshot");
         }
 
-        foreach (var orderId in subscriptions.Active())
+        var active = subscriptions.Active().ToHashSet();
+        foreach (var gone in published.Keys.Where(orderId => !active.Contains(orderId)).ToList())
+            published.Remove(gone);
+        foreach (var orderId in active)
         {
             if (dispatcher.Order(orderId) is not { } order)
                 continue;
+            var stage = $"{order.Status}{(time.GetUtcNow() >= order.ReadyAt ? "/ready" : "")}";
+            using var activity = published.GetValueOrDefault(orderId) == stage ? null
+                : Tracing.Start("realtime publish order update", dispatcher.TraceOf(orderId), ActivityKind.Producer)
+                    ?.SetTag("drone_delivery.order.id", orderId).SetTag("drone_delivery.order.status", order.Status.ToString())
+                    .SetTag("drone_delivery.order.ready", time.GetUtcNow() >= order.ReadyAt).SetTag("messaging.system", "signalr");
             try
             {
                 await hubs.Customers.Clients.User(orderId).SendAsync("orderUpdated", order, cancellationToken);
+                published[orderId] = stage;
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
+                activity.Failed(exception);
                 logger.LogError(exception, "Could not broadcast customer update for {OrderId}", orderId);
             }
         }

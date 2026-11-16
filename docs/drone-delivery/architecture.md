@@ -53,6 +53,7 @@ start at the latest event, so restarting a worker does not replay old missions.
 | CustomerServer / OperatorServer | Serve independent frontends and proxy backend REST/negotiate routes | No Event Hubs consumers, dispatch logic or authoritative state |
 | Simulated drone camera | Lazily loaded three.js view positioned by assigned-order telemetry; separate last captured blob frame | Placeholder scenery; not video; Azure Maps tiles only with the reviewer's token |
 | Frontend source | Independent app-local map/transport/theme assets; customer-only menu and receipt helpers | Some duplication keeps container build contexts self-contained; no cross-app imports |
+| ServiceDefaults and tracing | OpenTelemetry for every .NET project; `DroneDelivery` spans across HTTP, Event Hubs (`traceparent` in event properties), dispatch, mission legs, camera/blob work and SignalR publishes | Browser spans only under the Vite dev server via an `/otlp` proxy; no PII in span attributes |
 | Azure Maps adapter | Real basemap and fictional animated markers | Opt-in reviewer token, no refresh or resource provisioning |
 
 Customer receipts are capped at 20 entries, and quantities at nine per recipe or treat. Confirmed orders snapshot

@@ -1,5 +1,6 @@
 import type { OrderSnapshot, Receipt } from './api';
 import { connectRealtime } from './realtime';
+import { traced } from './telemetry';
 
 function waitForRegistration(signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.reject(signal.reason);
@@ -28,7 +29,8 @@ export function connectCustomerOrder(receipt: Receipt, receive: (snapshot: Order
 
   async function recover(waitForAcceptedOrder = false) {
     while (!controller.signal.aborted) {
-      const response = await fetch(`/api/orders/${encodeURIComponent(receipt.id)}`, { signal: controller.signal });
+      const response = await traced('customer load order', { 'drone_delivery.order.id': receipt.id },
+        () => fetch(`/api/orders/${encodeURIComponent(receipt.id)}`, { signal: controller.signal }));
       // POST returns 202 before the Event Hubs consumer registers the order. Only a
       // freshly accepted receipt gets this bounded readiness wait, never a live polling loop.
       if (response.status === 404 && waitForAcceptedOrder && Date.now() - Date.parse(receipt.placedAt) < 30000) {

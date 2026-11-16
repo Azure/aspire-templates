@@ -164,6 +164,46 @@ References: [Aspire SignalR integration](https://aspire.dev/integrations/cloud/a
 [emulator limitations](https://learn.microsoft.com/azure/azure-signalr/signalr-howto-emulator),
 [Management SDK](https://learn.microsoft.com/azure/azure-signalr/signalr-howto-use-management-sdk).
 
+## Tracing
+
+Every .NET project calls `AddServiceDefaults()` from `DroneDelivery.ServiceDefaults`,
+which exports OpenTelemetry traces, metrics and logs to the Aspire dashboard. The
+app's own spans use the `DroneDelivery` activity source. One customer order is one
+connected trace:
+
+`customer place order` (browser) → customer-server proxy → backend `POST /api/orders`
+→ `send orders` → `process orders` → `dispatch assign drone` → `send drone-missions`
+→ drone-simulator `process drone-missions` → `drone await departure`,
+`drone fly to pickup`, `drone load order`, `drone fly to customer`,
+`drone unload order`, `drone return to pad` → `drone camera capture` with blob
+uploads and `send drone-photos` → backend milestone processing →
+`realtime publish order update`.
+
+- Event Hubs messages carry W3C `traceparent`/`tracestate` in their application
+  properties. The Event Hubs SDK's own spans are turned off so each send and
+  receive appears once.
+- Demo skips (`demo skip {stage}`) and customer-simulator orders start their own
+  traces. Skips link to the order's trace.
+- Spans carry only IDs, stages, payload sizes and counts. Customer names,
+  coordinates, order contents, tokens and photo bytes are never recorded.
+- Drone position ticks, operator snapshot broadcasts and other rootless HTTP calls,
+  such as the SignalR management SDK's periodic requests, are not traced, so the
+  dashboard isn't flooded. Failed broadcasts still emit an error span.
+
+In the browser, both sites wrap user actions in spans (`customer place order`,
+`customer skip stage`, `customer load order` and `operator load snapshot`). Fetch
+instrumentation passes `traceparent` to the same-origin UI server. Browsers can only
+export OTLP over HTTP. The AppHost sets `WithOtlpExporter(OtlpProtocol.HttpProtobuf)`
+on the Vite apps, and each Vite dev server proxies `/otlp` to the dashboard and adds
+the dashboard API key server-side, so the key never reaches the browser.
+
+Tracing limits:
+
+- Browser spans are exported only while the site runs under the Vite dev server.
+  Published sites have no browser exporter.
+- The SignalR emulator's delivery to the browser over WebSockets is not traced.
+- Blob container creation shows a handled `409` from `CreateIfNotExists`.
+
 ## Things to try
 
 1. Choose a **Single**, **Double** or **Quad** flight box (one, two or four
@@ -304,7 +344,9 @@ charging before departure, queueing behind busy drones, unserviceable orders and
 drones becoming available again. The frontend tests cover payload capacity, variant identity/pricing, customization snapshots,
 conservative transcript matching, confirmation-only order creation, invalid
 configurations, the simulation lifecycle, the order's drone flight, South Melbourne
-coordinate mapping and demo stage skipping. The Azure Maps SDK and three.js are loaded only when needed;
+coordinate mapping, demo stage skipping and browser action spans. The .NET tests
+also cover trace context crossing Event Hubs properties and keeping customer
+details out of spans. The Azure Maps SDK and three.js are loaded only when needed;
 their large vendor chunks produce a Vite size advisory.
 
 ## Not ready yet

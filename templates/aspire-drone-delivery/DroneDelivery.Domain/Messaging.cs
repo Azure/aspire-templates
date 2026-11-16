@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Azure.Messaging.EventHubs;
 using Azure.Messaging.EventHubs.Consumer;
 using Azure.Messaging.EventHubs.Producer;
@@ -20,14 +21,38 @@ public static class Messaging
         if (data.Properties.TryGetValue(EventSerializer.TypeProperty, out var type) && Equals(type, typeof(T).Name))
         {
             message = EventSerializer.Deserialize<T>(data.EventBody.ToMemory().Span);
+            if (Activity.Current is { Kind: ActivityKind.Consumer } current && current.Source == Tracing.Source)
+                current.Describe(message);
             return true;
         }
         message = default!;
         return false;
     }
 
-    public static Task SendAsync<T>(this EventHubProducerClient producer, T message, string partitionKey, CancellationToken cancellationToken) =>
-        producer.SendAsync([ToEventData(message)], new SendEventOptions { PartitionKey = partitionKey }, cancellationToken);
+    /// <summary>
+    /// Sends one event. Traced sends get a producer span whose context travels in the event's properties, parented
+    /// to <paramref name="parent"/> or the current span. Pass <paramref name="traced"/> false for high-frequency
+    /// readings (drone telemetry) that would otherwise flood the trace view.
+    /// </summary>
+    public static async Task SendAsync<T>(this EventHubProducerClient producer, T message, string partitionKey, CancellationToken cancellationToken,
+        ActivityContext parent = default, bool traced = true)
+    {
+        var data = ToEventData(message);
+        using var activity = traced ? Tracing.Start($"send {producer.EventHubName}", parent, ActivityKind.Producer) : null;
+        activity?.SetTag("messaging.system", "eventhubs").SetTag("messaging.operation.type", "send")
+            .SetTag("messaging.destination.name", producer.EventHubName).SetTag("drone_delivery.message.type", typeof(T).Name)
+            .Describe(message);
+        Tracing.Inject(activity, data.Properties);
+        try
+        {
+            await producer.SendAsync([data], new SendEventOptions { PartitionKey = partitionKey }, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            activity.Failed(exception);
+            throw;
+        }
+    }
 
     /// <summary>Reads new events from every partition, reconnecting if the hub is not ready yet.</summary>
     public static async Task ConsumeAsync(
@@ -44,12 +69,20 @@ public static class Messaging
                 {
                     if (partitionEvent.Data is null)
                         continue;
+                    // Only traced sends carry context; untraced telemetry is processed without a span.
+                    var parent = Tracing.Extract(partitionEvent.Data.Properties);
+                    using var activity = parent == default ? null
+                        : Tracing.Start($"process {consumer.EventHubName}", parent, ActivityKind.Consumer);
+                    activity?.SetTag("messaging.system", "eventhubs").SetTag("messaging.operation.type", "process")
+                        .SetTag("messaging.destination.name", consumer.EventHubName)
+                        .SetTag("drone_delivery.message.type", partitionEvent.Data.Properties.TryGetValue(EventSerializer.TypeProperty, out var type) ? type : null);
                     try
                     {
                         await handle(partitionEvent.Data, cancellationToken);
                     }
                     catch (Exception exception) when (exception is not OperationCanceledException)
                     {
+                        activity.Failed(exception);
                         logger.LogError(exception, "Failed to handle an event from {Hub}", consumer.EventHubName);
                     }
                 }

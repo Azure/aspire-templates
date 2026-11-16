@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace DroneDelivery.Domain;
 
 public enum OrderStatus
@@ -41,6 +43,8 @@ public sealed class OrderView(OrderPlaced order, PickupLocation store, DateTimeO
     public DateTimeOffset? DeliveredAt { get; set; }
     public string? Note { get; set; }
     public List<OrderPhoto> Photos { get; } = [];
+    /// <summary>The span that accepted the order; later dispatch, mission and realtime spans join its trace.</summary>
+    public ActivityContext Trace { get; init; }
 
     public OrderSnapshot Snapshot() => new(Order, Store, ReadyAt, Status, DroneId, DroneClass, DepartAt, EstimatedPickup, EstimatedDelivery, DeliveredAt, Note, [.. Photos]);
 }
@@ -60,10 +64,10 @@ public sealed class Dispatcher
     readonly Dictionary<string, OrderView> orders = [];
     readonly Dictionary<string, OrderView> byMission = [];
 
-    public OrderSnapshot Accept(OrderPlaced order)
+    public OrderSnapshot Accept(OrderPlaced order, ActivityContext trace = default)
     {
         var store = ServiceArea.NearestStore(order.DropOff);
-        var view = new OrderView(order, store, order.PlacedAt + LogisticsPlanner.PreparationTime(order.PayloadBays));
+        var view = new OrderView(order, store, order.PlacedAt + LogisticsPlanner.PreparationTime(order.PayloadBays)) { Trace = trace };
         lock (gate)
             return (orders.TryAdd(order.OrderId, view) ? view : orders[order.OrderId]).Snapshot();
     }
@@ -148,6 +152,8 @@ public sealed class Dispatcher
                     view.Note = committed.Values.Any(drone => DroneSpec.For(drone.Class).CanCarry(view.Order.PayloadBays))
                         ? "Out of range for every capable drone"
                         : $"No drone in the fleet has {view.Order.PayloadBays} bays";
+                    using (var unserviceable = Tracing.Start("dispatch unserviceable", view.Trace))
+                        unserviceable.Describe(view.Order)?.SetStatus(ActivityStatusCode.Error, view.Note);
                     continue;
                 }
                 var missionId = $"{plan.DroneId}-{view.Order.OrderId}";
@@ -167,6 +173,12 @@ public sealed class Dispatcher
             }
         }
         return missions;
+    }
+
+    public ActivityContext TraceOf(string orderId)
+    {
+        lock (gate)
+            return orders.GetValueOrDefault(orderId)?.Trace ?? default;
     }
 
     public IReadOnlyList<DroneTelemetry> Fleet()
