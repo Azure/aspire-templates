@@ -48,6 +48,12 @@ The AppHost starts:
 | `operator-site` | Independent Vite/React app in `operator-frontend`, published into OperatorServer `wwwroot` |
 | `signalr` | Azure SignalR Service local emulator, using Serverless mode |
 
+Every resource is tagged so the dashboard's **Filters → Tags** can slice by kind
+(`frontends`, `servers`, `simulators`, `infrastructure`) or by role (`customer`,
+`operator`). Generated children such as `eventhubs-storage`, `storage-blobs` and the
+npm installers are tagged explicitly because they don't inherit their parent's tags.
+`WithTags` is an evaluation API in Aspire 17 (`ASPIRERESOURCETRAITS001`).
+
 The development launch profile uses localhost HTTP endpoints; its unsecured
 transport opt-in is local development configuration, not a deployment setting.
 
