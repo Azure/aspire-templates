@@ -1,25 +1,12 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'vitest';
-import { addToBag, bagFromBays, baysFromBag, bagTotal, canPickup, emptyBays, resizeBays, bagUnits, defaultCoffee, demoFlights, demoReducer, destinationFor, dropOffs, initialState, kitchen, linePrice, makeLine, matchSpokenOrder, orderFlight, stageTicks, validBag } from '../src/demo.ts';
+import { addToBag, bagFromBays, baysFromBag, bagTotal, canPickup, emptyBays, resizeBays, bagUnits, defaultCoffee, demoFlights, demoReducer, destinationFor, dropOffs, initialState, kitchen, linePrice, makeLine, orderFlight, stageTicks, validBag } from '../src/demo.ts';
 import { fromLonLat, toLonLat } from '../src/mapGeometry.ts';
 import type { Bag, Bays, CoffeeOptions, Order } from '../src/demo.ts';
 
-test('voice proposes default coffees and treats without placing an order', () => {
-  const proposal = [makeLine('latte'), { ...makeLine('biscuit'), quantity: 2 }];
-  assert.deepEqual(matchSpokenOrder('One latte and two biscuits, please!'), { bag: proposal });
-  assert.equal(bagTotal(proposal), 11.5);
+test('default lines price a latte and two biscuits', () => {
+  assert.equal(bagTotal([makeLine('latte'), { ...makeLine('biscuit'), quantity: 2 }]), 11.5);
   assert.equal(initialState.orders.length, 3);
-  assert.deepEqual(matchSpokenOrder('two flat whites and a long black').bag, [
-    { ...makeLine('flat-white'), quantity: 2 }, makeLine('long-black'),
-  ]);
-});
-
-test('ambiguous, unknown, modified and invalid quantities need clarification', () => {
-  for (const transcript of ['', 'a burger', 'latte', 'one latte with oat milk', 'one biscuit without nuts', 'zero lattes', '0 lattes', '10 lattes', '9 lattes and 1 latte', 'one cake and whatever else']) {
-    const result = matchSpokenOrder(transcript);
-    assert.ok(result.error, transcript);
-    assert.deepEqual(result.bag, []);
-  }
 });
 
 test('every coffee or treat fills exactly one bay of a single, double or quad payload', () => {

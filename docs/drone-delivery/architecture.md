@@ -48,7 +48,7 @@ start at the latest event, so restarting a worker does not replay old missions.
 | Drone simulator | Fleet of Piccolo/Doppio/Abbondante drones; missions, charging, telemetry, camera shots | In-memory fleet; SVG placeholder images |
 | Customer simulator | Peak-and-quiet demand from many customers at random drop-offs | Synthetic only |
 | API and logistics | Accept orders, assign drones, estimate delivery, expose fleet/orders/photos | In-memory order state; no persistence |
-| Customer React site | Payload selection, coffee builder, tray, own orders/tracking and scripted transcript matching | POST orders; scoped realtime receipt subscriptions; up to 20 localStorage receipts; no real authentication |
+| Customer React site | Payload selection, coffee builder, tray, own orders/tracking | POST orders; scoped realtime receipt subscriptions; up to 20 localStorage receipts; no real authentication |
 | Operator React site | All stores, fleet, dispatch queue, battery and queued work | Initial REST snapshot plus operator realtime stream; latest 100 orders; no browser simulation |
 | CustomerServer / OperatorServer | Serve independent frontends and proxy backend REST/negotiate routes | No Event Hubs consumers, dispatch logic or authoritative state |
 | Simulated drone camera | Lazily loaded three.js view positioned by assigned-order telemetry; separate last captured blob frame | Placeholder scenery; not video; Azure Maps tiles only with the reviewer's token |
@@ -122,12 +122,6 @@ updates with authorization and persistence. Both sites already show backend
 simulation state through SignalR. Keep the single-company ForthCoffee scope.
 Evaluate persistence and messaging against demonstrable sample value and the
 local prerequisites, rather than adding Azure services solely for a diagram.
-
-Speech capture and transcription should produce a transcript for a
-catalog-constrained AI interpretation layer. Validate product IDs/options/
-quantities on the server, disclose uncertainty and preserve explicit customer
-confirmation. Do not retain raw audio. Keep a testable provider-independent
-local path. The current deterministic text matcher is not an AI implementation.
 
 The eventual `aspire deploy` path must guide Azure configuration and verify the
 deployed customer/operations sites from a fresh generated project. The current

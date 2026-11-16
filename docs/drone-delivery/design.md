@@ -55,13 +55,6 @@ The map is illustrative and cannot support navigation or real flight planning.
    order remains Ready for pickup. The same views continue through loading into
    delivery. Queued assignments, unrelated missions and stale fixes never become
    a misleading live view. The last captured backend frame is labelled separately.
-5. Offer a voice shortcut without making the menu less usable. The spike uses an
-   editable example transcript; the UI explicitly says that it accesses no
-   microphone and calls no AI.
-6. Match only recognized menu items and quantities. A voice proposal replaces the
-   bag only after the user chooses it, and placing the order still needs a
-   separate confirmation. Unsupported modifiers, dietary requests, unknown
-   products or ambiguous quantities ask for clarification.
 
 The menu is five coffee styles plus a biscuit, cake and croissant. The company's
 single-bar experience replaces the earlier multi-vendor direction. Do not add a
@@ -83,18 +76,13 @@ Battery, drone class, altitude, current order and queued missions are reported
 telemetry, not decorative constants. Browser skip, pickup and reset controls are
 removed because they would contradict the server-owned lifecycle.
 
-## Maps and voice feasibility
+## Maps feasibility
 
 Azure Maps is the preferred provider to investigate. The integrated alternative
 renders an actual basemap with fictional overlays using a reviewer-supplied,
 short-lived Entra token. The default illustrated map needs no Azure account.
 Live authentication, account policies and billing cannot be verified without
 authorized account access. See the template README for the exact test path.
-
-For voice, a future implementation should separate capture/transcription from
-catalog-constrained interpretation. The customer owns the final confirmation.
-Never retain raw audio by default or silently reinterpret allergy/dietary
-requirements. An accessible text/manual flow must remain available.
 
 ## Immediate review criteria
 
@@ -105,8 +93,6 @@ requirements. An accessible text/manual flow must remain available.
 - Customer ordering appears in the independent operations queue via the shared API.
 - Ready orders follow only their assigned inbound mission and retain the camera
   through pickup and delivery.
-- The scripted voice flow exposes its mock nature and never places an implicit
-  order; unknown or modified requests stop for clarification.
 - Illustrative versus Azure Maps data and the simulation's limitations are clear.
 
 These are interaction checks, not proof of improved developer onboarding.
@@ -125,6 +111,5 @@ server-owned order/recipe/payload contracts, a deterministic simulator and
 real-time delivery updates. Choose messaging/storage only when their demo value
 justifies the added setup and cloud cost.
 
-Open decisions for the owner: accept or adjust this visual direction; select the
-hosted speech/AI capability and cost boundary; approve the Azure resource plan
+Open decisions for the owner: accept or adjust this visual direction; approve the Azure resource plan
 before provisioning. No autonomous merges or paid-resource creation are granted.

@@ -192,24 +192,6 @@ export function demoReducer(state: DemoState, action: Action): DemoState {
   return { ...state, orders, ticks, dronePads };
 }
 
-export function matchSpokenOrder(transcript: string): { bag: Bag; error?: string } {
-  const input = transcript.trim().toLowerCase().replace(/[.,!?]/g, '');
-  const bag: Bag = [];
-  const quantities: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9 };
-  const remaining = input.replace(/\b(a|an|one|two|three|four|five|six|seven|eight|nine|\d+)\s+(flat whites?|lattes?|cappuccinos?|long blacks?|espressos?|biscuits?|cakes?|croissants?)\b/g,
-    (_match, quantity: string, name: string) => {
-      const itemId = name.replace(/s$/, '').replace(' ', '-');
-      const line = makeLine(itemId);
-      const existing = bag.find(entry => entry.id === line.id);
-      const count = quantities[quantity] ?? Number(quantity);
-      if (existing) existing.quantity += count;
-      else bag.push({ ...line, quantity: count });
-      return '';
-    }).replace(/\b(please|and|can|i|have|would|like|order|me|could|you|get|thanks)\b/g, '').trim();
-  if (remaining || !validBag(bag)) return { bag: [], error: 'Try “one latte and two biscuits”. Coffees use regular, hot, double-shot defaults. Use the coffee builder for milk, size and other changes; dietary requests cannot be interpreted safely here.' };
-  return { bag };
-}
-
 export const money = (value: number) => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(value);
 export function demoFlights(tick: number) {
   return [0, 1, 2, 3].map(index => {

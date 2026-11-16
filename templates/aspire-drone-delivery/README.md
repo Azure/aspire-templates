@@ -4,8 +4,8 @@
 company in South Melbourne, Victoria: choose a payload, customize coffees and pack
 treats, then follow a simulated drone. Two independent Vite/React sites share
 server-owned orders and fleet telemetry: a customer-only coffee experience and
-a fleet operations site. The voice-ordering shortcut is scripted.
-No real orders, payments, microphone recordings or drone flights occur.
+a fleet operations site.
+No real orders, payments or drone flights occur.
 
 ## Run the design
 
@@ -262,15 +262,7 @@ Tracing and metrics limits:
    30 seconds for loading. Preparation takes 45 seconds plus 15 per payload bay;
    flight duration depends on distance and drone class. There are no browser
    skip/pickup/pause/reset controls that could contradict server state.
-3. Choose **Try a voice-order preview**. Edit “one latte and two biscuits”,
-   match it to the menu, review the proposed payload, then separately confirm.
-   Coffee defaults are regular, hot, double-shot with full cream milk (or no milk
-   for espresso/long black). Edit cups with the builder afterward. Proposals must
-   fit the chosen payload; they never silently resize it. The preview uses a
-   small deterministic matcher, not speech recognition or an AI service.
-   Unknown items, unsupported modifications and quantities outside 1–9 need
-   clarification rather than silently changing the request.
-4. Open **Map options** to investigate an Azure Maps basemap.
+3. Open **Map options** to investigate an Azure Maps basemap.
 
 Only API-reported drones appear in the operations map. Customer tracking uses the
 assigned drone's actual simulator telemetry, with no browser-generated flight leg.
@@ -375,7 +367,7 @@ npm run build
 The .NET tests cover VTOL flight legs, drone selection by payload, waiting and
 charging before departure, queueing behind busy drones, unserviceable orders and
 drones becoming available again. The frontend tests cover payload capacity, variant identity/pricing, customization snapshots,
-conservative transcript matching, confirmation-only order creation, invalid
+confirmation-only order creation, invalid
 configurations, the simulation lifecycle, the order's drone flight, South Melbourne
 coordinate mapping, demo stage skipping and browser action spans. The .NET tests
 also cover trace context crossing Event Hubs properties and keeping customer
@@ -384,8 +376,8 @@ their large vendor chunks produce a Vite size advisory.
 
 ## Not ready yet
 
-`aspire deploy` is **not configured in this design phase**. Real Azure deployment,
-genuine speech/AI integration and production identity/persistence are subsequent work.
+`aspire deploy` is **not configured in this design phase**. Real Azure deployment
+and production identity/persistence are subsequent work.
 Customer and operator clients already use the authoritative backend and scoped
 SignalR updates. Do not treat this preview as meeting deployment acceptance criteria.
 

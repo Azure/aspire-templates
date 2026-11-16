@@ -71,13 +71,6 @@ main { max-width: 1600px; margin: auto; }
 .add-button { width: 29px; height: 29px; border: 1px solid #dce2d2; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: transparent; }
 .add-button:hover, .add-button.added { background: #e8eddc; }
 .add-button.added { width: 44px; border-radius: 18px; gap: 5px; font-size: 10px; }
-.voice-banner { position: relative; margin: 0 5.2% 10px; border: 1px solid #e2e5d7; background: #eff0e6; border-radius: 7px; padding: 26px 31px; display: flex; align-items: center; gap: 21px; overflow: hidden; }
-.voice-banner-icon { display: grid; place-items: center; width: 59px; height: 59px; border-radius: 50%; border: 1px solid #d7ddc9; background: #e5ead8; }
-.voice-banner h2 { font-family: Georgia, serif; font-size: 22px; font-weight: 400; margin: 6px 0; letter-spacing: -.3px; }
-.voice-banner p { font-size: 10px; color: #7d866e; }
-.voice-banner .eyebrow { font-size: 7px; }
-.voice-banner .primary-button { margin-left: auto; font-size: 10px; }
-.preview-label { position: absolute; top: 9px; right: 13px; font-size: 6px; letter-spacing: 1.2px; color: #839074; }
 .customer-map-section { padding-top: 32px; }
 .customer-map-section .section-heading { margin-bottom: 25px; }
 .customer-map-section .delivery-map { border-radius: 7px; border: 1px solid var(--line); }
@@ -178,14 +171,9 @@ footer button { display: flex; align-items: center; gap: 7px; background: none; 
 .modal h2 { font-family: Georgia, serif; font-size: 31px; font-weight: 400; letter-spacing: -.6px; margin: 11px 0 14px; }
 .modal > p { color: #7a856f; font-size: 12px; line-height: 1.8; margin-bottom: 20px; }
 .field-label { display: block; font-size: 10px; font-weight: 600; margin: 20px 0 8px; color: #5e7251; line-height: 1.6; }
-.modal input, .modal textarea { width: 100%; display: block; border: 1px solid #d9e0cf; border-radius: 5px; padding: 12px; background: #fffef8; font-size: 12px; color: var(--ink); }
-.modal textarea { resize: vertical; min-height: 85px; margin-bottom: 14px; line-height: 1.7; }
+.modal input { width: 100%; display: block; border: 1px solid #d9e0cf; border-radius: 5px; padding: 12px; background: #fffef8; font-size: 12px; color: var(--ink); }
 .full-width { width: 100%; }
 .privacy-note { font-size: 9px !important; color: #879276 !important; margin-top: 20px; line-height: 1.7; display: flex; align-items: center; gap: 7px; }
-.voice-proposal { background: #edf1e4; padding: 18px; border: 1px solid #d6dfca; border-radius: 6px; margin-top: 20px; }
-.voice-proposal > div:not(.eyebrow) { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; padding: 13px 0; border-bottom: 1px solid #dbe3d0; }
-.voice-proposal strong { white-space: nowrap; font-size: 11px; }
-.voice-proposal p { color: #7b886c; font-size: 10px; line-height: 1.7; margin: 12px 0; }
 .form-error { color: #9a492c !important; font-size: 11px !important; margin: 13px 0 !important; line-height: 1.7; }
 .modal .small-print { font-size: 9px; margin-top: 10px; }
 .modal .text-button { margin-top: 9px; font-size: 11px; }
@@ -335,7 +323,6 @@ footer button { display: flex; align-items: center; gap: 7px; background: none; 
 .menu-biscuit .food-frame { background: #eee0cc; }
 .menu-cake .food-frame { background: #efead5; }
 .menu-croissant .food-frame { background: #eadfcf; }
-.voice-banner .outline-button { margin-left: auto; }
 .payload-dock { position: sticky; bottom: 16px; z-index: 10; max-width: 660px; margin: 0 auto 28px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border: 1px solid #c4cfb5; border-radius: 9px; background: #fffdf3f2; backdrop-filter: blur(12px); padding: 13px 15px; box-shadow: 0 8px 38px #24372324; }
 .payload-dock > div { display: flex; align-items: center; gap: 12px; }
 .payload-dock strong { font-size: 12px; font-weight: 600; display: block; }
@@ -402,12 +389,6 @@ footer button { display: flex; align-items: center; gap: 7px; background: none; 
   .customer-map-section { padding: 30px 5%; }
   .section-heading { align-items: flex-start; flex-wrap: wrap; gap: 15px; }
   .section-heading h2 { font-size: 28px; }
-  .voice-banner { margin: 0 5%; padding: 23px 20px; flex-wrap: wrap; gap: 15px; }
-  .voice-banner-icon { width: 42px; height: 42px; }
-  .voice-banner > div { flex: 1; }
-  .voice-banner h2 { font-size: 19px; line-height: 1.4; }
-  .voice-banner .primary-button { width: 100%; margin-top: 4px; }
-  .voice-banner .eyebrow { font-size: 6px; }
   .map-location { left: 12px; top: 12px; }
   .map-location-detail { display: none; }
   .map-zoom { right: 12px; top: 12px; }
@@ -483,7 +464,6 @@ footer button { display: flex; align-items: center; gap: 7px; background: none; 
   .packing-preview-bottom { margin-top: 24px; }
   .well-empty span { font-size: 10px; }
   .well-empty small { font-size: 7px; }
-  .voice-banner .outline-button { width: 100%; justify-content: center; margin: 0; }
   .payload-dock { margin: 0 12px 16px; padding: 10px; gap: 9px; bottom: 10px; }
   .payload-dock > div { gap: 7px; }
   .payload-dock > div > svg { width: 17px; }
