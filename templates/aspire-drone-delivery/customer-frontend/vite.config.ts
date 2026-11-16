@@ -12,6 +12,7 @@ const otlpAttributes = Object.fromEntries((process.env.OTEL_RESOURCE_ATTRIBUTES 
 
 export default defineConfig({
   plugins: [react()],
+  resolve: { dedupe: ['react', 'react-dom', 'three'] },
   define: {
     __OTEL__: JSON.stringify(otlpEndpoint
       ? { serviceName: process.env.OTEL_SERVICE_NAME ?? 'customer-site', attributes: otlpAttributes } : null),

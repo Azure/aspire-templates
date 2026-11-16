@@ -47,6 +47,10 @@ public static class Tracing
             return null;
         switch (message)
         {
+            case DroneCommandRequested command:
+                activity.SetTag("drone_delivery.drone.id", command.DroneId).SetTag("drone_delivery.command", command.Command.ToString())
+                    .SetTag("drone_delivery.command.id", command.CommandId);
+                break;
             case OrderPlaced order:
                 activity.SetTag("drone_delivery.order.id", order.OrderId).SetTag("drone_delivery.order.payload_bays", order.PayloadBays)
                     .SetTag("drone_delivery.order.source", order.Source);

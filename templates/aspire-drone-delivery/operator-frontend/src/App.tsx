@@ -6,6 +6,7 @@ import { fleetRequest, ordersRequest, stageFor, storesRequest } from './api';
 import { fromLonLat } from './mapGeometry';
 import { useRealtimeSnapshot } from './useApi';
 import { airborne, droneLabel, fleetMap } from './model';
+import DroneDrawer from './DroneDrawer';
 
 export default function App() {
   const load = useCallback(async (signal: AbortSignal) => {
@@ -17,7 +18,9 @@ export default function App() {
   const [mapDialog, setMapDialog] = useState(false);
   const [clientId, setClientId] = useState('');
   const [token, setToken] = useState('');
-  const active = data.orders.filter(snapshot => snapshot.status !== 'Delivered');
+  const [selected, setSelected] = useState<string | null>(null);
+  const selectedDrone = data.fleet.find(drone => drone.droneId === selected);
+  const active = data.orders.filter(snapshot => !['Delivered', 'Failed', 'Unserviceable'].includes(snapshot.status));
   return <div className="app-shell">
     <div className="demo-strip"><span>FORTHCOFFEE / FLEET OPERATIONS</span><span>Simulated drones. Shared logistics.</span></div>
     <header className="site-header"><a className="wordmark" href="/"><span className="brand-symbol"><Coffee size={23} /></span>Forth<span className="wordmark-light">Coffee</span><span className="brand-period">.</span></a><span className="location"><MapPin size={14} />South Melbourne operations</span></header>
@@ -48,11 +51,12 @@ export default function App() {
         </aside>
       </div>
       <section className="operations-roster"><div className="section-heading"><h2>On the roster</h2><p>Live battery, work and class from the simulator.</p></div>
-        <div className="operations-drones">{data.fleet.map(drone => <article key={drone.droneId}><Drone size={22} /><strong>{drone.droneId}</strong><span>{drone.class} · {droneLabel(drone)}</span><span>{Math.round(drone.batteryPercent)}% battery · ALT {Math.round(drone.altitudeMetres)} m</span><small>{drone.orderId ?? 'No active order'} · {drone.queuedMissions} queued</small></article>)}</div>
+        <div className="operations-drones">{data.fleet.map(drone => <article key={drone.droneId}><Drone size={22} /><strong>{drone.droneId}</strong><span>{drone.class} · {droneLabel(drone)}</span><span>{Math.round(drone.batteryPercent)}% battery · ALT {Math.round(drone.altitudeMetres)} m</span><small>{drone.orderId ?? 'No active order'} · {drone.queuedMissions} queued</small><button className="outline-button" onClick={() => setSelected(drone.droneId)} aria-label={`Inspect drone ${drone.droneId}`}>Camera &amp; controls</button></article>)}</div>
       </section>
-      <p className="privacy-note"><ShieldCheck size={14} />Fictional orders and flights. Logistics controls dispatch; this site observes the shared simulation.</p>
+      <p className="privacy-note"><ShieldCheck size={14} />Fictional orders and flights. Logistics handles dispatch; operator commands affect the simulation only.</p>
     </main>
     <footer><span className="footer-brand">ForthCoffee.</span><span>Fleet operations · Built with Aspire.</span></footer>
+    {selectedDrone && <DroneDrawer key={selectedDrone.droneId} drone={selectedDrone} fleet={data.fleet} settings={maps} onSelect={setSelected} onClose={() => setSelected(null)} />}
     {mapDialog && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-labelledby="maps-title"><button className="modal-close icon-button" aria-label="Close map settings" onClick={() => setMapDialog(false)}><X /></button><h2 id="maps-title">Map perspective</h2><p>Use the credential-free illustrated map, or your existing Azure Maps account. Tokens stay in page memory; usage may incur charges.</p><label className="field-label" htmlFor="client">Account client ID</label><input id="client" value={clientId} onChange={event => setClientId(event.target.value)} /><label className="field-label" htmlFor="token">Short-lived Entra token</label><input id="token" type="password" autoComplete="off" value={token} onChange={event => setToken(event.target.value)} /><button className="primary-button full-width" disabled={!clientId.trim() || !token.trim()} onClick={() => { setMaps({ clientId: clientId.trim(), token: token.trim() }); setToken(''); setMapDialog(false); }}>Explore Azure Maps</button><button className="text-button full-width" onClick={() => { setMaps(null); setToken(''); setMapDialog(false); }}>Use illustrated map</button></div></div>}
   </div>;
 }

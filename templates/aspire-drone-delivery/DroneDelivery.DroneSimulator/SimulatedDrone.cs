@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using DroneDelivery.Domain;
 
 namespace DroneDelivery.DroneSimulator;
@@ -13,17 +14,23 @@ public sealed class SimulatedDrone(string id, DroneSpec spec, GeoPoint homePad, 
     public GeoPoint Position { get; set; } = homePad;
     public double AltitudeMetres { get; set; }
     public double Heading { get; set; }
+    public double CameraPitchDegrees { get; set; } = -90;
+    public bool CarryingPackage { get; set; }
+    public DroneControl? Control { get; set; }
+    public ActivityContext MissionTrace { get; set; }
     public double? FlightProgress { get; set; }
     public double BatteryPercent { get; set; } = battery;
     public DroneState State { get; set; } = battery < 100 ? DroneState.Charging : DroneState.Parked;
     public Manoeuvre Manoeuvre { get; set; } = Manoeuvre.OnTheGround;
     public MissionAssigned? Mission { get; set; }
     public ConcurrentQueue<MissionAssigned> Queue { get; } = new();
+    public ConcurrentQueue<(DroneCommandRequested Request, ActivityContext Trace)> Commands { get; } = new();
+    public HashSet<string> ProcessedCommands { get; } = [];
 
     public DroneTelemetry Telemetry(DateTimeOffset now) => new(
         Id, Spec.Class, Interlocked.Increment(ref sequence), now, Position, HomePad,
         Math.Round(AltitudeMetres, 1), Math.Round(Heading), Math.Round(BatteryPercent, 1),
-        State, Manoeuvre, Mission?.MissionId, Mission?.OrderId, Queue.Count, FlightProgress);
+        State, Manoeuvre, Mission?.MissionId, Mission?.OrderId, Queue.Count, FlightProgress, CameraPitchDegrees, Control, CarryingPackage);
 
     /// <summary>Parked drones sit on their charging pad and top up.</summary>
     public void ChargeFor(TimeSpan elapsed)

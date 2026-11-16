@@ -2,3 +2,26 @@
 .operations-drones { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
 .operations-drones article { display: flex; flex-direction: column; gap: 9px; padding: 20px; background: #fffdf7; border: 1px solid #dde1d5; border-radius: 8px; }
 .operations-drones small { color: #73816c; }
+.operations-drones .outline-button { align-self: flex-start; margin-top: 5px; }
+.drawer-backdrop { position: fixed; inset: 0; z-index: 70; background: #14281e66; }
+.drone-drawer { position: absolute; right: 0; top: 0; bottom: 0; width: min(580px, 100%); background: #faf9f3; box-shadow: -8px 0 40px #17382c33; overflow-y: auto; overscroll-behavior: contain; animation: drawer-in .2s ease-out; }
+.drawer-heading { display: flex; align-items: center; justify-content: space-between; padding: 22px 24px 12px; }
+.drawer-heading h2 { font-size: 25px; margin: 8px 0 0; font-weight: 500; }
+.drone-select { display: flex; align-items: center; justify-content: space-between; margin: 0 24px 16px; font-size: 12px; }
+.drone-select select { background: #fffdf7; color: var(--forest); border: 1px solid var(--line); padding: 8px 14px; border-radius: 5px; font: inherit; }
+.drone-drawer .drone-cam { height: 330px; }
+.drawer-body { padding: 24px; }
+.drone-facts { display: grid; gap: 7px; color: var(--muted); font-size: 12px; }
+.drone-facts strong { color: var(--forest); font-size: 16px; }
+.command-disclaimer { font-size: 11px; line-height: 1.7; color: var(--muted); margin: 18px 0; }
+.command-status { font-size: 12px; line-height: 1.6; padding: 12px; background: #eaf0e2; border-left: 3px solid #879d71; }
+.drone-commands { display: grid; gap: 16px; margin-top: 20px; }
+.drone-commands > div { display: grid; gap: 5px; }
+.drone-commands button { text-align: left; padding: 13px 15px; border: 1px solid #ccd6c3; border-radius: 5px; background: #fffdf7; color: var(--forest); font-size: 12px; font-weight: 600; }
+.drone-commands button:hover:not(:disabled) { background: #eaf0e2; }
+.drone-commands button:disabled { opacity: .48; cursor: not-allowed; }
+.drone-commands .command-danger { color: #934b38; border-color: #d7b6a9; }
+.drone-commands small { font-size: 10px; line-height: 1.6; color: var(--muted); }
+@keyframes drawer-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@media (max-width: 650px) { .drone-drawer .drone-cam { height: 280px; } .drawer-body { padding: 20px; } }
+@media (prefers-reduced-motion: reduce) { .drone-drawer { animation: none; } }

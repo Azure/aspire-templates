@@ -47,6 +47,10 @@ public enum DroneState
     FlyingToCustomer,
     Unloading,
     ReturningToPad,
+    EmergencyLanding,
+    Grounded,
+    FlyingToWaste,
+    DiscardingPackage,
 }
 
 public enum Manoeuvre
@@ -58,32 +62,46 @@ public enum Manoeuvre
 }
 
 /// <summary>One take-off, cruise and landing between two points. Drones climb and descend vertically.</summary>
-public sealed record FlightLeg(DroneSpec Spec, GeoPoint From, GeoPoint To)
+public sealed record FlightLeg(DroneSpec Spec, GeoPoint From, GeoPoint To,
+    double? InitialHeading = null, double InitialAltitudeMetres = 0, bool LandingOnly = false)
 {
     public double DistanceMetres => From.DistanceTo(To);
     public TimeSpan VerticalDuration => TimeSpan.FromSeconds(DroneSpec.CruiseAltitudeMetres / Spec.VerticalSpeedMetresPerSecond);
-    public TimeSpan CruiseDuration => TimeSpan.FromSeconds(DistanceMetres / Spec.CruiseSpeedMetresPerSecond);
-    public TimeSpan Duration => VerticalDuration * 2 + CruiseDuration;
-    public double BatteryPercent => DistanceMetres / 1000 * Spec.BatteryPerKm + Spec.BatteryPerVerticalManoeuvre * 2;
+    public TimeSpan ClimbDuration => LandingOnly ? TimeSpan.Zero :
+        TimeSpan.FromSeconds(Math.Max(0, DroneSpec.CruiseAltitudeMetres - InitialAltitudeMetres) / Spec.VerticalSpeedMetresPerSecond);
+    public TimeSpan DescentDuration => LandingOnly
+        ? TimeSpan.FromSeconds(InitialAltitudeMetres / Spec.VerticalSpeedMetresPerSecond) : VerticalDuration;
+    public TimeSpan CruiseDuration => LandingOnly ? TimeSpan.Zero : TimeSpan.FromSeconds(DistanceMetres / Spec.CruiseSpeedMetresPerSecond);
+    public TimeSpan Duration => ClimbDuration + CruiseDuration + DescentDuration;
+    public double BatteryPercent => DistanceMetres / 1000 * Spec.BatteryPerKm +
+        Spec.BatteryPerVerticalManoeuvre * (ClimbDuration + DescentDuration).TotalSeconds / VerticalDuration.TotalSeconds;
 
     public FlightSample At(TimeSpan elapsed)
     {
-        var vertical = VerticalDuration.TotalSeconds;
+        var vertical = ClimbDuration.TotalSeconds;
         var cruise = CruiseDuration.TotalSeconds;
         var t = Math.Clamp(elapsed.TotalSeconds, 0, Duration.TotalSeconds);
         var progress = Duration == TimeSpan.Zero ? 1 : t / Duration.TotalSeconds;
+        var bearing = LandingOnly || DistanceMetres < .01 ? InitialHeading ?? 0 : From.HeadingTo(To);
+        // Keep the arrival heading on the ground, turning by the shortest arc during the next ascent.
+        // An airborne diversion blends its turn over four seconds rather than snapping.
+        var turn = Math.Clamp(t / Math.Max(1, vertical > 0 ? vertical : 4), 0, 1);
+        turn = turn * turn * (3 - 2 * turn);
+        var heading = ((InitialHeading ?? bearing) + ((bearing - (InitialHeading ?? bearing) + 540) % 360 - 180) * turn + 360) % 360;
         if (t < vertical)
-            return new(From, DroneSpec.CruiseAltitudeMetres * t / vertical, Manoeuvre.VerticalClimb, From.HeadingTo(To), progress);
-        if (t <= vertical + cruise)
+            return new(From, InitialAltitudeMetres + (DroneSpec.CruiseAltitudeMetres - InitialAltitudeMetres) * t / vertical,
+                Manoeuvre.VerticalClimb, heading, progress, -90 + 60 * Math.Clamp((t / vertical - .75) * 4, 0, 1));
+        if (!LandingOnly && t < vertical + cruise)
         {
             var fraction = cruise == 0 ? 1 : (t - vertical) / cruise;
-            return new(From.Towards(To, fraction), DroneSpec.CruiseAltitudeMetres, Manoeuvre.Cruise, From.HeadingTo(To), progress);
+            return new(From.Towards(To, fraction), DroneSpec.CruiseAltitudeMetres, Manoeuvre.Cruise, heading, progress, -30);
         }
         var remaining = Duration.TotalSeconds - t;
         return remaining <= 0
-            ? new(To, 0, Manoeuvre.OnTheGround, From.HeadingTo(To), progress)
-            : new(To, DroneSpec.CruiseAltitudeMetres * remaining / vertical, Manoeuvre.VerticalDescent, From.HeadingTo(To), progress);
+            ? new(To, 0, Manoeuvre.OnTheGround, bearing, progress, -90)
+            : new(To, Spec.VerticalSpeedMetresPerSecond * remaining, Manoeuvre.VerticalDescent, heading, progress,
+                LandingOnly ? -90 : -30 - 60 * Math.Clamp((1 - remaining / DescentDuration.TotalSeconds) * 4, 0, 1));
     }
 }
 
-public readonly record struct FlightSample(GeoPoint Position, double AltitudeMetres, Manoeuvre Manoeuvre, double Heading, double Progress);
+public readonly record struct FlightSample(GeoPoint Position, double AltitudeMetres, Manoeuvre Manoeuvre, double Heading, double Progress, double CameraPitchDegrees = -90);

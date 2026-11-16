@@ -34,6 +34,13 @@ public sealed class DroneFleetSimulator(
         {
             if (data.TryRead<DemoStageSkipped>(out var skip))
                 skips.Request(skip);
+            else if (data.TryRead<DroneCommandRequested>(out var command))
+            {
+                if (fleet.TryGetValue(command.DroneId, out var controlled))
+                    controlled.Commands.Enqueue((command, Activity.Current?.Context ?? default));
+                else
+                    logger.LogWarning("Command {CommandId} is for unknown drone {DroneId}", command.CommandId, command.DroneId);
+            }
             else if (data.TryRead<MissionAssigned>(out var mission))
             {
                 if (fleet.TryGetValue(mission.DroneId, out var drone))
@@ -57,6 +64,26 @@ public sealed class DroneFleetSimulator(
         {
             try
             {
+                if (drone.Commands.TryDequeue(out var command))
+                {
+                    try { await ControlAsync(drone, command.Request, command.Trace, cancellationToken); }
+                    catch (Exception exception) when (exception is not OperationCanceledException)
+                    {
+                        drone.ProcessedCommands.Remove(command.Request.CommandId);
+                        drone.Commands.Enqueue(command);
+                        if (drone.Control is { } control)
+                            drone.Control = control with { Message = "Command interrupted by an infrastructure failure; retrying from the current pose." };
+                        throw;
+                    }
+                    continue;
+                }
+                if (drone.State == DroneState.Grounded)
+                {
+                    await RejectQueuedAsync(drone, cancellationToken);
+                    await ReportAsync(drone, cancellationToken);
+                    await Task.Delay(Tick, time, cancellationToken);
+                    continue;
+                }
                 if (drone.Queue.TryDequeue(out var mission))
                 {
                     await FlyMissionAsync(drone, mission, cancellationToken);
@@ -71,6 +98,10 @@ public sealed class DroneFleetSimulator(
                     lastReport = now;
                 }
                 await Task.Delay(Tick, time, cancellationToken);
+            }
+            catch (CommandPendingException)
+            {
+                // Unwind the mission, preserving its actual pose and payload for ControlAsync.
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -100,6 +131,7 @@ public sealed class DroneFleetSimulator(
         }
 
         drone.Mission = mission;
+        drone.MissionTrace = trace;
         await MilestoneAsync(drone, mission, trace, MissionMilestone.Accepted, cancellationToken);
 
         // Stay on the pad, charging, until it is time to leave and there is enough battery for the whole trip.
@@ -107,6 +139,7 @@ public sealed class DroneFleetSimulator(
         using (Step("drone await departure"))
         while (time.GetUtcNow() < mission.DepartAt || drone.BatteryPercent < needed)
         {
+            InterruptIfRequested(drone);
             if (skips.Contains(mission.OrderId, DemoStage.ReadyForPickup))
             {
                 // Fast-forward this mission's charging wait, not any preceding mission.
@@ -123,7 +156,7 @@ public sealed class DroneFleetSimulator(
         }
 
         using (Step("drone fly to pickup"))
-            await FlyAsync(drone, toPickup, DroneState.FlyingToPickup, proofOfDelivery: false, cancellationToken);
+            await FlyAsync(drone, LegFromPose(drone, mission.Pickup), DroneState.FlyingToPickup, proofOfDelivery: false, cancellationToken);
         await MilestoneAsync(drone, mission, trace, MissionMilestone.ArrivedAtPickup, cancellationToken);
 
         using (Step("drone load order"))
@@ -133,20 +166,22 @@ public sealed class DroneFleetSimulator(
             var loaded = (time.GetUtcNow() > mission.ReadyAt ? time.GetUtcNow() : mission.ReadyAt) + LogisticsPlanner.LoadingTime;
             await WaitUntilAsync(drone, loaded, DemoStage.ReadyForPickup, cancellationToken);
         }
+        drone.CarryingPackage = true;
         await MilestoneAsync(drone, mission, trace, MissionMilestone.PickedUp, cancellationToken);
 
         using (Step("drone fly to customer"))
-            await FlyAsync(drone, toCustomer, DroneState.FlyingToCustomer, proofOfDelivery: true, cancellationToken);
+            await FlyAsync(drone, LegFromPose(drone, mission.DropOff), DroneState.FlyingToCustomer, proofOfDelivery: true, cancellationToken);
         using (Step("drone unload order"))
         {
             drone.State = DroneState.Unloading;
             await ReportAsync(drone, cancellationToken);
             await WaitUntilAsync(drone, time.GetUtcNow() + LogisticsPlanner.UnloadingTime, DemoStage.Delivering, cancellationToken);
         }
+        drone.CarryingPackage = false;
         await MilestoneAsync(drone, mission, trace, MissionMilestone.Delivered, cancellationToken);
 
         using (Step("drone return to pad"))
-            await FlyAsync(drone, toPad, DroneState.ReturningToPad, proofOfDelivery: false, cancellationToken);
+            await FlyAsync(drone, LegFromPose(drone, drone.HomePad), DroneState.ReturningToPad, proofOfDelivery: false, cancellationToken);
         await MilestoneAsync(drone, mission, trace, MissionMilestone.ReturnedToPad, cancellationToken);
         drone.Mission = null;
         skips.Complete(mission.OrderId);
@@ -163,6 +198,8 @@ public sealed class DroneFleetSimulator(
         var lastPhoto = start;
         while (true)
         {
+            if (drone.Control is not { Status: CommandStatus.Executing })
+                InterruptIfRequested(drone);
             var now = time.GetUtcNow();
             var skip = drone.Mission is { } mission && (state switch
             {
@@ -176,6 +213,7 @@ public sealed class DroneFleetSimulator(
             drone.Position = sample.Position;
             drone.AltitudeMetres = sample.AltitudeMetres;
             drone.Heading = sample.Heading;
+            drone.CameraPitchDegrees = sample.CameraPitchDegrees;
             drone.Manoeuvre = sample.Manoeuvre;
             drone.BatteryPercent = startBattery - leg.BatteryPercent * sample.Progress;
 
@@ -192,7 +230,7 @@ public sealed class DroneFleetSimulator(
             if (trigger is { } photo)
             {
                 lastPhoto = now;
-                await camera.CaptureAsync(drone, photo, proofOfDelivery && photo == PhotoTrigger.LandingEnd, now, cancellationToken);
+                camera.CaptureFrame(drone, photo, proofOfDelivery && photo == PhotoTrigger.LandingEnd, now);
             }
             previous = sample.Manoeuvre;
             if (elapsed >= leg.Duration)
@@ -205,6 +243,7 @@ public sealed class DroneFleetSimulator(
     {
         while (until - time.GetUtcNow() is var remaining && remaining > TimeSpan.Zero)
         {
+            InterruptIfRequested(drone);
             if (drone.Mission is { } mission && (skips.Contains(mission.OrderId, stage) ||
                 stage == DemoStage.ReadyForPickup && skips.Contains(mission.OrderId, DemoStage.Preparing)))
             {
@@ -218,6 +257,116 @@ public sealed class DroneFleetSimulator(
             await ReportAsync(drone, cancellationToken);
         }
     }
+
+    static FlightLeg LegFromPose(SimulatedDrone drone, GeoPoint target) =>
+        new(drone.Spec, drone.Position, target, drone.Heading, drone.AltitudeMetres);
+
+    static void InterruptIfRequested(SimulatedDrone drone)
+    {
+        while (drone.Commands.TryPeek(out var queued))
+        {
+            if (drone.ProcessedCommands.Contains(queued.Request.CommandId))
+            {
+                drone.Commands.TryDequeue(out _);
+                continue;
+            }
+            if (DroneCommands.Error(drone.State, drone.CarryingPackage, queued.Request.Command) is { } error)
+            {
+                drone.Commands.TryDequeue(out _);
+                drone.ProcessedCommands.Add(queued.Request.CommandId);
+                drone.Control = new(queued.Request.CommandId, queued.Request.Command, CommandStatus.Rejected, error);
+                continue;
+            }
+            throw new CommandPendingException();
+        }
+    }
+
+    async Task RejectQueuedAsync(SimulatedDrone drone, CancellationToken cancellationToken)
+    {
+        while (drone.Queue.TryPeek(out var queued))
+        {
+            traces.TryGetValue(queued.MissionId, out var trace);
+            await MilestoneAsync(drone, queued, trace, MissionMilestone.Rejected, cancellationToken,
+                "Queued delivery released after an operator intervention");
+            drone.Queue.TryDequeue(out _);
+            traces.TryRemove(queued.MissionId, out _);
+        }
+    }
+
+    async Task ControlAsync(SimulatedDrone drone, DroneCommandRequested request, ActivityContext trace, CancellationToken cancellationToken)
+    {
+        // Event Hubs can redeliver. Repeating an acknowledged command must not fly the diversion twice.
+        if (!drone.ProcessedCommands.Add(request.CommandId))
+            return;
+        if (drone.ProcessedCommands.Count > 128)
+        {
+            drone.ProcessedCommands.Clear();
+            drone.ProcessedCommands.Add(request.CommandId);
+        }
+        if (drone.Control is not { Status: CommandStatus.Executing } &&
+            DroneCommands.Error(drone.State, drone.CarryingPackage, request.Command) is { } error)
+        {
+            drone.Control = new(request.CommandId, request.Command, CommandStatus.Rejected, error);
+            logger.LogWarning("Drone command {CommandId} rejected: {Reason}", request.CommandId, error);
+            await ReportAsync(drone, cancellationToken);
+            return;
+        }
+        using var activity = Tracing.Start("drone execute command", trace,
+            links: drone.Mission is null ? [] : [new ActivityLink(drone.MissionTrace)])
+            ?.SetTag("drone_delivery.drone.id", drone.Id).SetTag("drone_delivery.command", request.Command.ToString())
+            .SetTag("drone_delivery.command.id", request.CommandId);
+        drone.Control = new(request.CommandId, request.Command, CommandStatus.Executing, $"{request.Command} in progress");
+        await ReportAsync(drone, cancellationToken);
+        if (drone.Mission is { } mission)
+        {
+            await MilestoneAsync(drone, mission, drone.MissionTrace, MissionMilestone.Interrupted, cancellationToken,
+                $"Delivery unable to complete: operator requested {request.Command}");
+            skips.Complete(mission.OrderId);
+        }
+        await RejectQueuedAsync(drone, cancellationToken);
+
+        if (request.Command == DroneCommand.EmergencyLanding)
+        {
+            using (Tracing.Start("drone emergency descent"))
+                await FlyAsync(drone, new(drone.Spec, drone.Position, drone.Position, drone.Heading,
+                    drone.AltitudeMetres, LandingOnly: true), DroneState.EmergencyLanding, false, cancellationToken);
+            drone.State = DroneState.Grounded;
+        }
+        else
+        {
+            if (request.Command == DroneCommand.DiscardPackage && drone.CarryingPackage)
+            {
+                using (Tracing.Start("drone fly to waste"))
+                    await FlyAsync(drone, LegFromPose(drone, ServiceArea.Waste.Location), DroneState.FlyingToWaste, false, cancellationToken);
+                drone.State = DroneState.DiscardingPackage;
+                await ReportAsync(drone, cancellationToken);
+                using (Tracing.Start("drone discard package"))
+                {
+                    await Task.Delay(Tick, time, cancellationToken);
+                    drone.CarryingPackage = false;
+                    camera.CaptureFrame(drone, PhotoTrigger.LandingEnd, false, time.GetUtcNow());
+                    await ReportAsync(drone, cancellationToken);
+                }
+            }
+            using (Tracing.Start("drone commanded return"))
+                await FlyAsync(drone, LegFromPose(drone, drone.HomePad), DroneState.ReturningToPad, false, cancellationToken);
+            // Return-to-base and reactivation unload any retained package at the base, never at the customer.
+            drone.CarryingPackage = false;
+            drone.ChargeFor(TimeSpan.Zero);
+        }
+        drone.Mission = null;
+        await RejectQueuedAsync(drone, cancellationToken);
+        drone.Control = drone.Control with
+        {
+            Status = CommandStatus.Completed,
+            Message = drone.State == DroneState.Grounded ? "Landed and grounded. Reactivate to return to base and rejoin dispatch."
+                : request.Command == DroneCommand.DiscardPackage ? "Package discarded at the waste drop-off. Returned to base."
+                : "Returned to base; available for dispatch.",
+        };
+        await ReportAsync(drone, cancellationToken);
+    }
+
+    sealed class CommandPendingException : Exception;
 
     // Position readings go out every second per drone, so they are not traced; legs and milestones are.
     Task ReportAsync(SimulatedDrone drone, CancellationToken cancellationToken) =>

@@ -46,11 +46,37 @@ app.MapGet("/api/demo", () => new
 
 app.MapGet("/api/fleet", (Dispatcher dispatcher) => dispatcher.Fleet());
 app.MapGet("/api/stores", () => ServiceArea.Stores);
+app.MapGet("/api/waste", () => ServiceArea.Waste);
 app.MapGet("/api/orders", (Dispatcher dispatcher, int? take) => dispatcher.Orders(Math.Clamp(take ?? 50, 1, 500)));
 app.MapGet("/api/orders/{orderId}", (Dispatcher dispatcher, string orderId) =>
     dispatcher.Order(orderId) is { } order ? Results.Ok(order) : Results.NotFound());
 
 app.MapRealtimeEndpoints();
+
+app.MapPost("/api/fleet/{droneId}/commands", async (
+    string droneId, DroneCommand command, Dispatcher dispatcher, TimeProvider time,
+    [FromKeyedServices(Hubs.DroneMissions)] EventHubProducerClient missions, CancellationToken cancellationToken) =>
+{
+    if (!Enum.IsDefined(command))
+        return Results.BadRequest(new { message = "Unknown drone command." });
+    var request = new DroneCommandRequested(Guid.NewGuid().ToString("N"), droneId, command);
+    using var activity = Tracing.Start("operator drone command")
+        ?.SetTag("drone_delivery.drone.id", droneId).SetTag("drone_delivery.command", command.ToString())
+        .SetTag("drone_delivery.command.id", request.CommandId);
+    if (!dispatcher.TryBeginCommand(request, time.GetUtcNow(), out var error))
+    {
+        activity?.SetStatus(ActivityStatusCode.Error, error);
+        return Results.Conflict(new { message = error });
+    }
+    try { await missions.SendAsync(request, droneId, cancellationToken); }
+    catch (Exception exception)
+    {
+        dispatcher.CancelPendingCommand(request);
+        activity.Failed(exception);
+        throw;
+    }
+    return Results.Accepted(value: new { request.CommandId });
+});
 
 app.MapPost("/api/orders/{orderId}/demo/skip", async (
     string orderId, DemoStageSkipped request, Dispatcher dispatcher,

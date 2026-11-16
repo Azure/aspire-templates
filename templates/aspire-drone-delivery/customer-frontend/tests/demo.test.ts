@@ -259,3 +259,10 @@ test('both map modes use South Melbourne coordinates and round-trip the delivery
     assert.ok(Math.abs(back.x - point.x) < 1e-6 && Math.abs(back.y - point.y) < 1e-6);
   }
 });
+
+test('every selectable drop-off is inside the backend service area', () => {
+  for (const point of dropOffs) {
+    const [lon, lat] = toLonLat(point.x, point.y);
+    assert.ok(lon >= 144.950 && lon <= 144.978 && lat >= -37.845 && lat <= -37.826, point.label);
+  }
+});

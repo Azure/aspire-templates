@@ -57,7 +57,7 @@ export function useCustomerOrders() {
   }
   const orders = saved.receipts.flatMap(receipt => snapshots[receipt.id] ? [customerOrder(snapshots[receipt.id], receipt, now)] : []);
   const loading = saved.receipts.some(receipt => !snapshots[receipt.id] && !connectionErrors[receipt.id]);
-  return { orders: orders.map(order => connectionErrors[order.id] || connectionStatus[order.id] ? { ...order, tracking: undefined } : order),
+  return { orders: orders.map(order => connectionErrors[order.id] || connectionStatus[order.id] ? { ...order, tracking: undefined, cameraPose: undefined } : order),
     error: saved.error || Object.values(connectionErrors).find(Boolean) || '',
     status: Object.values(connectionStatus).find(Boolean) || '', loading, remember, receipts: saved.receipts };
 }

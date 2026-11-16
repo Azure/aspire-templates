@@ -10,6 +10,7 @@ public enum OrderStatus
     PickedUp,
     Delivered,
     Unserviceable,
+    Failed,
 }
 
 public sealed record OrderPhoto(string BlobName, PhotoTrigger Trigger, bool ProofOfDelivery, DateTimeOffset Timestamp);
@@ -27,7 +28,8 @@ public sealed record OrderSnapshot(
     DateTimeOffset? DeliveredAt,
     string? Note,
     IReadOnlyList<OrderPhoto> Photos,
-    DroneTelemetry? Telemetry = null);
+    DroneTelemetry? Telemetry = null,
+    IReadOnlyList<CameraPose>? NearbyDrones = null);
 
 public sealed class OrderView(OrderPlaced order, PickupLocation store, DateTimeOffset readyAt)
 {
@@ -63,6 +65,7 @@ public sealed class Dispatcher
     readonly Dictionary<string, int> outstanding = [];
     readonly Dictionary<string, OrderView> orders = [];
     readonly Dictionary<string, OrderView> byMission = [];
+    readonly Dictionary<string, string> pendingCommands = [];
 
     public OrderSnapshot Accept(OrderPlaced order, ActivityContext trace = default)
     {
@@ -79,8 +82,12 @@ public sealed class Dispatcher
             if (fleet.TryGetValue(telemetry.DroneId, out var previous) && previous.Sequence >= telemetry.Sequence && previous.Timestamp >= telemetry.Timestamp)
                 return;
             fleet[telemetry.DroneId] = telemetry;
+            if (telemetry.Control is { Status: CommandStatus.Completed or CommandStatus.Rejected } control &&
+                pendingCommands.GetValueOrDefault(telemetry.DroneId) == control.CommandId)
+                pendingCommands.Remove(telemetry.DroneId);
             // A drone with no committed work is free now, wherever its telemetry says it is.
-            if (outstanding.GetValueOrDefault(telemetry.DroneId) == 0 && telemetry.Manoeuvre == Manoeuvre.OnTheGround)
+            if (outstanding.GetValueOrDefault(telemetry.DroneId) == 0 && telemetry.Manoeuvre == Manoeuvre.OnTheGround &&
+                telemetry.State is DroneState.Parked or DroneState.Charging)
                 committed[telemetry.DroneId] = new(telemetry.DroneId, telemetry.Class, telemetry.Position, telemetry.HomePad, telemetry.BatteryPercent, telemetry.Timestamp);
         }
     }
@@ -109,12 +116,26 @@ public sealed class Dispatcher
                     break;
                 case MissionMilestone.ReturnedToPad:
                     Release(progress.DroneId);
+                    byMission.Remove(progress.MissionId);
                     break;
                 case MissionMilestone.Rejected:
                     view.Status = OrderStatus.AwaitingFleet;
                     view.Note = progress.Reason;
                     view.DroneId = null;
+                    view.DroneClass = null;
+                    view.DepartAt = view.EstimatedPickup = view.EstimatedDelivery = null;
                     Release(progress.DroneId);
+                    byMission.Remove(progress.MissionId);
+                    break;
+                case MissionMilestone.Interrupted:
+                    if (view.Status != OrderStatus.Delivered)
+                    {
+                        view.Status = OrderStatus.Failed;
+                        view.Note = progress.Reason ?? "Delivery interrupted by fleet operations";
+                        view.EstimatedDelivery = null;
+                    }
+                    Release(progress.DroneId);
+                    byMission.Remove(progress.MissionId);
                     break;
                 case MissionMilestone.Accepted when now >= (view.DepartAt ?? now):
                     view.Status = OrderStatus.DroneEnRoute;
@@ -140,14 +161,22 @@ public sealed class Dispatcher
         {
             foreach (var view in orders.Values.Where(order => order.Status == OrderStatus.AwaitingFleet).OrderBy(order => order.Order.PlacedAt).ToList())
             {
-                if (committed.Count == 0)
+                var available = committed.Values.Where(drone => !pendingCommands.ContainsKey(drone.DroneId) &&
+                    fleet[drone.DroneId].State is not (DroneState.Grounded or DroneState.EmergencyLanding or DroneState.FlyingToWaste or DroneState.DiscardingPackage) &&
+                    fleet[drone.DroneId].Control is not { Status: CommandStatus.Executing }).ToList();
+                if (available.Count == 0)
                 {
                     view.Note = "Waiting for drones to report in";
                     continue;
                 }
                 var request = new DeliveryRequest(view.Order.OrderId, view.Order.PayloadBays, view.Store.Location, view.Order.DropOff, view.ReadyAt);
-                if (LogisticsPlanner.Plan(request, committed.Values, now) is not { } plan)
+                if (LogisticsPlanner.Plan(request, available, now) is not { } plan)
                 {
+                    if (committed.Values.Except(available).Any(drone => DroneSpec.For(drone.Class).CanCarry(view.Order.PayloadBays)))
+                    {
+                        view.Note = "Waiting for a capable drone to return to dispatch";
+                        continue;
+                    }
                     view.Status = OrderStatus.Unserviceable;
                     view.Note = committed.Values.Any(drone => DroneSpec.For(drone.Class).CanCarry(view.Order.PayloadBays))
                         ? "Out of range for every capable drone"
@@ -156,7 +185,7 @@ public sealed class Dispatcher
                         unserviceable.Describe(view.Order)?.SetStatus(ActivityStatusCode.Error, view.Note);
                     continue;
                 }
-                var missionId = $"{plan.DroneId}-{view.Order.OrderId}";
+                var missionId = $"{plan.DroneId}-{view.Order.OrderId}-{Guid.NewGuid():N}";
                 committed[plan.DroneId] = plan.After;
                 outstanding[plan.DroneId] = outstanding.GetValueOrDefault(plan.DroneId) + 1;
                 view.Status = OrderStatus.Scheduled;
@@ -192,7 +221,7 @@ public sealed class Dispatcher
         lock (gate)
         {
             if (!orders.TryGetValue(orderId, out var view) ||
-                view.Status is OrderStatus.Delivered or OrderStatus.Unserviceable)
+                view.Status is OrderStatus.Delivered or OrderStatus.Unserviceable or OrderStatus.Failed)
                 return false;
             return stage switch
             {
@@ -228,8 +257,45 @@ public sealed class Dispatcher
                 return null;
             var telemetry = view.DroneId is { } droneId ? fleet.GetValueOrDefault(droneId) : null;
             // A reserved drone may still be serving an earlier order.
-            return view.Snapshot() with { Telemetry = telemetry?.OrderId == orderId ? telemetry : null };
+            return view.Snapshot() with
+            {
+                Telemetry = telemetry?.OrderId == orderId ? telemetry : null,
+                NearbyDrones = telemetry?.OrderId != orderId ? [] : fleet.Values
+                    .Where(drone => drone.DroneId != telemetry.DroneId &&
+                        telemetry.Timestamp - drone.Timestamp < TimeSpan.FromSeconds(30))
+                    .OrderBy(drone => drone.Position.DistanceTo(telemetry.Position)).Take(24)
+                    .Select(drone => drone.CameraPose()).ToList(),
+            };
         }
+    }
+
+    public bool TryBeginCommand(DroneCommandRequested command, DateTimeOffset now, out string error)
+    {
+        lock (gate)
+        {
+            if (!fleet.TryGetValue(command.DroneId, out var drone))
+                error = "Drone not found.";
+            else if (now - drone.Timestamp > TimeSpan.FromSeconds(30))
+                error = "Waiting for current drone telemetry.";
+            else if (pendingCommands.ContainsKey(command.DroneId) || drone.Control is { Status: CommandStatus.Executing })
+                error = "A command is already in progress.";
+            else if (DroneCommands.Error(drone.State, drone.CarryingPackage, command.Command) is { } invalid)
+                error = invalid;
+            else
+            {
+                pendingCommands[command.DroneId] = command.CommandId;
+                error = "";
+                return true;
+            }
+            return false;
+        }
+    }
+
+    public void CancelPendingCommand(DroneCommandRequested command)
+    {
+        lock (gate)
+            if (pendingCommands.GetValueOrDefault(command.DroneId) == command.CommandId)
+                pendingCommands.Remove(command.DroneId);
     }
 
     void Release(string droneId)

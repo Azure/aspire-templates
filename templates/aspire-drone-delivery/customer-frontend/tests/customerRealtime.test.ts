@@ -107,3 +107,18 @@ test('delivery stops only its connection, preserves final snapshot, and ignores 
   expect(receive).toHaveBeenLastCalledWith(delivered);
   controller.abort();
 });
+
+test('interrupted orders retain their failure snapshot and stop receiving diverted-drone updates', async () => {
+  fetchMock.mockImplementation(async () => response(200));
+  const controller = new AbortController(), receive = vi.fn();
+  connectCustomerOrder(receipt, receive, vi.fn(), controller.signal);
+  await vi.advanceTimersByTimeAsync(0);
+  const [, , push, , , signal] = vi.mocked(connectRealtime).mock.calls[0];
+  const failed = { ...snapshot, status: 'Failed' as const, note: 'Operator requested return to base' };
+  push(failed);
+  expect(receive).toHaveBeenLastCalledWith(failed);
+  expect(signal.aborted).toBe(true);
+  push(snapshot);
+  expect(receive).toHaveBeenLastCalledWith(failed);
+  controller.abort();
+});

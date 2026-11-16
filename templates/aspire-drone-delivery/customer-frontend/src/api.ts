@@ -2,22 +2,25 @@ import { coffeeDescription, menuItem, metresPerUnit } from './demo';
 import type { Bag, Destination, Order, OrderFlight, PayloadSize, Stage } from './demo';
 import { fromLonLat, toLonLat } from './mapGeometry';
 import { traced } from './telemetry';
+import type { CameraPose } from '../../frontend-shared/pose';
 
 export type GeoPoint = { latitude: number; longitude: number };
 export type Telemetry = {
   droneId: string; class: 'Piccolo' | 'Doppio' | 'Abbondante'; sequence: number; timestamp: string;
   position: GeoPoint; homePad: GeoPoint; altitudeMetres: number; heading: number; batteryPercent: number;
-  state: 'Charging' | 'Parked' | 'FlyingToPickup' | 'Loading' | 'FlyingToCustomer' | 'Unloading' | 'ReturningToPad';
+  state: 'Charging' | 'Parked' | 'FlyingToPickup' | 'Loading' | 'FlyingToCustomer' | 'Unloading' | 'ReturningToPad' | 'EmergencyLanding' | 'Grounded' | 'FlyingToWaste' | 'DiscardingPackage';
   manoeuvre: 'OnTheGround' | 'VerticalClimb' | 'Cruise' | 'VerticalDescent'; orderId: string | null; queuedMissions: number;
   flightProgress?: number | null;
+  cameraPitchDegrees?: number;
 };
 export type OrderSnapshot = {
   order: { orderId: string; customerName: string; dropOff: GeoPoint; payloadBays: PayloadSize; lines: { item: string; bays: number }[]; placedAt: string };
   store: { id: string; name: string; location: GeoPoint }; readyAt: string;
-  status: 'AwaitingFleet' | 'Scheduled' | 'DroneEnRoute' | 'PickedUp' | 'Delivered' | 'Unserviceable';
+  status: 'AwaitingFleet' | 'Scheduled' | 'DroneEnRoute' | 'PickedUp' | 'Delivered' | 'Unserviceable' | 'Failed';
   droneId: string | null; estimatedDelivery: string | null; deliveredAt: string | null; note: string | null;
   photos: { blobName: string; trigger: string; proofOfDelivery: boolean; timestamp: string }[];
   telemetry?: Telemetry | null;
+  nearbyDrones?: CameraPose[];
 };
 export type Receipt = { id: string; bag: Bag; payload: PayloadSize; placedAt: string; dropOff: Destination };
 
@@ -58,6 +61,7 @@ export function stageFor(snapshot: OrderSnapshot, now = Date.now()): Order['stag
 }
 
 export function trackingFor(snapshot: OrderSnapshot, now = Date.now()): OrderFlight | undefined {
+  if (snapshot.status === 'Failed' || snapshot.status === 'Unserviceable') return undefined;
   const drone = snapshot.telemetry;
   if (!snapshot.droneId || !drone || drone.droneId !== snapshot.droneId || drone.orderId !== snapshot.order.orderId) return undefined;
   // An old fix is not a live view; never extrapolate into a different mission or invent a flight leg.
@@ -76,7 +80,7 @@ export function trackingFor(snapshot: OrderSnapshot, now = Date.now()): OrderFli
     ...location, droneId: drone.droneId, phase, manoeuvre, origin, target, destination,
     progress: drone.flightProgress === undefined || drone.flightProgress === null ? 0 : fraction(drone.flightProgress),
     heading: (drone.heading - 90) * Math.PI / 180, altitude: Math.round(drone.altitudeMetres),
-    cameraDown: manoeuvre === 'Cruise' ? 0 : 1,
+    cameraDown: drone.cameraPitchDegrees === undefined ? (manoeuvre === 'Cruise' ? 0 : 1) : fraction((-drone.cameraPitchDegrees - 30) / 60),
     remainingMetres: Math.round(remaining * metresPerUnit),
     etaSeconds: snapshot.estimatedDelivery ? Math.max(0, Math.ceil((Date.parse(snapshot.estimatedDelivery) - now) / 1000)) : 0,
   };
@@ -112,6 +116,10 @@ export function customerOrder(snapshot: OrderSnapshot, receipt: Receipt, now = D
     stage: stageFor(snapshot, now), elapsed: Math.max(0, (now - Date.parse(snapshot.order.placedAt)) / 1000),
     drone: snapshot.droneId ? { id: snapshot.droneId, pickupOrigin: point(snapshot.store.location), assignedAt: 0 } : undefined,
     tracking, stageProgress: stageProgressFor(snapshot, tracking, now), pickup: { ...point(snapshot.store.location), label: snapshot.store.name },
+    failure: snapshot.status === 'Failed' || snapshot.status === 'Unserviceable' ? snapshot.note ?? 'This delivery cannot be completed.' : undefined,
+    cameraPose: tracking && snapshot.telemetry ? { ...snapshot.telemetry,
+      cameraPitchDegrees: snapshot.telemetry.cameraPitchDegrees ?? (snapshot.telemetry.manoeuvre === 'Cruise' ? -30 : -90) } : undefined,
+    nearbyDrones: snapshot.nearbyDrones,
     dropOff: { ...point(snapshot.order.dropOff), label: receipt.dropOff.label }, note: snapshot.note,
     etaSeconds: snapshot.estimatedDelivery ? Math.max(0, Math.ceil((Date.parse(snapshot.estimatedDelivery) - now) / 1000)) : undefined,
     photo: photo ? { url: `/api/photos/${photo.blobName.split('/').map(encodeURIComponent).join('/')}`, timestamp: photo.timestamp, proofOfDelivery: photo.proofOfDelivery } : undefined,

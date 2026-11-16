@@ -63,12 +63,16 @@ var operatorServer = builder.AddDotnetProject("operator-server", "../DroneDelive
 // relay /otlp to the dashboard and add its API key server-side.
 var customerSite = builder.AddViteApp("customer-site", "../customer-frontend")
     .WithTags("frontends", "customer")
+    .PublishAsDockerFile(container => container.WithDockerfile("..", "frontend-shared/Dockerfile")
+        .WithBuildArg("FRONTEND", "customer-frontend"))
     .WithOtlpExporter(OtlpProtocol.HttpProtobuf)
     .WithReference(customerServer)
     .WithEnvironment("SERVER_HTTP", customerServer.GetEndpoint("http"))
     .WaitFor(customerServer);
 var operatorSite = builder.AddViteApp("operator-site", "../operator-frontend")
     .WithTags("frontends", "operator")
+    .PublishAsDockerFile(container => container.WithDockerfile("..", "frontend-shared/Dockerfile")
+        .WithBuildArg("FRONTEND", "operator-frontend"))
     .WithOtlpExporter(OtlpProtocol.HttpProtobuf)
     .WithReference(operatorServer)
     .WithEnvironment("SERVER_HTTP", operatorServer.GetEndpoint("http"))

@@ -11,6 +11,7 @@ builder.AddAzureBlobContainerClient(Hubs.PhotoContainer);
 
 builder.Services.AddSingleton(FleetOptions.FromConfiguration(builder.Configuration));
 builder.Services.AddSingleton<DroneCamera>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<DroneCamera>());
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddHostedService<DroneFleetSimulator>();
 

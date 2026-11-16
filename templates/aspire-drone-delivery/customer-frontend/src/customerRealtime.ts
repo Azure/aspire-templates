@@ -27,7 +27,7 @@ export function connectCustomerOrder(receipt: Receipt, receive: (snapshot: Order
       'drone_delivery.order.id': receipt.id, 'drone_delivery.order.status': snapshot.status, 'messaging.system': 'signalr',
     });
     status('');
-    if (snapshot.status === 'Delivered') stop();
+    if (snapshot.status === 'Delivered' || snapshot.status === 'Failed' || snapshot.status === 'Unserviceable') stop();
   }
 
   async function recover(waitForAcceptedOrder = false) {

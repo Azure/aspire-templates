@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import type { MapSettings } from './DeliveryMap';
-import type { Order } from './demo';
-import { dropOffs, kitchen, metresPerUnit, orderFlight } from './demo';
+import { PoseBuffer } from './pose';
+import type { CameraPose } from './pose';
+import './camera.css';
 import { coastPath, fromLonLat, landmarks, lakePath, landPath, mapLabels, parkPath, pierPath, roadPaths, toLonLat } from './mapGeometry';
 
 // Ground region (illustrated-map units) around the kitchen-to-drop-off corridor.
-const region = { x: 380, y: 200, width: 500, height: 440 };
+const region = { x: 280, y: 100, width: 720, height: 550 };
+const kitchen = { x: 510, y: 318 };
+const metresPerUnit = 4.2;
+type MapSettings = { clientId: string; token: string };
 const tileZoom = 16;
 type GroundSource = 'illustrated' | 'azure';
 
@@ -41,6 +44,65 @@ function drawIllustratedGround(ctx: CanvasRenderingContext2D, scale: number) {
   mapLabels.forEach(label => ctx.fillText(label.text, label.x, label.y));
   landmarks.forEach(({ x, y }) => { ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fillStyle = '#fffaf0'; ctx.fill(); });
   ctx.restore();
+}
+
+function drawAirspace(canvas: HTMLCanvasElement, readings: readonly CameraPose[], selectedId: string) {
+  const width = canvas.clientWidth, height = canvas.clientHeight;
+  if (!width || !height) return 0;
+  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(width * ratio);
+  canvas.height = Math.round(height * ratio);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return 0;
+  const scale = Math.min(canvas.width / region.width, canvas.height / region.height);
+  const offsetX = (canvas.width - region.width * scale) / 2;
+  const offsetY = (canvas.height - region.height * scale) / 2;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.translate(offsetX, offsetY);
+  drawIllustratedGround(ctx, scale);
+  ctx.restore();
+  let count = 0;
+  for (const reading of readings) {
+    if (Date.now() - Date.parse(reading.timestamp) > 30000) continue;
+    const point = fromLonLat(reading.position.longitude, reading.position.latitude);
+    if (point.x < region.x || point.x > region.x + region.width || point.y < region.y || point.y > region.y + region.height) continue;
+    count++;
+    const x = offsetX + (point.x - region.x) * scale;
+    const y = offsetY + (point.y - region.y) * scale;
+    const color = reading.droneId === selectedId ? '#c47b2d' : '#184b38';
+    const markerSize = Math.max(1, ratio);
+    ctx.beginPath();
+    ctx.arc(x, y, 5 * markerSize, 0, Math.PI * 2);
+    ctx.fillStyle = '#fffef5';
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = markerSize;
+    ctx.stroke();
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(reading.heading * Math.PI / 180);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2 * markerSize;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, -4 * markerSize);
+    ctx.lineTo(-3 * markerSize, 3 * markerSize);
+    ctx.moveTo(0, -4 * markerSize);
+    ctx.lineTo(3 * markerSize, 3 * markerSize);
+    ctx.moveTo(-3 * markerSize, 0);
+    ctx.lineTo(3 * markerSize, 0);
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(0, -4 * markerSize);
+    ctx.lineTo(-2 * markerSize, 2 * markerSize);
+    ctx.lineTo(2 * markerSize, 2 * markerSize);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  return count;
 }
 
 function tileToLonLat(x: number, y: number) {
@@ -95,7 +157,7 @@ function buildScenery(scene: THREE.Scene, disposables: { dispose(): void }[]): T
   const palette = ['#f2efe4', '#e6e1d2', '#d9d6c8', '#efe6d4', '#cfd8cc'].map(color => new THREE.Color(color));
   for (let i = 0; i < 1600 && boxes.length < 420; i++) {
     const x = region.x + next() * region.width, y = region.y + next() * region.height;
-    if (!onLand(x, y) || Math.hypot(x - kitchen.x, y - kitchen.y) < 22 || dropOffs.some(point => Math.hypot(x - point.x, y - point.y) < 18)) continue;
+    if (!onLand(x, y) || Math.hypot(x - kitchen.x, y - kitchen.y) < 22) continue;
     const tree = next() < .35;
     const matrix = new THREE.Matrix4();
     if (tree) {
@@ -123,13 +185,72 @@ function buildScenery(scene: THREE.Scene, disposables: { dispose(): void }[]): T
   return target;
 }
 
-export default function DroneCam({ order, settings }: { order: Order; settings: MapSettings | null }) {
+function droneModel(id: string, selected: boolean, disposables: { dispose(): void }[]) {
+  const group = new THREE.Group();
+  const body = new THREE.BoxGeometry(1.1, .35, 1.5);
+  const arm = new THREE.BoxGeometry(2.5, .12, .12);
+  const rotor = new THREE.CylinderGeometry(.65, .65, .035, 16);
+  const shell = new THREE.MeshLambertMaterial({ color: selected ? '#c47b2d' : '#184b38' });
+  const metal = new THREE.MeshLambertMaterial({ color: '#e9b44c' });
+  const blades = new THREE.MeshBasicMaterial({ color: '#647a6d', transparent: true, opacity: .48, side: THREE.DoubleSide });
+  group.add(new THREE.Mesh(body, shell));
+  for (const z of [-.65, .65]) {
+    const beam = new THREE.Mesh(arm, metal); beam.position.z = z; group.add(beam);
+    for (const x of [-1.25, 1.25]) {
+      const disk = new THREE.Mesh(rotor, blades); disk.position.set(x, .12, z); group.add(disk);
+    }
+  }
+  // The gold nose points north (-Z), matching headings in the simulator.
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(.8, .2, .15), metal);
+  nose.position.z = -.8; group.add(nose);
+  const label = document.createElement('canvas');
+  label.width = 256; label.height = 48;
+  const ink = label.getContext('2d')!;
+  ink.fillStyle = '#184b38'; ink.fillRect(0, 0, 256, 48);
+  ink.fillStyle = '#fffdf5'; ink.font = '28px monospace'; ink.textAlign = 'center';
+  ink.fillText(id, 128, 34);
+  const texture = new THREE.CanvasTexture(label);
+  const captionMaterial = new THREE.SpriteMaterial({ map: texture, sizeAttenuation: false });
+  const caption = new THREE.Sprite(captionMaterial); caption.scale.set(.38, .075, 1); caption.position.y = 1.8;
+  group.add(caption);
+  const markerGeometry = new THREE.RingGeometry(5, 8, 24);
+  const markerMaterial = new THREE.MeshBasicMaterial({ color: selected ? '#c47b2d' : '#184b38', side: THREE.DoubleSide });
+  const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+  marker.rotation.x = -Math.PI / 2;
+  marker.position.y = .12;
+  group.add(marker);
+  group.scale.setScalar(.35);
+  disposables.push(body, arm, rotor, shell, metal, blades, nose.geometry, markerGeometry, markerMaterial);
+  disposables.push(texture, captionMaterial);
+  return group;
+}
+
+export default function DroneCam({ pose, nearby = [], settings, target: destination }: {
+  pose: CameraPose; nearby?: readonly CameraPose[]; settings: MapSettings | null; target?: { x: number; y: number };
+}) {
   const host = useRef<HTMLDivElement>(null);
-  const latest = useRef({ order, changedAt: performance.now() });
+  const buffers = useRef(new Map<string, PoseBuffer>());
+  const latest = useRef({ pose, nearby, destination });
   const [status, setStatus] = useState<'loading' | 'live' | 'unavailable'>('loading');
   const [ground, setGround] = useState<GroundSource>('illustrated');
   const [groundNote, setGroundNote] = useState('');
-  useEffect(() => { latest.current = { order, changedAt: performance.now() }; }, [order]);
+  useEffect(() => {
+    latest.current = { pose, nearby, destination };
+    const visible = new Set([pose.droneId, ...nearby.map(drone => drone.droneId)]);
+    for (const id of buffers.current.keys()) if (!visible.has(id)) buffers.current.delete(id);
+    for (const reading of [pose, ...nearby]) {
+      let buffer = buffers.current.get(reading.droneId);
+      if (!buffer) { buffer = new PoseBuffer(); buffers.current.set(reading.droneId, buffer); }
+      buffer.push(reading);
+    }
+    const canvas = host.current?.querySelector<HTMLCanvasElement>('.cam-airspace canvas');
+    const count = canvas ? drawAirspace(canvas, [pose, ...nearby], pose.droneId) : 0;
+    const label = host.current?.querySelector<HTMLElement>('.cam-airspace-label');
+    if (label && label.dataset.count !== String(count)) {
+      label.dataset.count = String(count);
+      label.textContent = `AIRSPACE · ${count} DRONES`;
+    }
+  }, [pose, nearby, destination]);
 
   useEffect(() => {
     const element = host.current;
@@ -169,6 +290,9 @@ export default function DroneCam({ order, settings }: { order: Order; settings: 
     scene.add(plane);
     disposables.push(texture, planeGeometry, planeMaterial);
     const target = buildScenery(scene, disposables);
+    target.visible = false;
+    const models = new Map<string, THREE.Group>();
+    const frustum = new THREE.Frustum(), viewProjection = new THREE.Matrix4();
     if (settings) {
       drawAzureGround(ctx, scale, settings, controller.signal)
         .then(() => { texture.needsUpdate = true; setGround('azure'); setGroundNote(''); })
@@ -186,30 +310,68 @@ export default function DroneCam({ order, settings }: { order: Order; settings: 
       renderer.setSize(clientWidth, clientHeight, false);
       camera.aspect = clientWidth / Math.max(1, clientHeight);
       camera.updateProjectionMatrix();
+      const canvas = element.querySelector<HTMLCanvasElement>('.cam-airspace canvas');
+      const count = canvas ? drawAirspace(canvas, [latest.current.pose, ...latest.current.nearby], latest.current.pose.droneId) : 0;
+      const label = element.querySelector<HTMLElement>('.cam-airspace-label');
+      if (label && label.dataset.count !== String(count)) {
+        label.dataset.count = String(count);
+        label.textContent = `AIRSPACE · ${count} DRONES`;
+      }
     };
     const observer = new ResizeObserver(resize);
     observer.observe(element);
     resize();
 
     let frame = 0;
-    const render = (now: number) => {
+    const render = () => {
       const still = reduce.matches;
-      const { order: current, changedAt } = latest.current;
-      const flight = orderFlight(current, still ? 0 : (now - changedAt) / 1000);
-      const forwardX = Math.cos(flight.heading), forwardZ = Math.sin(flight.heading);
-      const t = now / 1000;
-      const flying = flight.phase === 'In flight' || flight.phase === 'To pickup';
-      const bob = still || !flying ? 0 : Math.sin(t * 2.1) * .25;
-      const height = Math.max(3, flight.altitude / metresPerUnit) + bob;
-      target.position.set(flight.target.x, .05, flight.target.y);
-      camera.position.set(flight.x, height, flight.y);
-      // Tilt from a forward view (looking slightly down at the ground ahead) to straight down for vertical take-off and landing.
-      const level = Math.atan2(height, flying ? 30 : 24);
-      const tilt = level + (Math.PI / 2 - level) * flight.cameraDown;
+      const { pose: current, nearby: others, destination: goal } = latest.current;
+      target.visible = !!goal;
+      if (goal) target.position.set(goal.x, .05, goal.y);
+      const at = still ? Date.now() : Date.now() - 2000;
+      const sampled = buffers.current.get(current.droneId)?.sample(at) ?? current;
+      const location = fromLonLat(sampled.position.longitude, sampled.position.latitude);
+      const heading = (sampled.heading - 90) * Math.PI / 180;
+      const forwardX = Math.cos(heading), forwardZ = Math.sin(heading);
+      const height = Math.max(.7, sampled.altitudeMetres / metresPerUnit);
+      camera.position.set(location.x, height, location.y);
+      const tilt = -sampled.cameraPitchDegrees * Math.PI / 180;
       const down = Math.sin(tilt), across = Math.cos(tilt);
       camera.up.set(forwardX * down, across, forwardZ * down);
-      camera.lookAt(flight.x + forwardX * across, height - down, flight.y + forwardZ * across);
-      if (!still && flying && flight.manoeuvre === 'Cruise') camera.rotateZ(Math.sin(t * .7) * .015);
+      camera.lookAt(location.x + forwardX * across, height - down, location.y + forwardZ * across);
+      const seen = new Set<string>();
+      for (const reading of others.slice(0, 24)) {
+        if (Date.now() - Date.parse(reading.timestamp) > 30000) continue;
+        const other = buffers.current.get(reading.droneId)?.sample(at);
+        if (!other) continue;
+        seen.add(other.droneId);
+        let model = models.get(other.droneId);
+        if (!model) { model = droneModel(other.droneId, other.droneId === current.droneId, disposables); models.set(other.droneId, model); scene.add(model); }
+        const point = fromLonLat(other.position.longitude, other.position.latitude);
+        model.position.set(point.x, Math.max(.25, other.altitudeMetres / metresPerUnit), point.y);
+        model.rotation.y = -other.heading * Math.PI / 180;
+        model.scale.setScalar(.35);
+        // The simulator permits co-located launch pads; do not render a hull around the camera lens.
+        model.visible = camera.position.distanceTo(model.position) > 1;
+      }
+      for (const [id, model] of models) if (!seen.has(id)) model.visible = false;
+      camera.updateMatrixWorld();
+      scene.updateMatrixWorld();
+      frustum.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+      element.dataset.visibleDrones = String([...models.values()].filter(model => model.visible &&
+        camera.position.distanceTo(model.position) < 230 && frustum.intersectsObject(model.children[0])).length);
+      element.dataset.otherDrones = String([...seen].filter(id => id !== current.droneId).length);
+      element.dataset.heading = sampled.heading.toFixed(2);
+      element.dataset.altitude = sampled.altitudeMetres.toFixed(2);
+      element.dataset.cameraPitch = sampled.cameraPitchDegrees.toFixed(2);
+      element.dataset.airspaceDrones = element.querySelector('.cam-airspace-label')?.getAttribute('data-count') ?? '0';
+      const stale = Date.now() - Date.parse(current.timestamp) > 10000;
+      element.dataset.stale = String(stale);
+      const readout = element.querySelector('.cam-readout');
+      if (readout) readout.textContent = stale ? 'TELEMETRY PAUSED · LAST RECEIVED POSE'
+        : `ALT ${sampled.altitudeMetres.toFixed(1)} m · HDG ${sampled.heading.toFixed(0)}° · CAM ${sampled.cameraPitchDegrees.toFixed(0)}°`;
+      renderer.setScissorTest(false);
+      renderer.setViewport(0, 0, element.clientWidth, element.clientHeight);
       renderer.render(scene, camera);
       frame = requestAnimationFrame(render);
     };
@@ -226,17 +388,18 @@ export default function DroneCam({ order, settings }: { order: Order; settings: 
     };
   }, [settings]);
 
-  const flight = orderFlight(order);
-  return <div className="drone-cam" ref={host} role="img" aria-label={`Simulated camera view from drone ${flight.droneId}, ${flight.phase.toLowerCase()}. Not real video.`}>
+  return <div className="drone-cam" ref={host} role="img" aria-label={`Simulated camera view from drone ${pose.droneId}, with an airspace overview of actual telemetry positions. Not real video.`}>
     {status === 'unavailable' && <div className="cam-fallback"><strong>Camera preview unavailable</strong><p>This browser could not start WebGL. The overhead map still follows your drone.</p></div>}
     {status === 'loading' && <div className="cam-fallback" role="status">Starting simulated camera…</div>}
     <div className="cam-hud" aria-hidden="true">
       <span className="cam-rec"><i />SIMULATED FEED</span>
-      <span className="cam-id">{flight.droneId} · CAM 1</span>
+      <span className="cam-id">{pose.droneId} · CAM 1</span>
       <span className="cam-cross" />
-      <span className="cam-readout">ALT {flight.altitude} m · {flight.manoeuvre === 'Cruise' ? `${flight.remainingMetres} m ${flight.phase === 'To pickup' ? 'to pickup' : 'to go'}` : flight.phase === 'In flight' || flight.phase === 'To pickup' ? flight.manoeuvre : flight.phase} · CAM {flight.cameraDown > .5 ? 'DOWN' : 'FWD'}</span>
+      <span className="cam-readout" />
     </div>
-    <span className="cam-credit">{ground === 'azure' ? '© Microsoft, © TomTom · Azure Maps tiles · simulated view' : 'Illustrated ground · placeholder structures · not real video'}</span>
+    <div className="cam-transmission" aria-hidden="true" />
+    <div className="cam-airspace"><canvas aria-hidden="true" /><span className="cam-airspace-label">AIRSPACE</span></div>
+    <span className="cam-credit">{ground === 'azure' ? '© Microsoft, © TomTom · Azure Maps' : 'Illustrated ground · placeholder structures'} · ~2 s playout · not video</span>
     {groundNote && <span className="cam-note" role="status">{groundNote}</span>}
   </div>;
 }

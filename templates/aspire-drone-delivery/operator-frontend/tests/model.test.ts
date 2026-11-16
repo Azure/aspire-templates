@@ -1,6 +1,6 @@
 import { assert, test } from 'vitest';
 import type { Telemetry } from '../src/api';
-import { airborne, fleetMap } from '../src/model';
+import { airborne, commandUnavailable, fleetMap } from '../src/model';
 import { toLonLat } from '../src/mapGeometry';
 
 const drone: Telemetry = {
@@ -8,6 +8,7 @@ const drone: Telemetry = {
   position: { latitude: -37.838, longitude: 144.967 }, homePad: { latitude: -37.842, longitude: 144.972 },
   altitudeMetres: 60, heading: 0, batteryPercent: 75, state: 'FlyingToPickup', manoeuvre: 'Cruise',
   orderId: 'FC-TEST', queuedMissions: 2,
+  cameraPitchDegrees: -30, carryingPackage: false, control: null,
 };
 test('operations map shows each reported drone without adding illustrative loops', () => {
   assert.deepEqual(fleetMap([]), []);
@@ -21,4 +22,17 @@ test('operations map shows each reported drone without adding illustrative loops
 test('airborne count follows manoeuvres, not a scheduled order or hard-coded fleet size', () => {
   assert.equal(airborne(drone), true);
   assert.equal(airborne({ ...drone, manoeuvre: 'OnTheGround', state: 'Loading' }), false);
+});
+
+test('controls require the right payload and recovery state and serialize ongoing actions', () => {
+  const current = { ...drone, timestamp: new Date().toISOString() };
+  assert.notEqual(commandUnavailable(current, 'DiscardPackage'), '');
+  assert.equal(commandUnavailable({ ...current, carryingPackage: true }, 'DiscardPackage'), '');
+  assert.notEqual(commandUnavailable(current, 'Reactivate'), '');
+  assert.equal(commandUnavailable({ ...current, state: 'Grounded' }, 'Reactivate'), '');
+  assert.notEqual(commandUnavailable({ ...current, state: 'Grounded' }, 'ReturnToBase'), '');
+  assert.notEqual(commandUnavailable({ ...current, control: {
+    commandId: 'test', command: 'ReturnToBase', status: 'Executing', message: 'Returning',
+  } }, 'EmergencyLanding'), '');
+  assert.notEqual(commandUnavailable({ ...current, timestamp: new Date(0).toISOString() }, 'ReturnToBase'), '');
 });

@@ -8,7 +8,7 @@ import { skipOrderStage } from './api';
 import { bagCount, bagTotal, coffeeDescription, linePrice, menuItem, money, orderFlight, payloadNames, stages, stageTicks } from './demo';
 import type { Order, OrderFlight } from './demo';
 
-const DroneCam = lazy(() => import('./DroneCam'));
+const DroneCam = lazy(() => import('../../frontend-shared/DroneCam'));
 const stageIcons = [ChefHat, Package, Drone, House];
 const stageCopy = {
   Preparing: { title: 'Your barista is on it.', detail: 'ForthCoffee is brewing your coffee run, just the way you like it.' },
@@ -89,8 +89,9 @@ export default function OrderStatus({ order, orderId, settings, onSettings, onBa
 
   const flight = orderFlight(order);
   const current = stages.indexOf(order.stage);
-  const followable = current >= 1 && flight.droneId !== null && (!order.backend || !!order.tracking);
-  const copy = order.stage === 'Ready for pickup' && !flight.droneId
+  const followable = !order.failure && current >= 1 && flight.droneId !== null && !!order.cameraPose;
+  const copy = order.failure ? { title: 'This coffee run couldn’t be completed.', detail: order.failure }
+    : order.stage === 'Ready for pickup' && !flight.droneId
     ? { title: 'Ready. Waiting for a drone.', detail: 'Your coffee run is packed and sealed. The map and camera will appear once a drone is assigned.' }
     : order.stage === 'Ready for pickup' && flight.phase === 'On the pad'
     ? { title: 'Ready. Your drone is at the bar.', detail: 'Your drone has landed at ForthCoffee. Next stop: your drop-off.' }
@@ -102,9 +103,9 @@ export default function OrderStatus({ order, orderId, settings, onSettings, onBa
     <button className="text-button back-link" onClick={onBack}><ArrowLeft size={15} />Back to the menu</button>
     <section className="status-header" aria-live="polite">
       <div><div className="eyebrow">ORDER {order.id} · FORTHCOFFEE · {payloadNames[order.payload].toUpperCase()} PAYLOAD</div><h1>{copy.title}</h1><p>{copy.detail}</p></div>
-      <div className="status-eta"><span>{order.stage === 'Delivered' ? 'DELIVERED' : 'ESTIMATED ARRIVAL'}</span><strong>{order.stage === 'Delivered' ? 'Arrived' : order.backend ? (order.etaSeconds === undefined ? 'Awaiting estimate' : eta(order.etaSeconds)) : flight.droneId ? eta(flight.etaSeconds) : 'Awaiting drone'}</strong><small>{order.backend ? 'Demo server estimate' : 'Accelerated demo time'}</small></div>
+      <div className="status-eta"><span>{order.failure ? 'DELIVERY INTERRUPTED' : order.stage === 'Delivered' ? 'DELIVERED' : 'ESTIMATED ARRIVAL'}</span><strong>{order.failure ? 'Unable to complete' : order.stage === 'Delivered' ? 'Arrived' : order.backend ? (order.etaSeconds === undefined ? 'Awaiting estimate' : eta(order.etaSeconds)) : flight.droneId ? eta(flight.etaSeconds) : 'Awaiting drone'}</strong><small>{order.backend ? 'Demo server estimate' : 'Accelerated demo time'}</small></div>
     </section>
-    <ol className="status-steps" aria-label="Order progress">{stages.map((stage, index) => {
+    {!order.failure && <ol className="status-steps" aria-label="Order progress">{stages.map((stage, index) => {
       const Icon = stageIcons[index];
       const state = index < current ? 'done' : index === current ? 'current' : 'upcoming';
       const fill = state === 'done' ? 1 : state === 'current' ? (stage === 'Delivered' ? 1 : order.backend ? order.stageProgress ?? 0 : Math.min(1, order.elapsed / duration[stage])) : 0;
@@ -118,7 +119,7 @@ export default function OrderStatus({ order, orderId, settings, onSettings, onBa
           onClick={skip}><FastForward size={10} />{skipping ? 'Skipping…' : 'Skip'}</button>}</span>
         <span className="step-bar"><i style={{ width: `${fill * 100}%` }} /></span>
       </li>;
-    })}</ol>
+    })}</ol>}
     {skipError && <p role="alert" className="skip-error">{skipError}</p>}
 
     <div className="status-grid">
@@ -126,12 +127,12 @@ export default function OrderStatus({ order, orderId, settings, onSettings, onBa
         {followable ? <div className="follow-views">
           <div className="follow-panel"><div className="follow-heading"><span><MapPin size={14} />Overhead</span><small>{flight.phase}</small></div><FollowMap flight={flight} settings={settings} onSettings={onSettings} /></div>
           <div className="follow-panel"><div className="follow-heading"><span><span className="rec-dot" />Drone camera</span><small>Simulated</small></div>
-            <Suspense fallback={<div className="drone-cam"><div className="cam-fallback" role="status">Starting simulated camera…</div></div>}><DroneCam order={order} settings={settings} /></Suspense></div>
+            <Suspense fallback={<div className="drone-cam"><div className="cam-fallback" role="status">Starting simulated camera…</div></div>}>{order.cameraPose && <DroneCam pose={order.cameraPose} nearby={order.nearbyDrones} target={order.tracking?.target} settings={settings} />}</Suspense></div>
         </div> : <div className="kitchen-card">
           <div className="kitchen-food" data-count={Math.min(order.bag.length, 4)}>{order.bag.slice(0, 4).map(line => <div key={line.id}>{line.coffee ? <CoffeeCup options={line.coffee} style={line.itemId} /> : <FoodArt kind={menuItem(line.itemId).kind} />}</div>)}</div>
-          <div><span className="eyebrow">YOUR COFFEE RUN</span><h2>Made your way.<br /><em>Then on its way.</em></h2><p>{order.stage === 'Ready for pickup' ? (order.drone ? 'Your drone is assigned. Waiting for current telemetry for this order; no unrelated flight is shown.' : 'Packed and waiting for an available drone. No drone is assigned yet.') : order.stage === 'Preparing' ? 'Your barista is preparing your flight box. Once a drone is assigned, follow its pickup and delivery through the map and simulated camera.' : order.stage === 'Delivered' ? 'Your coffee run has landed. Enjoy your ForthCoffee moment.' : 'Waiting for current telemetry from your assigned drone.'}</p>{order.note && <p role="status">{order.note}</p>}</div>
+          <div><span className="eyebrow">YOUR COFFEE RUN</span><h2>{order.failure ? 'Delivery interrupted.' : <>Made your way.<br /><em>Then on its way.</em></>}</h2><p>{order.failure ? 'Fleet operations has stopped this delivery. No delivery or live customer flight is claimed.' : order.stage === 'Ready for pickup' ? (order.drone ? 'Your drone is assigned. Waiting for current telemetry for this order; no unrelated flight is shown.' : 'Packed and waiting for an available drone. No drone is assigned yet.') : order.stage === 'Preparing' ? 'Your barista is preparing your flight box. Once a drone is assigned, follow its pickup and delivery through the map and simulated camera.' : order.stage === 'Delivered' ? 'Your coffee run has landed. Enjoy your ForthCoffee moment.' : 'Waiting for current telemetry from your assigned drone.'}</p>{order.note && <p role="status">{order.note}</p>}</div>
         </div>}
-        {order.stage === 'Preparing' && <BaristaCard orderId={order.id} />}
+        {order.stage === 'Preparing' && !order.failure && <BaristaCard orderId={order.id} />}
       </section>
       <aside className="status-summary">
         <div className="eyebrow">YOUR COFFEE RUN</div>
@@ -144,7 +145,7 @@ export default function OrderStatus({ order, orderId, settings, onSettings, onBa
           <div><dt>To</dt><dd>{flight.destination.label}</dd></div>
           {(order.stage === 'Delivering' || flight.phase === 'To pickup') && <div><dt>{flight.phase === 'To pickup' ? 'To pickup' : 'Distance left'}</dt><dd>{flight.remainingMetres} m</dd></div>}
         </dl>
-        {order.stage === 'Delivered' && <button className="primary-button full-width" onClick={onBack}>Order something else <ArrowRight size={15} /></button>}
+        {(order.stage === 'Delivered' || order.failure) && <button className="primary-button full-width" onClick={onBack}>Order something else <ArrowRight size={15} /></button>}
         {order.photo && <figure className="captured-frame"><img src={order.photo.url} alt={`Last simulated camera frame for ${order.id}`} /><figcaption>Last captured frame · {new Date(order.photo.timestamp).toLocaleTimeString()}{order.photo.proofOfDelivery ? ' · Proof of delivery' : ''}</figcaption></figure>}
         <p className="privacy-note"><ShieldCheck size={14} />Simulated order and flight. No payment, drone or camera is involved.</p>
       </aside>

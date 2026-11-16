@@ -41,6 +41,15 @@ public enum DemoStage { Preparing, ReadyForPickup, Delivering }
 
 public sealed record DemoStageSkipped(string OrderId, DemoStage Stage);
 
+public enum DroneCommand { EmergencyLanding, ReturnToBase, DiscardPackage, Reactivate }
+public enum CommandStatus { Executing, Completed, Rejected }
+public sealed record DroneCommandRequested(string CommandId, string DroneId, DroneCommand Command);
+public sealed record DroneControl(string CommandId, DroneCommand Command, CommandStatus Status, string Message);
+
+// Camera poses shared with customers contain no other customers' orders or mission details.
+public sealed record CameraPose(string DroneId, DateTimeOffset Timestamp, GeoPoint Position,
+    double AltitudeMetres, double Heading, double CameraPitchDegrees);
+
 /// <summary>Published to <see cref="Hubs.DroneTelemetry"/> by the drone simulator, partitioned by drone.</summary>
 public sealed record DroneTelemetry(
     string DroneId,
@@ -57,7 +66,13 @@ public sealed record DroneTelemetry(
     string? MissionId,
     string? OrderId,
     int QueuedMissions,
-    double? FlightProgress = null);
+    double? FlightProgress = null,
+    double CameraPitchDegrees = -90,
+    DroneControl? Control = null,
+    bool CarryingPackage = false)
+{
+    public CameraPose CameraPose() => new(DroneId, Timestamp, Position, AltitudeMetres, Heading, CameraPitchDegrees);
+}
 
 public enum MissionMilestone
 {
@@ -67,6 +82,7 @@ public enum MissionMilestone
     Delivered,
     ReturnedToPad,
     Rejected,
+    Interrupted,
 }
 
 /// <summary>Published to <see cref="Hubs.DroneTelemetry"/>; position alone never implies a delivery.</summary>

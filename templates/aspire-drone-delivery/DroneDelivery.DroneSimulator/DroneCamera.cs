@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
+using System.Diagnostics;
+using System.Threading.Channels;
 using Azure.Messaging.EventHubs.Producer;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
@@ -12,13 +14,33 @@ namespace DroneDelivery.DroneSimulator;
 public sealed class DroneCamera(
     BlobContainerClient container,
     [FromKeyedServices(Hubs.DronePhotos)] EventHubProducerClient photos,
-    ILogger<DroneCamera> logger)
+    ILogger<DroneCamera> logger) : BackgroundService
 {
     bool containerReady;
+    readonly Channel<Capture> captures = Channel.CreateBounded<Capture>(64);
 
-    public async Task CaptureAsync(SimulatedDrone drone, PhotoTrigger trigger, bool proofOfDelivery, DateTimeOffset now, CancellationToken cancellationToken)
+    // Blob latency must not stall flight telemetry. Snapshot the pose now, not when the upload runs.
+    public void CaptureFrame(SimulatedDrone drone, PhotoTrigger trigger, bool proofOfDelivery, DateTimeOffset now)
     {
-        using var activity = Tracing.Start("drone camera capture")
+        var snapshot = new SimulatedDrone(drone.Id, drone.Spec, drone.HomePad, drone.BatteryPercent)
+        {
+            Position = drone.Position, AltitudeMetres = drone.AltitudeMetres, Heading = drone.Heading,
+            CameraPitchDegrees = drone.CameraPitchDegrees, Mission = drone.Mission,
+        };
+        if (!captures.Writer.TryWrite(new(snapshot, trigger, proofOfDelivery, now, Activity.Current?.Context ?? default)))
+            logger.LogWarning("Camera capture queue is full; skipped {Trigger} for {DroneId}", trigger, drone.Id);
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        await foreach (var capture in captures.Reader.ReadAllAsync(stoppingToken))
+            await CaptureAsync(capture.Drone, capture.Trigger, capture.ProofOfDelivery, capture.Timestamp, capture.Trace, stoppingToken);
+    }
+
+    async Task CaptureAsync(SimulatedDrone drone, PhotoTrigger trigger, bool proofOfDelivery, DateTimeOffset now,
+        ActivityContext trace, CancellationToken cancellationToken)
+    {
+        using var activity = Tracing.Start("drone camera capture", trace)
             ?.SetTag("drone_delivery.drone.id", drone.Id).SetTag("drone_delivery.order.id", drone.Mission?.OrderId)
             .SetTag("drone_delivery.photo.trigger", trigger.ToString()).SetTag("drone_delivery.photo.proof_of_delivery", proofOfDelivery);
         try
@@ -49,7 +71,7 @@ public sealed class DroneCamera(
 
     public static string Render(SimulatedDrone drone, PhotoTrigger trigger, bool proofOfDelivery, DateTimeOffset now)
     {
-        var lookingDown = trigger != PhotoTrigger.Cruise;
+        var lookingDown = drone.CameraPitchDegrees <= -60;
         var random = new Random(HashCode.Combine(Math.Round(drone.Position.Latitude, 4), Math.Round(drone.Position.Longitude, 4)));
         var svg = new StringBuilder();
         svg.Append("""<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480" font-family="monospace">""");
@@ -87,4 +109,6 @@ public sealed class DroneCamera(
     static string Invariant(FormattableString value) => value.ToString(CultureInfo.InvariantCulture);
 
     static string Escape(string value) => WebUtility.HtmlEncode(value);
+
+    sealed record Capture(SimulatedDrone Drone, PhotoTrigger Trigger, bool ProofOfDelivery, DateTimeOffset Timestamp, ActivityContext Trace);
 }

@@ -33,6 +33,41 @@ missions, and pickup cannot be skipped before a drone is assigned. Commands trav
 through the mission hub; telemetry and landing photos remain authoritative. Delivered
 orders retain their proof-of-delivery frame instead of showing the return flight.
 
+On the operations roster, **Camera & controls** opens a right-hand drawer for any
+drone. The feed is a client-rendered Three.js scene, not streamed video or a sequence
+of Blob images. Position, altitude, heading and camera pitch arrive over SignalR;
+a two-second playout buffer interpolates only received poses (including heading
+wraparound). Missing telemetry freezes the last pose and is labelled, never
+extrapolated into another mission. Subtle scanlines and a rolling transmission band
+are visual effects, disabled for reduced motion. Other drones use their real
+reported positions and a small procedural model; no decorative flight paths are added.
+The feed's airspace inset shows all current fleet positions with heading-aware
+markers so aircraft outside the camera's field of view remain locatable.
+
+The drawer sends commands through the backend and mission Event Hub:
+
+| Command | Simulator effect |
+| --- | --- |
+| Emergency landing | Descend vertically at the current position; stay grounded and unavailable for dispatch |
+| Return to base | Divert from the actual pose, land at the home pad and unload any package there |
+| Discard package | Only available with a package; land at the designated waste drop-off, release there, then return to base |
+| Reactivate | Only available when grounded; fly back to the home pad, unload if necessary and rejoin dispatch |
+
+Commands are serialized per drone and acknowledged by telemetry. Interrupting a
+mission marks its active order **unable to complete**, not Delivered; queued orders
+are released for reassignment. Previously delivered orders stay delivered.
+The waste point is fictional (`GET /api/waste`). All controls affect only the
+simulator: this is not a real flight-control or collision-avoidance system.
+On the ground, drones retain their arrival heading; the next ascent turns by the
+shortest arc toward the new leg. Airborne diversions start at the actual altitude
+and blend their turn. The camera looks down during vertical flight, tilting forward
+as the climb completes and down again as descent begins.
+
+Blob capture remains independent: a bounded 64-frame upload queue snapshots the
+pose at capture time. Slow storage does not stop telemetry; a full queue explicitly
+logs a skipped capture. These remain labelled SVG placeholder images, not captures
+of the browser's Three.js canvas or real photographs.
+
 The AppHost starts:
 
 | Resource | What it does |
@@ -78,15 +113,22 @@ The customer stores up to 20 order receipts in localStorage and subscribes only
 to active orders among those IDs. A freshly accepted order may take up to 30 seconds
 to appear through Event Hubs; the customer shows a confirming state before opening
 its live connection. Delivered orders retain their final snapshot and close that
-connection; reloading fetches the completed snapshot without resubscribing.
+connection; failed and unserviceable orders also stop live subscriptions.
+Reloading fetches the terminal snapshot without resubscribing.
 Bag contents and map credentials remain in page memory. Backend orders
 reset when the server restarts, with missing-order errors shown explicitly.
 
 Each frontend publishes its `dist` into its own UI server's `wwwroot` using
 `PublishWithContainerFiles`. The two ASP.NET servers have independent processes
 and endpoints; neither contains logistics nor shares a static-file root.
-Frontend builds are self-contained, including map artwork and theme assets,
-so their publish contexts need no sibling source directories.
+Both frontends compile the common camera, pose buffer and map artwork from
+`frontend-shared`; keep that directory beside the frontend source folders when
+building. Published `dist` output is self-contained and needs no shared source
+directory at runtime. The AppHost uses `frontend-shared/Dockerfile` with the template
+root as its context and a per-site `FRONTEND` argument; this includes the shared
+source without depending on the other site's packages. Its build-only `/app/dist`
+artifact is still copied into the corresponding UI server's `wwwroot` by
+`PublishWithContainerFiles`.
 Both UI servers proxy to the service-discovered backend. This packaging is not an Azure
 deployment claim; no deployment target is configured.
 
@@ -267,7 +309,7 @@ Tracing and metrics limits:
 Only API-reported drones appear in the operations map. Customer tracking uses the
 assigned drone's actual simulator telemetry, with no browser-generated flight leg.
 The three.js camera stays mounted through inbound flight, loading and delivery
-and points straight down during take-off and landing. It has placeholder buildings,
+and smoothly follows the simulator's camera orientation during take-off and landing. It has placeholder buildings,
 not real video. A separately labelled last captured frame comes from the server's
 blob-photo proxy, including proof of delivery when available.
 The rendered camera uses Azure Maps road tiles for the

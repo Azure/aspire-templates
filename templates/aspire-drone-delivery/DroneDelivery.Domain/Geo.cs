@@ -44,6 +44,8 @@ public static class ServiceArea
         new("albert-park", "ForthCoffee, Albert Park kiosk", new(-37.8402, 144.9661)),
     ];
 
+    public static readonly PickupLocation Waste = new("waste", "ForthCoffee waste drop-off (simulated)", new(-37.8364, 144.9602));
+
     public static bool Contains(GeoPoint point) =>
         point.Latitude is >= South and <= North && point.Longitude is >= West and <= East;
 
