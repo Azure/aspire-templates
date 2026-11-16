@@ -23,7 +23,17 @@ Open **customer-site** for ordering and your own tracking, or **operator-site**
 for the store maps, dispatch queue and full fleet. There is no portal/login chooser
 or operations UI on the customer site. While an order is Preparing, the customer
 site shows a fictional barista profile (frontend-only mock data with illustrated
-avatars), picked consistently from the order ID. The AppHost starts:
+avatars), picked consistently from the order ID.
+
+For presentations, a small **Skip** control beside the active stage fast-forwards
+Preparing, Ready for pickup, or Delivering through the backend. Pickup skips include
+the assigned drone's departure/charging wait, inbound flight and loading; delivery
+skips include the flight and unloading. Queued orders still wait for preceding
+missions, and pickup cannot be skipped before a drone is assigned. Commands travel
+through the mission hub; telemetry and landing photos remain authoritative. Delivered
+orders retain their proof-of-delivery frame instead of showing the return flight.
+
+The AppHost starts:
 
 | Resource | What it does |
 | --- | --- |

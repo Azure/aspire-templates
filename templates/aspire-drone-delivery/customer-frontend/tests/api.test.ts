@@ -67,6 +67,14 @@ test('receipt identity, recipes and partial quad capacity are preserved', () => 
   assert.throws(() => customerOrder({ ...snapshot, order: { ...snapshot.order, orderId: 'FC-OTHER' } }, receipt, now), /receipt/);
 });
 
+test('a completed order keeps its landing proof rather than the subsequent return-flight frame', () => {
+  const landing = { blobName: `${telemetry.droneId}/landing.svg`, trigger: 'LandingEnd', proofOfDelivery: true, timestamp: telemetry.timestamp };
+  const returning = { blobName: `${telemetry.droneId}/return.svg`, trigger: 'TakeoffStart', proofOfDelivery: false, timestamp: telemetry.timestamp };
+  const order = customerOrder({ ...snapshot, status: 'Delivered', photos: [landing, returning] }, receipt, now);
+  assert.equal(order.photo?.proofOfDelivery, true);
+  assert.include(order.photo!.url, 'landing.svg');
+});
+
 test('current stage progress follows live telemetry instead of jumping to complete', () => {
   const store = snapshot.store.location, drop = snapshot.order.dropOff;
   const along = (t: number) => ({ latitude: store.latitude + (drop.latitude - store.latitude) * t, longitude: store.longitude + (drop.longitude - store.longitude) * t });

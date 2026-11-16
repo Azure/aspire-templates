@@ -1,9 +1,10 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, ChefHat, Drone, FastForward, House, Layers, MapPin, Package, ShieldCheck } from 'lucide-react';
 import { AzureBasemap, MapArtwork } from './DeliveryMap';
 import type { MapSettings } from './DeliveryMap';
 import FoodArt, { CoffeeCup } from './FoodArt';
 import { baristaFor } from './baristas';
+import { skipOrderStage } from './api';
 import { bagCount, bagTotal, coffeeDescription, linePrice, menuItem, money, orderFlight, payloadNames, stages, stageTicks } from './demo';
 import type { Order, OrderFlight } from './demo';
 
@@ -67,9 +68,22 @@ function FollowMap({ flight, settings, onSettings }: { flight: OrderFlight; sett
   </div>;
 }
 
-export default function OrderStatus({ order, orderId, settings, onSettings, onAdvance, onBack }: {
-  order: Order | undefined; orderId: string; settings: MapSettings | null; onSettings: () => void; onAdvance?: () => void; onBack: () => void;
+export default function OrderStatus({ order, orderId, settings, onSettings, onBack }: {
+  order: Order | undefined; orderId: string; settings: MapSettings | null; onSettings: () => void; onBack: () => void;
 }) {
+  const [skipping, setSkipping] = useState(false);
+  const [skipError, setSkipError] = useState('');
+  useEffect(() => { setSkipping(false); setSkipError(''); }, [orderId, order?.stage]);
+  async function skip() {
+    if (!order || skipping) return;
+    setSkipping(true);
+    setSkipError('');
+    try { await skipOrderStage(order.id, order.stage); }
+    catch (reason) {
+      setSkipError(reason instanceof Error ? reason.message : String(reason));
+      setSkipping(false);
+    }
+  }
   if (!order) return <main className="status-page"><button className="text-button back-link" onClick={onBack}><ArrowLeft size={15} />Back to the menu</button>
     <section className="status-missing"><h1>We can’t find order {orderId}.</h1><p>This browser shows only the orders you placed here. The demo server resets on restart.</p><button className="primary-button" onClick={onBack}>Find something good <ArrowRight size={15} /></button></section></main>;
 
@@ -96,10 +110,16 @@ export default function OrderStatus({ order, orderId, settings, onSettings, onAd
       const fill = state === 'done' ? 1 : state === 'current' ? (stage === 'Delivered' ? 1 : order.backend ? order.stageProgress ?? 0 : Math.min(1, order.elapsed / duration[stage])) : 0;
       return <li key={stage} className={state} aria-current={state === 'current' ? 'step' : undefined}>
         <span className="step-icon">{state === 'done' ? <Check size={16} /> : <Icon size={16} />}</span>
-        <span className="step-label">{stage}</span>
+        <span className="step-label">{stage}
+        {state === 'current' && stage !== 'Delivered' && <button className="stage-skip" type="button"
+          aria-label={`Skip ${stage} (demo)`} title={stage === 'Ready for pickup' && !order.drone
+            ? 'Waiting for an assigned drone' : 'Fast-forward this stage in the demo'}
+          disabled={skipping || stage === 'Ready for pickup' && !order.drone}
+          onClick={skip}><FastForward size={10} />{skipping ? 'Skipping…' : 'Skip'}</button>}</span>
         <span className="step-bar"><i style={{ width: `${fill * 100}%` }} /></span>
       </li>;
     })}</ol>
+    {skipError && <p role="alert" className="skip-error">{skipError}</p>}
 
     <div className="status-grid">
       <section className="status-stage">
@@ -124,7 +144,6 @@ export default function OrderStatus({ order, orderId, settings, onSettings, onAd
           <div><dt>To</dt><dd>{flight.destination.label}</dd></div>
           {(order.stage === 'Delivering' || flight.phase === 'To pickup') && <div><dt>{flight.phase === 'To pickup' ? 'To pickup' : 'Distance left'}</dt><dd>{flight.remainingMetres} m</dd></div>}
         </dl>
-        {order.stage !== 'Delivered' && onAdvance && <button className="outline-button full-width" disabled={order.stage === 'Ready for pickup' && !flight.droneId} onClick={onAdvance}><FastForward size={14} />Skip to next stage (demo)</button>}
         {order.stage === 'Delivered' && <button className="primary-button full-width" onClick={onBack}>Order something else <ArrowRight size={15} /></button>}
         {order.photo && <figure className="captured-frame"><img src={order.photo.url} alt={`Last simulated camera frame for ${order.id}`} /><figcaption>Last captured frame · {new Date(order.photo.timestamp).toLocaleTimeString()}{order.photo.proofOfDelivery ? ' · Proof of delivery' : ''}</figcaption></figure>}
         <p className="privacy-note"><ShieldCheck size={14} />Simulated order and flight. No payment, drone or camera is involved.</p>

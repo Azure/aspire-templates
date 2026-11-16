@@ -18,6 +18,7 @@ public sealed class DroneFleetSimulator(
     ILogger<DroneFleetSimulator> logger) : BackgroundService
 {
     static readonly TimeSpan Tick = TimeSpan.FromSeconds(1);
+    readonly DemoSkips skips = new();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -27,7 +28,9 @@ public sealed class DroneFleetSimulator(
 
         var receiving = missions.ConsumeAsync((data, _) =>
         {
-            if (data.TryRead<MissionAssigned>(out var mission))
+            if (data.TryRead<DemoStageSkipped>(out var skip))
+                skips.Request(skip);
+            else if (data.TryRead<MissionAssigned>(out var mission))
             {
                 if (fleet.TryGetValue(mission.DroneId, out var drone))
                     drone.Queue.Enqueue(mission);
@@ -94,6 +97,12 @@ public sealed class DroneFleetSimulator(
         var lastReport = time.GetUtcNow();
         while (time.GetUtcNow() < mission.DepartAt || drone.BatteryPercent < needed)
         {
+            if (skips.Contains(mission.OrderId, DemoStage.ReadyForPickup))
+            {
+                // Fast-forward this mission's charging wait, not any preceding mission.
+                drone.BatteryPercent = Math.Max(drone.BatteryPercent, needed);
+                break;
+            }
             await Task.Delay(Tick, time, cancellationToken);
             drone.ChargeFor(Tick);
             if (time.GetUtcNow() - lastReport >= options.ParkedTelemetryInterval)
@@ -109,18 +118,19 @@ public sealed class DroneFleetSimulator(
         drone.State = DroneState.Loading;
         await ReportAsync(drone, cancellationToken);
         var loaded = (time.GetUtcNow() > mission.ReadyAt ? time.GetUtcNow() : mission.ReadyAt) + LogisticsPlanner.LoadingTime;
-        await WaitUntilAsync(drone, loaded, cancellationToken);
+        await WaitUntilAsync(drone, loaded, DemoStage.ReadyForPickup, cancellationToken);
         await MilestoneAsync(drone, mission, MissionMilestone.PickedUp, cancellationToken);
 
         await FlyAsync(drone, toCustomer, DroneState.FlyingToCustomer, proofOfDelivery: true, cancellationToken);
         drone.State = DroneState.Unloading;
         await ReportAsync(drone, cancellationToken);
-        await WaitUntilAsync(drone, time.GetUtcNow() + LogisticsPlanner.UnloadingTime, cancellationToken);
+        await WaitUntilAsync(drone, time.GetUtcNow() + LogisticsPlanner.UnloadingTime, DemoStage.Delivering, cancellationToken);
         await MilestoneAsync(drone, mission, MissionMilestone.Delivered, cancellationToken);
 
         await FlyAsync(drone, toPad, DroneState.ReturningToPad, proofOfDelivery: false, cancellationToken);
         await MilestoneAsync(drone, mission, MissionMilestone.ReturnedToPad, cancellationToken);
         drone.Mission = null;
+        skips.Complete(mission.OrderId);
         drone.ChargeFor(TimeSpan.Zero);
         await ReportAsync(drone, cancellationToken);
     }
@@ -135,7 +145,13 @@ public sealed class DroneFleetSimulator(
         while (true)
         {
             var now = time.GetUtcNow();
-            var elapsed = now - start;
+            var skip = drone.Mission is { } mission && (state switch
+            {
+                DroneState.FlyingToPickup => skips.Contains(mission.OrderId, DemoStage.ReadyForPickup),
+                DroneState.FlyingToCustomer => skips.Contains(mission.OrderId, DemoStage.Delivering),
+                _ => false,
+            });
+            var elapsed = skip ? leg.Duration : now - start;
             var sample = leg.At(elapsed);
             drone.FlightProgress = sample.Progress;
             drone.Position = sample.Position;
@@ -144,7 +160,7 @@ public sealed class DroneFleetSimulator(
             drone.Manoeuvre = sample.Manoeuvre;
             drone.BatteryPercent = startBattery - leg.BatteryPercent * sample.Progress;
 
-            var trigger = (previous, sample.Manoeuvre) switch
+            var trigger = skip ? PhotoTrigger.LandingEnd : (previous, sample.Manoeuvre) switch
             {
                 (Manoeuvre.OnTheGround, _) when elapsed < Tick * 1.5 => PhotoTrigger.TakeoffStart,
                 (Manoeuvre.VerticalClimb, Manoeuvre.Cruise) => PhotoTrigger.TakeoffEnd,
@@ -166,11 +182,20 @@ public sealed class DroneFleetSimulator(
         }
     }
 
-    async Task WaitUntilAsync(SimulatedDrone drone, DateTimeOffset until, CancellationToken cancellationToken)
+    async Task WaitUntilAsync(SimulatedDrone drone, DateTimeOffset until, DemoStage stage, CancellationToken cancellationToken)
     {
         while (until - time.GetUtcNow() is var remaining && remaining > TimeSpan.Zero)
         {
-            await Task.Delay(remaining < options.ParkedTelemetryInterval ? remaining : options.ParkedTelemetryInterval, time, cancellationToken);
+            if (drone.Mission is { } mission && (skips.Contains(mission.OrderId, stage) ||
+                stage == DemoStage.ReadyForPickup && skips.Contains(mission.OrderId, DemoStage.Preparing)))
+            {
+                if (stage != DemoStage.ReadyForPickup || skips.Contains(mission.OrderId, stage))
+                    break;
+                // Preparation was shortened, but loading still takes its normal duration.
+                until = until > time.GetUtcNow() + LogisticsPlanner.LoadingTime
+                    ? time.GetUtcNow() + LogisticsPlanner.LoadingTime : until;
+            }
+            await Task.Delay(remaining < Tick ? remaining : Tick, time, cancellationToken);
             await ReportAsync(drone, cancellationToken);
         }
     }

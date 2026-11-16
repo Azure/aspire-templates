@@ -31,7 +31,7 @@ public sealed class OrderView(OrderPlaced order, PickupLocation store, DateTimeO
 {
     public OrderPlaced Order { get; } = order;
     public PickupLocation Store { get; } = store;
-    public DateTimeOffset ReadyAt { get; } = readyAt;
+    public DateTimeOffset ReadyAt { get; set; } = readyAt;
     public OrderStatus Status { get; set; } = OrderStatus.AwaitingFleet;
     public string? DroneId { get; set; }
     public DroneClass? DroneClass { get; set; }
@@ -173,6 +173,32 @@ public sealed class Dispatcher
     {
         lock (gate)
             return fleet.Values.OrderBy(drone => drone.Class).ThenBy(drone => drone.DroneId, StringComparer.Ordinal).ToList();
+    }
+
+    public bool CanSkip(string orderId, DemoStage stage, DateTimeOffset now)
+    {
+        lock (gate)
+        {
+            if (!orders.TryGetValue(orderId, out var view) ||
+                view.Status is OrderStatus.Delivered or OrderStatus.Unserviceable)
+                return false;
+            return stage switch
+            {
+                DemoStage.Preparing => view.Status != OrderStatus.PickedUp && now < view.ReadyAt,
+                DemoStage.ReadyForPickup => view.Status != OrderStatus.PickedUp && now >= view.ReadyAt && view.DroneId is not null,
+                DemoStage.Delivering => view.Status == OrderStatus.PickedUp,
+                _ => false,
+            };
+        }
+    }
+
+    public void SkipPreparation(string orderId, DateTimeOffset now)
+    {
+        lock (gate)
+        {
+            if (orders.TryGetValue(orderId, out var view) && view.ReadyAt > now)
+                view.ReadyAt = now;
+        }
     }
 
     public IReadOnlyList<OrderSnapshot> Orders(int take)

@@ -1,5 +1,5 @@
 import { coffeeDescription, menuItem, metresPerUnit } from './demo';
-import type { Bag, Destination, Order, OrderFlight, PayloadSize } from './demo';
+import type { Bag, Destination, Order, OrderFlight, PayloadSize, Stage } from './demo';
 import { fromLonLat, toLonLat } from './mapGeometry';
 
 export type GeoPoint = { latitude: number; longitude: number };
@@ -24,6 +24,15 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   if (!response.ok) throw new Error(`${init?.method ?? 'GET'} ${path} failed (${response.status}). ${await response.text()}`);
   return response.json() as Promise<T>;
+}
+
+export async function skipOrderStage(orderId: string, stage: Stage): Promise<void> {
+  if (stage === 'Delivered') throw new Error('Delivered orders have no stage to skip.');
+  const response = await fetch(`/api/orders/${encodeURIComponent(orderId)}/demo/skip`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orderId, stage: stage === 'Ready for pickup' ? 'ReadyForPickup' : stage }),
+  });
+  if (!response.ok) throw new Error(`Cannot skip ${stage}: ${await response.text()}`);
 }
 export async function placeOrder(bag: Bag, payload: PayloadSize, dropOff: Destination): Promise<Receipt> {
   const [longitude, latitude] = toLonLat(dropOff.x, dropOff.y);
@@ -86,7 +95,8 @@ export function stageProgressFor(snapshot: OrderSnapshot, tracking: OrderFlight 
 export function customerOrder(snapshot: OrderSnapshot, receipt: Receipt, now = Date.now()): Order {
   if (snapshot.order.orderId !== receipt.id) throw new Error('Order response does not match your receipt.');
   const tracking = trackingFor(snapshot, now);
-  const photo = snapshot.photos.filter(frame => snapshot.droneId && frame.blobName.startsWith(`${snapshot.droneId}/`)).at(-1);
+  const frames = snapshot.photos.filter(frame => snapshot.droneId && frame.blobName.startsWith(`${snapshot.droneId}/`));
+  const photo = (snapshot.status === 'Delivered' ? frames.filter(frame => frame.proofOfDelivery).at(-1) : undefined) ?? frames.at(-1);
   return {
     id: receipt.id, customer: 'You', bag: receipt.bag, payload: receipt.payload, manual: true, backend: true,
     stage: stageFor(snapshot, now), elapsed: Math.max(0, (now - Date.parse(snapshot.order.placedAt)) / 1000),

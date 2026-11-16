@@ -37,6 +37,10 @@ public sealed record MissionAssigned(
     DateTimeOffset DepartAt,
     DateTimeOffset ReadyAt);
 
+public enum DemoStage { Preparing, ReadyForPickup, Delivering }
+
+public sealed record DemoStageSkipped(string OrderId, DemoStage Stage);
+
 /// <summary>Published to <see cref="Hubs.DroneTelemetry"/> by the drone simulator, partitioned by drone.</summary>
 public sealed record DroneTelemetry(
     string DroneId,

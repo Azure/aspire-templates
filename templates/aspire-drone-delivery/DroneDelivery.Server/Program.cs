@@ -50,6 +50,23 @@ app.MapGet("/api/orders/{orderId}", (Dispatcher dispatcher, string orderId) =>
 
 app.MapRealtimeEndpoints();
 
+app.MapPost("/api/orders/{orderId}/demo/skip", async (
+    string orderId, DemoStageSkipped request, Dispatcher dispatcher,
+    [FromKeyedServices(Hubs.DroneMissions)] EventHubProducerClient missions,
+    TimeProvider time, CancellationToken cancellationToken) =>
+{
+    if (request.OrderId != orderId || !Enum.IsDefined(request.Stage))
+        return Results.BadRequest();
+    if (dispatcher.Order(orderId) is not { } order)
+        return Results.NotFound();
+    if (!dispatcher.CanSkip(orderId, request.Stage, time.GetUtcNow()))
+        return Results.Conflict(new { message = "This stage cannot be skipped now. Wait for an assigned drone or the next stage." });
+    await missions.SendAsync(request, order.DroneId ?? orderId, cancellationToken);
+    if (request.Stage == DemoStage.Preparing)
+        dispatcher.SkipPreparation(orderId, time.GetUtcNow());
+    return Results.Accepted();
+});
+
 // Web orders take the same path as simulated customers: onto the orders hub, then through logistics.
 app.MapPost("/api/orders", async (
     PlaceOrder request,
