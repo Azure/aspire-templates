@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, Coffee, Drone, MapPin, Minus, Package, Plus, ShieldCheck, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Coffee, Drone, MapPin, Minus, Package, Plus, ShieldCheck, X } from 'lucide-react';
 import type { MapSettings } from './DeliveryMap';
 import BaySelector from './BaySelector';
 import FoodArt, { CoffeeCup } from './FoodArt';
@@ -15,7 +15,7 @@ type Modal = 'bag' | 'bay' | 'maps' | 'about' | null;
 const bayLabel = (bays: number) => `${bays} bay${bays === 1 ? '' : 's'}`;
 
 export default function App() {
-  const { orders, error: apiError, status: apiStatus, loading, remember, receipts } = useCustomerOrders();
+  const { orders, error: apiError, status: apiStatus, remember, receipts } = useCustomerOrders();
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [bays, setBays] = useState<Bays>([]);
@@ -26,7 +26,6 @@ export default function App() {
   const [mapClientId, setMapClientId] = useState('');
   const [mapToken, setMapToken] = useState('');
   const [mapError, setMapError] = useState('');
-  const [notice, setNotice] = useState('');
   const [route, setRoute] = useState(() => window.location.hash);
   const opener = useRef<HTMLElement | null>(null);
   const dialog = useRef<HTMLDivElement>(null);
@@ -43,11 +42,6 @@ export default function App() {
     if (hash) window.location.hash = hash;
     else { window.history.pushState(null, '', window.location.pathname + window.location.search); setRoute(''); window.scrollTo(0, 0); }
   }
-  useEffect(() => {
-    if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(''), 4500);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
   useEffect(() => {
     if (!modal) return;
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -75,7 +69,6 @@ export default function App() {
     if (count > size) return;
     setPayload(size);
     setBays(current => resizeBays(current, size));
-    setNotice(`${payloadNames[size]} selected. ${size - count} of ${size} bay${size === 1 ? '' : 's'} ready to fill.`);
   }
   function chooseFirst() {
     setModal(null);
@@ -84,7 +77,6 @@ export default function App() {
       document.getElementById('payload')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       document.querySelector<HTMLButtonElement>('.payload-options button')?.focus({ preventScroll: true });
     }, 0);
-    setNotice('Choose a single, double or quad payload first.');
   }
   function openBay(index: number) {
     if (!payload) { chooseFirst(); return; }
@@ -103,10 +95,8 @@ export default function App() {
     if (index >= 0) clearBay(index);
   }
   function fillBay(line: BagLine) {
-    const editing = bays[activeBay] !== null;
     setBays(current => current.map((entry, i) => i === activeBay ? line : entry));
     setModal(null);
-    setNotice(`${menuItem(line.itemId).name} ${editing ? 'updated in' : 'packed in'} bay ${activeBay + 1}.`);
   }
   async function confirm() {
     if (!payload || !validBag(bag, payload) || submitting) return;
@@ -116,7 +106,6 @@ export default function App() {
       remember(receipt);
       setBays(emptyBays(payload)); setModal(null);
       navigate(`#/order/${receipt.id}`);
-      setNotice('Order confirmed. Your barista is on it.');
     } catch (reason) {
       setSubmitError(`Order not confirmed: ${reason instanceof Error ? reason.message : String(reason)}`);
     } finally { setSubmitting(false); }
@@ -146,16 +135,9 @@ export default function App() {
             <div className="packing-preview-bottom"><span>INSULATED CUPS. CAREFULLY NESTLED.<br /><small>Illustrative packaging, not real payload engineering.</small></span><span><Package size={15} />{payload ? payloadNames[payload].toUpperCase() : 'YOUR BOX, YOUR WAY'}</span></div>
           </div>
         </section>
-        <section className="customer-map-section"><div className="section-heading"><div><div className="eyebrow">YOUR COFFEE RUNS</div><h2>Good mornings. <em>On their way.</em></h2><p>Only orders placed from this browser appear here.</p></div></div>
-          {loading && <p role="status">Connecting to your orders…</p>}
-          {!receipts.length && <p>Your next good morning starts with a payload.</p>}
-          {receipts.map(receipt => <p key={receipt.id}><a href={`#/order/${receipt.id}`}>{receipt.id} · {orders.find(order => order.id === receipt.id)?.stage ?? 'Connecting'} · {receipt.dropOff.label}</a></p>)}
-        </section>
-        <div className="payload-dock"><div><Package size={20} /><span><strong>{payload ? `${payloadNames[payload]} payload` : 'Your next coffee run'}</strong><small>{payload ? `${count} ${count === 1 ? 'item' : 'items'} · ${bayLabel(capacity - count)} free` : 'Start with your flight box'}</small></span></div><button className="primary-button" onClick={() => payload ? setModal('bag') : chooseFirst()}>{payload ? `Review payload · ${money(bagTotal(bag))}` : 'Choose your payload'}<ArrowRight size={15} /></button></div>
       </main>}
 
     <footer><a className="footer-brand" href="#" onClick={event => { event.preventDefault(); navigate(''); }}>ForthCoffee.</a><span>Great coffee. A little altitude. Built with Aspire.</span><button onClick={() => setModal('about')}>A fictional company, by design <ArrowRight size={13} /></button><span className="footer-coordinates">SOUTH MELBOURNE · 37.83° S, 144.96° E</span></footer>
-    {notice && <div role="status" className="toast"><Check size={17} />{notice}</div>}
     {modal && <div className="modal-backdrop" onClick={event => { if (event.target === event.currentTarget) setModal(null); }}><div className={`modal ${modal === 'bay' ? 'coffee-modal' : modal === 'bag' ? 'bag-modal' : ''}`} ref={dialog} role="dialog" aria-modal="true" aria-labelledby="modal-heading"><button className="modal-close icon-button" onClick={() => setModal(null)} aria-label="Close dialog"><X size={20} /></button>
       {modal === 'bay' && payload && <BaySelector key={activeBay} bay={activeBay} current={bays[activeBay] ?? null} onSave={fillBay} />}
       {modal === 'bag' && <><div className="eyebrow">03 / READY FOR TAKE-OFF?</div><h2 id="modal-heading">Your coffee run.</h2><p>ForthCoffee · South Melbourne · {payload ? `${payloadNames[payload]} payload` : 'No payload selected'}</p>

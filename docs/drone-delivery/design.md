@@ -42,7 +42,7 @@ The map is illustrative and cannot support navigation or real flight planning.
    shows AUD prices and full customization details before confirmation.
 3. Confirm a demo order explicitly. The customer lands on a dedicated order
    status page (`#/order/<id>`) with a four-step progress indicator, ETA, items
-   and total. A home-page card links back to it.
+   and total. Its URL is the way back to it; the menu page lists no past orders.
 4. Once the order is ready and matching assigned-drone telemetry is available,
    the status page adds two follow views: an overhead
    map centred on the assigned drone (illustrated, or Azure Maps when configured)
