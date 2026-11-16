@@ -56,4 +56,4 @@ This is a demo. Before using it with real customers:
 
 ## Deploy
 
-The AppHost targets Azure Container Apps for `aspire deploy`. In publish mode the server hosts the built public site at `/` and the agent console at `/agent`, and Azure Web PubSub is provisioned for the hub.
+The AppHost targets Azure Container Apps for `aspire deploy`, using an [Azure Container Apps Express](https://learn.microsoft.com/azure/container-apps/express-overview) environment (`AsExpress()`, preview) so it provisions quickly and scales to zero. Express environments don't include the managed Aspire dashboard; remove `.AsExpress()` for a standard environment. In publish mode the server hosts the built public site at `/` and the agent console at `/agent`, and Azure Web PubSub is provisioned for the hub.

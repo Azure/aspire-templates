@@ -1,6 +1,11 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
-builder.AddAzureContainerAppEnvironment("env");
+// Container Apps Express provisions quickly and scales to zero; it does not
+// include the managed Aspire dashboard. Local runs are unaffected.
+#pragma warning disable ASPIREACAEXPRESS001 // Express is a preview feature.
+builder.AddAzureContainerAppEnvironment("env")
+    .AsExpress();
+#pragma warning restore ASPIREACAEXPRESS001
 
 // Azure Web PubSub carries real-time traffic between customers and agents.
 // Locally it runs as the Web PubSub emulator container; when published it
