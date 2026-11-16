@@ -4,11 +4,14 @@ import { PoseBuffer } from './pose';
 import type { CameraPose } from './pose';
 import './camera.css';
 import { coastPath, fromLonLat, landmarks, lakePath, landPath, mapLabels, parkPath, pierPath, roadPaths } from './mapGeometry';
+import { fetchTile, tilesFor, tileToLonLat } from './osm';
 
 // Ground region (illustrated-map units) around the kitchen-to-drop-off corridor.
 const region = { x: 280, y: 100, width: 720, height: 550 };
 const kitchen = { x: 510, y: 318 };
 const metresPerUnit = 4.2;
+const tileZoom = 16;
+type GroundSource = 'illustrated' | 'osm';
 
 function drawIllustratedGround(ctx: CanvasRenderingContext2D, scale: number) {
   ctx.save();
@@ -100,6 +103,30 @@ function drawAirspace(canvas: HTMLCanvasElement, readings: readonly CameraPose[]
     ctx.restore();
   }
   return count;
+}
+
+/** Draws OpenStreetMap tiles over the corridor (fetched once per page). Throws if any tile fails so the caller can keep the illustrated ground. */
+async function drawOsmGround(ctx: CanvasRenderingContext2D, scale: number, signal: AbortSignal) {
+  const queue = tilesFor(region, tileZoom);
+  // Draw only after every tile arrives so a partial failure never leaves a patchwork ground.
+  const images: { x: number; y: number; image: ImageBitmap }[] = [];
+  try {
+    await Promise.all(Array.from({ length: 2 }, async () => {
+      for (let tile = queue.shift(); tile; tile = queue.shift()) {
+        const [x, y] = tile;
+        const blob = await fetchTile(tileZoom, x, y);
+        if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        images.push({ x, y, image: await createImageBitmap(blob) });
+      }
+    }));
+    for (const { x, y, image } of images) {
+      const [lonA, latA] = tileToLonLat(x, y, tileZoom), [lonB, latB] = tileToLonLat(x + 1, y + 1, tileZoom);
+      const a = fromLonLat(lonA, latA), b = fromLonLat(lonB, latB);
+      ctx.drawImage(image, (a.x - region.x) * scale, (a.y - region.y) * scale, (b.x - a.x) * scale + 1, (b.y - a.y) * scale + 1);
+    }
+  } finally {
+    images.forEach(({ image }) => image.close());
+  }
 }
 
 // Small deterministic generator so the temporary scenery is stable between visits.
@@ -194,6 +221,8 @@ export default function DroneCam({ pose, nearby = [], target: destination }: {
   const buffers = useRef(new Map<string, PoseBuffer>());
   const latest = useRef({ pose, nearby, destination });
   const [status, setStatus] = useState<'loading' | 'live' | 'unavailable'>('loading');
+  const [ground, setGround] = useState<GroundSource>('illustrated');
+  const [groundNote, setGroundNote] = useState('');
   useEffect(() => {
     latest.current = { pose, nearby, destination };
     const visible = new Set([pose.droneId, ...nearby.map(drone => drone.droneId)]);
@@ -224,6 +253,7 @@ export default function DroneCam({ pose, nearby = [], target: destination }: {
     }
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
     const disposables: { dispose(): void }[] = [];
+    const controller = new AbortController();
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.domElement.setAttribute('aria-hidden', 'true');
     element.prepend(renderer.domElement);
@@ -252,6 +282,13 @@ export default function DroneCam({ pose, nearby = [], target: destination }: {
     target.visible = false;
     const models = new Map<string, THREE.Group>();
     const frustum = new THREE.Frustum(), viewProjection = new THREE.Matrix4();
+    drawOsmGround(ctx, scale, controller.signal)
+      .then(() => { texture.needsUpdate = true; setGround('osm'); setGroundNote(''); })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setGroundNote(`OpenStreetMap tiles unavailable, showing the illustrated ground. ${error instanceof Error ? error.message : ''}`.trim());
+      });
+
     const camera = new THREE.PerspectiveCamera(62, 1, .5, 400);
     const resize = () => {
       const { clientWidth, clientHeight } = element;
@@ -327,6 +364,7 @@ export default function DroneCam({ pose, nearby = [], target: destination }: {
     setStatus('live');
 
     return () => {
+      controller.abort();
       cancelAnimationFrame(frame);
       observer.disconnect();
       disposables.forEach(item => item.dispose());
@@ -346,6 +384,7 @@ export default function DroneCam({ pose, nearby = [], target: destination }: {
     </div>
     <div className="cam-transmission" aria-hidden="true" />
     <div className="cam-airspace"><canvas aria-hidden="true" /><span className="cam-airspace-label">AIRSPACE</span></div>
-    <span className="cam-credit">Illustrated ground · placeholder structures · ~2 s playout · not video</span>
+    <span className="cam-credit">{ground === 'osm' ? '© OpenStreetMap contributors · placeholder structures' : 'Illustrated ground · placeholder structures'} · ~2 s playout · not video</span>
+    {groundNote && <span className="cam-note" role="status">{groundNote}</span>}
   </div>;
 }
