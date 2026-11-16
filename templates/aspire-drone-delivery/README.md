@@ -312,8 +312,8 @@ The three.js camera stays mounted through inbound flight, loading and delivery
 and smoothly follows the simulator's camera orientation during take-off and landing. It has placeholder buildings,
 not real video. A separately labelled last captured frame comes from the server's
 blob-photo proxy, including proof of delivery when available.
-The rendered camera uses OpenStreetMap tiles for the
-ground, falling back to an illustrated map if they can't load. If WebGL is
+The rendered camera's ground is an illustrated map; the overhead maps use
+OpenStreetMap. If WebGL is
 unavailable, the overhead map still follows the drone.
 Prices, battery levels and the company are fictional design data.
 Plant milk choices are not an allergen-free guarantee; no dietary suitability is claimed.
