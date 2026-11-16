@@ -67,3 +67,22 @@ test('invalid pushed data is surfaced rather than silently keeping a live view',
   expect(report).toHaveBeenCalledWith('Invalid realtime update: wrong receipt');
   controller.abort();
 });
+
+test('ordinary reconnect is a status, but negotiation failure remains an error and terminal abort stays quiet', async () => {
+  const controller = new AbortController(), report = vi.fn(), status = vi.fn();
+  connectRealtime('/realtime/customer', 'orderUpdated', vi.fn(),
+    vi.fn().mockResolvedValue(undefined), report, controller.signal, status);
+  await vi.advanceTimersByTimeAsync(0);
+  hub.reconnecting();
+  expect(status).toHaveBeenCalledWith(expect.stringContaining('Reconnecting'));
+  expect(report).not.toHaveBeenCalled();
+  hub.reconnected();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(status).toHaveBeenLastCalledWith('');
+  controller.abort();
+  report.mockClear(); status.mockClear();
+  hub.reconnecting(); hub.closed(); hub.reconnected();
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(report).not.toHaveBeenCalled();
+  expect(status).not.toHaveBeenCalled();
+});

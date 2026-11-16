@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { customerOrder } from './api';
 import type { OrderSnapshot, Receipt } from './api';
 import { validBag } from './demo';
-import { connectRealtime } from './realtime';
+import { connectCustomerOrder } from './customerRealtime';
 
 const receiptKey = 'forthcoffee.orders';
 function readReceipts(): { receipts: Receipt[]; error: string } {
@@ -24,7 +24,7 @@ export function useCustomerOrders() {
   const [snapshots, setSnapshots] = useState<Record<string, OrderSnapshot>>({});
   const [now, setNow] = useState(Date.now);
   const [connectionErrors, setConnectionErrors] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<Record<string, string>>({});
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
@@ -32,23 +32,19 @@ export function useCustomerOrders() {
   useEffect(() => {
     const controller = new AbortController();
     setConnectionErrors({});
-    setLoading(saved.receipts.length > 0);
+    setConnectionStatus({});
     for (const receipt of saved.receipts) {
       function receive(snapshot: OrderSnapshot) {
         if (controller.signal.aborted) return;
         if (snapshot.order.orderId !== receipt.id) throw new Error('Realtime order response does not match your receipt.');
         setSnapshots(current => ({ ...current, [receipt.id]: snapshot }));
         setConnectionErrors(current => ({ ...current, [receipt.id]: '' }));
-        setLoading(false);
       }
-      connectRealtime<OrderSnapshot>(`/realtime/customer?orderId=${encodeURIComponent(receipt.id)}`, 'orderUpdated', receive,
-        async () => {
-          const response = await fetch(`/api/orders/${encodeURIComponent(receipt.id)}`, { signal: controller.signal });
-          if (!response.ok) throw new Error(`Order ${receipt.id} unavailable (${response.status}); the demo server may have restarted.`);
-          receive(await response.json());
-        }, message => {
-          if (!controller.signal.aborted) { setConnectionErrors(current => ({ ...current, [receipt.id]: message })); setLoading(false); }
-        }, controller.signal);
+      connectCustomerOrder(receipt, receive, message => {
+        if (!controller.signal.aborted) setConnectionErrors(current => ({ ...current, [receipt.id]: message }));
+      }, controller.signal, message => {
+        if (!controller.signal.aborted) setConnectionStatus(current => ({ ...current, [receipt.id]: message }));
+      });
     }
     return () => controller.abort();
   }, [saved.receipts]);
@@ -60,6 +56,8 @@ export function useCustomerOrders() {
     setSaved({ receipts, error });
   }
   const orders = saved.receipts.flatMap(receipt => snapshots[receipt.id] ? [customerOrder(snapshots[receipt.id], receipt, now)] : []);
-  return { orders: orders.map(order => connectionErrors[order.id] ? { ...order, tracking: undefined } : order),
-    error: saved.error || Object.values(connectionErrors).find(Boolean) || '', loading, remember, receipts: saved.receipts };
+  const loading = saved.receipts.some(receipt => !snapshots[receipt.id] && !connectionErrors[receipt.id]);
+  return { orders: orders.map(order => connectionErrors[order.id] || connectionStatus[order.id] ? { ...order, tracking: undefined } : order),
+    error: saved.error || Object.values(connectionErrors).find(Boolean) || '',
+    status: Object.values(connectionStatus).find(Boolean) || '', loading, remember, receipts: saved.receipts };
 }

@@ -15,7 +15,7 @@ type Modal = 'voice' | 'bag' | 'bay' | 'maps' | 'about' | null;
 const bayLabel = (bays: number) => `${bays} bay${bays === 1 ? '' : 's'}`;
 
 export default function App() {
-  const { orders, error: apiError, loading, remember, receipts } = useCustomerOrders();
+  const { orders, error: apiError, status: apiStatus, loading, remember, receipts } = useCustomerOrders();
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [dropOffIndex, setDropOffIndex] = useState(0);
@@ -141,9 +141,10 @@ export default function App() {
     </header>
 
     {apiError && <p className="form-error" role="alert">{apiError}</p>}
+    {apiStatus && (!statusId || orders.some(order => order.id === statusId)) && <p className="small-print" role="status">{apiStatus}</p>}
     {statusId ? (orders.find(order => order.id === statusId) || !receipts.some(receipt => receipt.id === statusId)
       ? <OrderStatus order={orders.find(order => order.id === statusId)} orderId={statusId} settings={maps} onSettings={() => setModal('maps')} onBack={() => navigate('')} />
-      : <main className="status-page"><p role="status">{apiError ? 'Order updates are unavailable. Your receipt is saved.' : 'Connecting to your order…'}</p></main>)
+      : <main className="status-page"><p role="status">{apiError ? 'Order updates are unavailable. Your receipt is saved.' : 'Confirming your order…'}</p></main>)
       : <main>
         <section className="customer-intro"><div className="eyebrow"><span className="small-line" /> SOUTH MELBOURNE, MEET YOUR NEW COFFEE RUN.</div><h1>Good coffee. Great company. <em>A little <span className="altitude" aria-label="altitude">a<span className="proof-insert" aria-hidden="true"><span className="proof-l">l</span><span className="proof-caret">^</span></span>titude.</span></em></h1></section>
         <section className="packing-section" id="payload">

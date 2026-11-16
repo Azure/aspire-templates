@@ -1,7 +1,8 @@
 import { HubConnectionBuilder, HubConnectionState, LogLevel } from '@microsoft/signalr';
 
 export function connectRealtime<T>(url: string, event: string, receive: (value: T) => void,
-  recover: () => Promise<void>, report: (message: string) => void, signal: AbortSignal) {
+  recover: () => Promise<void>, report: (message: string) => void, signal: AbortSignal,
+  status: (message: string) => void = report) {
   const connection = new HubConnectionBuilder().withUrl(url).withAutomaticReconnect([0, 1000, 3000, 10000])
     .configureLogging(LogLevel.Warning).build();
   let retry: ReturnType<typeof setTimeout>;
@@ -11,14 +12,16 @@ export function connectRealtime<T>(url: string, event: string, receive: (value: 
     catch (reason) { report(`Invalid realtime update: ${reason instanceof Error ? reason.message : String(reason)}`); }
   });
   async function refresh() {
-    try { await recover(); }
+    try { await recover(); if (!signal.aborted) status(''); }
     catch (reason) { if (!signal.aborted) report(`Snapshot recovery failed: ${reason instanceof Error ? reason.message : String(reason)}`); }
   }
-  connection.onreconnecting(() => report('Realtime connection lost. Reconnecting; shown data may be stale.'));
+  connection.onreconnecting(() => {
+    if (!signal.aborted) status('Reconnecting to your live updates. Your last order details are still shown.');
+  });
   connection.onreconnected(() => { if (!signal.aborted) void refresh(); });
   connection.onclose(() => {
     if (!signal.aborted) {
-      report('Realtime connection closed. Retrying; shown data may be stale.');
+      status('Reconnecting to your live updates. Your last order details are still shown.');
       retry = setTimeout(start, 5000);
     }
   });

@@ -59,7 +59,11 @@ standalone Vite uses localhost ports 5383 (customer) and 5384 (operator).
 Set `SERVER_HTTP` to the matching UI host's actual endpoint when running outside
 Aspire. There is no browser-local order or fleet simulation.
 The customer stores up to 20 order receipts in localStorage and subscribes only
-to those order IDs. Bag contents and map credentials remain in page memory. Backend orders
+to active orders among those IDs. A freshly accepted order may take up to 30 seconds
+to appear through Event Hubs; the customer shows a confirming state before opening
+its live connection. Delivered orders retain their final snapshot and close that
+connection; reloading fetches the completed snapshot without resubscribing.
+Bag contents and map credentials remain in page memory. Backend orders
 reset when the server restarts, with missing-order errors shown explicitly.
 
 Each frontend publishes its `dist` into its own UI server's `wwwroot` using
