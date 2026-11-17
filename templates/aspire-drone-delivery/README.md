@@ -33,8 +33,10 @@ missions, and pickup cannot be skipped before a drone is assigned. Commands trav
 through the mission hub; telemetry and landing photos remain authoritative. Delivered
 orders retain their proof-of-delivery frame instead of showing the return flight.
 
-On the operations roster, **Camera & controls** opens a right-hand drawer for any
-drone. The feed is a client-rendered Three.js scene, not streamed video or a sequence
+Click a drone marker on the operations map (or focus it and press Enter or Space)
+to open its right-hand **Camera & controls** drawer. The roster offers the same
+drawer and a case-insensitive name search, without filtering drones off the map.
+The feed is a client-rendered Three.js scene, not streamed video or a sequence
 of Blob images. Position, altitude, heading and camera pitch arrive over SignalR;
 a two-second playout buffer interpolates only received poses (including heading
 wraparound). Missing telemetry freezes the last pose and is labelled, never

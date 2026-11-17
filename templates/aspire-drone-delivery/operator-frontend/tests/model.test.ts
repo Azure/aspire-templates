@@ -1,6 +1,6 @@
 import { assert, test } from 'vitest';
 import type { Telemetry } from '../src/api';
-import { airborne, commandUnavailable, fleetMap } from '../src/model';
+import { airborne, commandUnavailable, filterFleet, fleetMap } from '../src/model';
 import { toLonLat } from '../src/mapGeometry';
 
 const drone: Telemetry = {
@@ -22,6 +22,16 @@ test('operations map shows each reported drone without adding illustrative loops
 test('airborne count follows manoeuvres, not a scheduled order or hard-coded fleet size', () => {
   assert.equal(airborne(drone), true);
   assert.equal(airborne({ ...drone, manoeuvre: 'OnTheGround', state: 'Loading' }), false);
+});
+
+test('roster search matches drone names without case or surrounding whitespace and can be cleared', () => {
+  const fleet = [drone, { ...drone, droneId: 'PIC-01' }, { ...drone, droneId: 'PIC-02' }];
+  assert.deepEqual(filterFleet(fleet, ' pic- ').map(item => item.droneId), ['PIC-01', 'PIC-02']);
+  assert.deepEqual(filterFleet(fleet, '02').map(item => item.droneId), ['ABB-02', 'PIC-02']);
+  assert.deepEqual(filterFleet(fleet, 'PIC-01'), [fleet[1]]);
+  assert.deepEqual(filterFleet(fleet, 'unknown'), []);
+  assert.deepEqual(filterFleet(fleet, ''), fleet);
+  assert.deepEqual(filterFleet(fleet, '   '), fleet);
 });
 
 test('the fleet map preserves all simulator route bends and does not invent a path for parked drones', () => {

@@ -4,7 +4,7 @@ import DeliveryMap from './DeliveryMap';
 import { fleetRequest, ordersRequest, stageFor, storesRequest } from './api';
 import { fromLonLat } from './mapGeometry';
 import { useRealtimeSnapshot } from './useApi';
-import { airborne, droneLabel, fleetMap } from './model';
+import { airborne, droneLabel, filterFleet, fleetMap } from './model';
 import DroneDrawer from './DroneDrawer';
 import { camPads } from '../../frontend-shared/pads';
 
@@ -19,6 +19,8 @@ export default function App() {
     pads: store.pads?.map(pad => ({ id: pad.id, held: held.has(pad.id), ...fromLonLat(pad.location.longitude, pad.location.latitude) })) })), [data.stores, held]);
   const pads = useMemo(() => camPads(data.stores), [data.stores]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const visibleDrones = filterFleet(data.fleet, search);
   const selectedDrone = data.fleet.find(drone => drone.droneId === selected);
   const active = data.orders.filter(snapshot => !['Delivered', 'Failed', 'Unserviceable'].includes(snapshot.status));
   return <div className="app-shell">
@@ -35,7 +37,7 @@ export default function App() {
       </div>
       <div className="operations-grid">
         <section className="operations-map"><div className="panel-heading"><h2>Our patch of sky</h2></div>
-          <DeliveryMap fleet={fleetMap(data.fleet)} stores={stores} />
+          <DeliveryMap fleet={fleetMap(data.fleet)} stores={stores} onSelectDrone={setSelected} />
           <div className="map-legend"><span>Actual simulator positions · all reported drones</span></div>
         </section>
         <aside className="dispatch-panel"><div className="panel-heading"><h2>On the docket <span className="count-badge">{active.length}</span></h2><span className="eyebrow">DISPATCH QUEUE</span></div><p className="queue-intro">Prepared at the store. Dispatched by logistics.</p>
@@ -51,7 +53,10 @@ export default function App() {
         </aside>
       </div>
       <section className="operations-roster"><div className="section-heading"><h2>On the roster</h2><p>Live battery, work and class from the simulator.</p></div>
-        <div className="operations-drones">{data.fleet.map(drone => <article key={drone.droneId}><Drone size={22} /><strong>{drone.droneId}</strong><span>{drone.class} · {droneLabel(drone)}</span><span>{Math.round(drone.batteryPercent)}% battery · ALT {Math.round(drone.altitudeMetres)} m</span><small>{drone.orderId ?? 'No active order'} · {drone.queuedMissions} queued</small><button className="outline-button" onClick={() => setSelected(drone.droneId)} aria-label={`Inspect drone ${drone.droneId}`}>Camera &amp; controls</button></article>)}</div>
+        <label className="drone-search">Search drones by name<input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="e.g. PIC-01" aria-controls="drone-roster" /></label>
+        <p role="status">{visibleDrones.length} of {data.fleet.length} drones</p>
+        <div className="operations-drones" id="drone-roster">{visibleDrones.map(drone => <article key={drone.droneId}><Drone size={22} /><strong>{drone.droneId}</strong><span>{drone.class} · {droneLabel(drone)}</span><span>{Math.round(drone.batteryPercent)}% battery · ALT {Math.round(drone.altitudeMetres)} m</span><small>{drone.orderId ?? 'No active order'} · {drone.queuedMissions} queued</small><button className="outline-button" onClick={() => setSelected(drone.droneId)} aria-label={`Inspect drone ${drone.droneId}`}>Camera &amp; controls</button></article>)}</div>
+        {!!search.trim() && !visibleDrones.length && <p>No drones match your search.</p>}
       </section>
       <p className="privacy-note"><ShieldCheck size={14} />Fictional orders and flights. Logistics handles dispatch; operator commands affect the simulation only.</p>
     </main>

@@ -41,10 +41,10 @@ function plannedPath(points: Point[], group: L.LayerGroup) {
 }
 
 /** OpenStreetMap basemap (Leaflet) with themed drone, store and route overlays. */
-export default function OsmMap({ flights, stores = [], route, follow, center, zoom = 15, fit, ariaLabel }: {
+export default function OsmMap({ flights, stores = [], route, follow, center, zoom = 15, fit, ariaLabel, onSelectDrone }: {
   flights: MapFlight[]; stores?: MapStore[]; route?: MapRoute; follow?: Point; center: Point; zoom?: number;
   /** Optional corners to fit on first render instead of the fixed zoom. */
-  fit?: [Point, Point]; ariaLabel: string;
+  fit?: [Point, Point]; ariaLabel: string; onSelectDrone?: (id: string) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
@@ -100,15 +100,26 @@ export default function OsmMap({ flights, stores = [], route, follow, center, zo
       let marker = current.drones.get(flight.id);
       if (marker) marker.setLatLng(latLng(flight));
       else {
-        marker = L.marker(latLng(flight), { icon: droneIcon(flight), keyboard: false, zIndexOffset: 500 }).addTo(instance);
+        marker = L.marker(latLng(flight), { icon: droneIcon(flight), keyboard: !!onSelectDrone,
+          title: onSelectDrone ? `Inspect drone ${flight.id}` : flight.id, zIndexOffset: 500 }).addTo(instance);
         current.drones.set(flight.id, marker);
       }
+      marker.off('click keydown');
+      if (onSelectDrone) {
+        marker.on('click', () => onSelectDrone(flight.id));
+        marker.on('keydown', (event: L.LeafletKeyboardEvent) => {
+          if (event.originalEvent.key !== 'Enter' && event.originalEvent.key !== ' ') return;
+          event.originalEvent.preventDefault();
+          onSelectDrone(flight.id);
+        });
+      }
+      if (onSelectDrone) marker.getElement()?.setAttribute('aria-label', `Inspect drone ${flight.id}`);
       const title = marker.getElement()?.querySelector<HTMLElement>('.osm-drone');
       if (title) title.title = `${flight.id}: ${flight.status}`;
       rotate(marker, flight.heading);
     }
     for (const [id, marker] of current.drones) if (!seen.has(id)) { marker.remove(); current.drones.delete(id); }
-  }, [flights]);
+  }, [flights, onSelectDrone]);
 
   useEffect(() => {
     if (follow) map.current?.panTo(latLng(follow), { animate: !reducedMotion(), duration: .8 });
