@@ -11,7 +11,7 @@ No real orders, payments or drone flights occur.
 
 Prerequisites: .NET SDK 10.0 or later, Node.js 22.13 or later, npm, Aspire CLI 17.0
 or later and a container runtime such as Docker Desktop. No Azure account is needed:
-Event Hubs and Blob Storage run as local emulators.
+Event Hubs, Blob Storage, Cosmos DB and SignalR run as local emulators.
 
 From this directory:
 
@@ -132,16 +132,14 @@ integrations add themselves, such as `eventhubs-storage` and the npm installers,
 The development launch profile uses localhost HTTP endpoints; its unsecured
 transport opt-in is local development configuration, not a deployment setting.
 
-For separate frontend iteration, keep the API running and use either app:
+For separate frontend iteration, keep the API running and install the shared npm
+workspace from the template root. Start either app, or run both in separate terminals:
 
 ```bash
-cd customer-frontend
 npm ci
-npm run dev
-# Or, from the template root:
-cd operator-frontend
-npm ci
-npm run dev
+npm run dev:customer
+# In another terminal:
+npm run dev:operator
 ```
 
 Open each localhost URL printed by Vite. Both proxy `/api` and `/realtime` to
@@ -155,8 +153,8 @@ to appear through Event Hubs; the customer shows a confirming state before openi
 its live connection. Delivered orders retain their final snapshot and close that
 connection; failed and unserviceable orders also stop live subscriptions.
 Reloading fetches the terminal snapshot without resubscribing.
-Bag contents and map credentials remain in page memory. Backend orders
-reset when the server restarts, with missing-order errors shown explicitly.
+Bag contents and map credentials remain in page memory. Backend orders are
+reloaded from Cosmos DB when the server restarts.
 
 Each frontend publishes its `dist` into its own UI server's `wwwroot` using
 `PublishWithContainerFiles`. The two ASP.NET servers have independent processes
@@ -164,13 +162,13 @@ and endpoints; neither contains logistics nor shares a static-file root.
 Both frontends compile the common camera, pose buffer and map artwork from
 `frontend-shared`; keep that directory beside the frontend source folders when
 building. Published `dist` output is self-contained and needs no shared source
-directory at runtime. The AppHost uses `frontend-shared/Dockerfile` with the template
-root as its context and a per-site `FRONTEND` argument; this includes the shared
-source without depending on the other site's packages. Its build-only `/app/dist`
-artifact is still copied into the corresponding UI server's `wwwroot` by
-`PublishWithContainerFiles`.
-Both UI servers proxy to the service-discovered backend. This packaging is not an Azure
-deployment claim; no deployment target is configured.
+directory at runtime. Both Vite resources use the template-root npm workspace as
+their build context, with separate build scripts and output paths. Aspire's default
+Vite image builder includes the shared source, and `PublishWithContainerFiles`
+copies each output into its corresponding server. Both UI servers proxy to the
+service-discovered backend. Declare frontend dependencies in the root
+`package.json`: Aspire installs from the root manifests before copying the workspace
+source into the build image.
 
 This is not an authentication boundary: receipts filter the customer UI, but the
 demo API is unauthenticated. Add authorization before exposing real customer data
@@ -394,7 +392,7 @@ This is not a navigation map or a flight planning tool.
 
 ## Checks
 
-Run `npm test` (Vitest) and `npm run build` in both `customer-frontend` and `operator-frontend`.
+Run the Vitest tests and build scripts for both npm workspaces.
 Run `dotnet test DroneDelivery.Tests` and
 `dotnet build DroneDelivery.AppHost/DroneDelivery.AppHost.csproj` from this directory.
 
@@ -482,14 +480,11 @@ packages; remove that source once the packages are on nuget.org.
 ```bash
 dotnet build DroneDelivery.AppHost
 dotnet test DroneDelivery.Tests
-cd customer-frontend
 npm ci
-npm test
-npm run build
-cd ../operator-frontend
-npm ci
-npm test
-npm run build
+npm test --workspace=forthcoffee-customer
+npm run build:customer
+npm test --workspace=forthcoffee-operations
+npm run build:operator
 ```
 
 The .NET tests cover VTOL flight legs, drone selection by payload, waiting and
@@ -502,12 +497,22 @@ also cover trace context crossing Event Hubs properties and keeping customer
 details out of spans. three.js is loaded only when a camera opens; the
 large vendor chunks produce a Vite size advisory.
 
-## Not ready yet
+## Azure Container Apps deployment
 
-`aspire deploy` is **not configured in this design phase**. Real Azure deployment
-and production identity are subsequent work.
-Customer and operator clients already use the authoritative backend and scoped
-SignalR updates. Do not treat this preview as meeting deployment acceptance criteria.
+The AppHost targets Azure Container Apps. With an authenticated Azure CLI and an
+appropriate subscription, resource group and region, run `aspire deploy` from the
+template root. Aspire provisions the Container Apps environment and registry,
+Cosmos DB serverless, Event Hubs, Storage and SignalR. These resources can incur
+charges even when the demo is idle; the customer simulator also generates demand.
+
+The backend and both simulators run as single replicas because they own in-memory
+state or consume simulation events. They are not highly available, and events can
+be missed during downtime. The two UI servers are public and unauthenticated; do
+not expose this demo to untrusted users.
+
+`aspire publish` generates infrastructure artifacts without deploying. The deployment
+pipeline and frontend/server image builds have been checked locally, but an
+end-to-end Azure deployment has not yet been verified.
 
 The [design](docs/design.md) and [architecture](docs/architecture.md) notes
 describe the proposed next steps.

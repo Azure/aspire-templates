@@ -1,9 +1,12 @@
 using Aspire.Hosting.Azure;
+using Aspire.Hosting.JavaScript;
 
 // Dashboard tags (an evaluation API in Aspire 17) let resources be filtered by kind and by customer/operator role.
 #pragma warning disable ASPIRERESOURCETRAITS001
 
 var builder = DistributedApplication.CreateBuilder(args);
+
+builder.AddAzureContainerAppEnvironment("aca").WithTags("infrastructure");
 
 // Event Hubs (the local emulator during development) carries orders, missions, telemetry and camera events.
 var eventHubs = builder.AddAzureEventHubs("eventhubs").RunAsEmulator().WithTags("infrastructure");
@@ -29,7 +32,12 @@ var droneSimulator = builder.AddDotnetProject("drone-simulator", "../DroneDelive
     .WithEnvironment("FLEET_PICCOLO", "6")
     .WithEnvironment("FLEET_DOPPIO", "3")
     .WithEnvironment("FLEET_ABBONDANTE", "2")
-    .WaitFor(eventHubs).WaitFor(photoStore);
+    .WaitFor(eventHubs).WaitFor(photoStore)
+    .PublishAsAzureContainerApp((_, app) =>
+    {
+        app.Template.Scale.MinReplicas = 1;
+        app.Template.Scale.MaxReplicas = 1;
+    });
 
 var backend = builder.AddDotnetProject("backend", "../DroneDelivery.Server/DroneDelivery.Server.csproj")
     .WithTags("servers")
@@ -37,14 +45,24 @@ var backend = builder.AddDotnetProject("backend", "../DroneDelivery.Server/Drone
     .WithReference(signalr).WaitFor(signalr)
     .WithReference(orderStore).WaitFor(orderStore)
     .WaitFor(eventHubs).WaitFor(photoStore).WaitFor(droneSimulator)
-    .WithHttpHealthCheck("/health");
+    .WithHttpHealthCheck("/health")
+    .PublishAsAzureContainerApp((_, app) =>
+    {
+        app.Template.Scale.MinReplicas = 1;
+        app.Template.Scale.MaxReplicas = 1;
+    });
 
 builder.AddDotnetProject("customer-simulator", "../DroneDelivery.CustomerSimulator/DroneDelivery.CustomerSimulator.csproj")
     .WithTags("simulators", "customer")
     .WithReference(orders)
     .WithEnvironment("CUSTOMERS_PEAK", "60")
     .WithEnvironment("DEMAND_CYCLE_MINUTES", "15")
-    .WaitFor(backend);
+    .WaitFor(backend)
+    .PublishAsAzureContainerApp((_, app) =>
+    {
+        app.Template.Scale.MinReplicas = 1;
+        app.Template.Scale.MaxReplicas = 1;
+    });
 
 var customerServer = builder.AddDotnetProject("customer-server", "../DroneDelivery.CustomerServer/DroneDelivery.CustomerServer.csproj")
     .WithTags("servers", "customer")
@@ -66,22 +84,32 @@ var operatorServer = builder.AddDotnetProject("operator-server", "../DroneDelive
 
 // Browsers can only export OTLP over HTTP. The Vite dev servers (and, for built sites, the UI servers above)
 // relay /otlp to the dashboard and add its API key server-side.
-var customerSite = builder.AddViteApp("customer-site", "../customer-frontend")
+var customerSite = builder.AddViteApp("customer-site", "..", "dev:customer")
     .WithTags("frontends", "customer")
-    .PublishAsDockerFile(container => container.WithDockerfile("..", "frontend-shared/Dockerfile")
-        .WithBuildArg("FRONTEND", "customer-frontend"))
+    .WithBuildScript("build:customer")
+    .ClearContainerFilesSources()
+    .WithContainerFilesSource("/app/customer-frontend/dist")
     .WithOtlpExporter(OtlpProtocol.HttpProtobuf)
     .WithReference(customerServer)
     .WithEnvironment("SERVER_HTTP", customerServer.GetEndpoint("http"))
     .WaitFor(customerServer);
-var operatorSite = builder.AddViteApp("operator-site", "../operator-frontend")
+var operatorSite = builder.AddViteApp("operator-site", "..", "dev:operator")
     .WithTags("frontends", "operator")
-    .PublishAsDockerFile(container => container.WithDockerfile("..", "frontend-shared/Dockerfile")
-        .WithBuildArg("FRONTEND", "operator-frontend"))
+    .WithNpm(install: false)
+    .WithBuildScript("build:operator")
+    .ClearContainerFilesSources()
+    .WithContainerFilesSource("/app/operator-frontend/dist")
     .WithOtlpExporter(OtlpProtocol.HttpProtobuf)
     .WithReference(operatorServer)
     .WithEnvironment("SERVER_HTTP", operatorServer.GetEndpoint("http"))
     .WaitFor(operatorServer);
+
+if (builder.ExecutionContext.IsRunMode)
+{
+    // Both Vite apps share one workspace and must not install into node_modules concurrently.
+    var installer = customerSite.Resource.Annotations.OfType<JavaScriptPackageInstallerAnnotation>().Single().Resource;
+    operatorSite.WaitForCompletion(builder.CreateResourceBuilder(installer));
+}
 
 customerServer.PublishWithContainerFiles(customerSite, "wwwroot");
 operatorServer.PublishWithContainerFiles(operatorSite, "wwwroot");

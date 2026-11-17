@@ -1,8 +1,8 @@
-# Drone delivery architecture: design phase
+# Drone delivery architecture
 
 ## Starting point
 
-This spike follows the
+This demo follows the
 [`aspire-ts-cs-starter` layout](https://github.com/microsoft/aspire/tree/3ed1c753769b7fb0edd28beede32e4639d39acd8/src/Aspire.ProjectTemplates/templates/aspire-ts-cs-starter):
 C# AppHost, C# Minimal API, two Vite/React sites and service-discovery-based
 Vite proxying. `customer-frontend` references `DroneDelivery.CustomerServer`;
@@ -10,7 +10,7 @@ Vite proxying. `customer-frontend` references `DroneDelivery.CustomerServer`;
 publishes only its own assets into its own `wwwroot`, as in the upstream starter.
 Both hosts reference the authoritative `DroneDelivery.Server` backend through
 service discovery; neither duplicates logistics or order/fleet state.
-The sample's product UI and illustrations are original to this spike.
+The sample's product UI and illustrations are original to this demo.
 
 The template targets Aspire 17.0 and .NET 10. Until Aspire 17.0.0 is on nuget.org,
 its `NuGet.config` maps `Aspire.*` packages to the Aspire release feed. No existing
@@ -29,7 +29,7 @@ flowchart LR
     Operations[Operator site] --> OperatorHost[Operator Server]
     CustomerHost -. own order REST + negotiate .-> API
     OperatorHost -. fleet REST + negotiate .-> API
-    API -- scoped snapshots --> Realtime[SignalR Serverless emulator]
+    API -- scoped snapshots --> Realtime[SignalR Serverless service or emulator]
     Realtime -- own orders --> Customer
     Realtime -- fleet + queue --> Operations
 ```
@@ -43,7 +43,7 @@ start at the latest event, so restarting a worker does not replay old missions.
 
 | Component | Responsibility | Current boundary |
 | --- | --- | --- |
-| AppHost | Start emulators, workers, backend, two UI servers and two Vite apps | No deployment target configured |
+| AppHost | Start emulators, workers, backend, two UI servers and two Vite apps | Azure Container Apps target configured; end-to-end Azure deployment unverified |
 | Domain library | Drone classes, VTOL flight legs, logistics planner, dispatcher and event contracts | Pure .NET; unit tested |
 | Drone simulator | Fleet of Piccolo/Doppio/Abbondante drones; missions, charging, telemetry, camera shots | In-memory fleet; SVG placeholder images |
 | Customer simulator | Peak-and-quiet demand from many customers at random drop-offs | Synthetic only |
@@ -52,7 +52,7 @@ start at the latest event, so restarting a worker does not replay old missions.
 | Operator React site | All stores, fleet, dispatch queue, battery, queued work and a per-drone camera/command drawer | Initial REST snapshot plus operator realtime stream; latest 100 orders; commands go through the backend |
 | CustomerServer / OperatorServer | Serve independent frontends and proxy backend REST/negotiate routes | No Event Hubs consumers, dispatch logic or authoritative state |
 | Simulated drone camera | Shared, lazily loaded Three.js renderer; buffered position/heading/camera-pitch telemetry, with actual nearby fleet models | OSM building footprints (ODbL, bundled extract) on OSM ground tiles; not video; independent SVG Blob captures |
-| Frontend source | Independent sites with customer-only menu/receipt helpers and common `frontend-shared` camera/pose/artwork source | Build from the template tree; emitted site assets are self-contained |
+| Frontend source | Independent sites with customer-only menu/receipt helpers and common `frontend-shared` camera/pose/artwork source | One npm workspace and build context; separate site builds are copied into their matching UI servers |
 | ServiceDefaults and tracing | OpenTelemetry for every .NET project; `DroneDelivery` spans across HTTP, Event Hubs (`traceparent` in event properties), dispatch, mission legs, camera/blob work, SignalR publishes and browser receipt of stage changes; `DroneDelivery` meter for position ingestion and SignalR sends | Browser spans relayed through `/otlp` by the Vite dev server or, for built sites, the UI server; SignalR service internals not traceable; no PII in span attributes or IDs in metric tags |
 | OpenStreetMap basemap | Leaflet with OSM raster tiles and fictional drone/store/route markers | Public tile server for demo/dev traffic only; attribution required |
 
@@ -186,7 +186,8 @@ simulation state through SignalR. Keep the single-company ForthCoffee scope.
 Evaluate further messaging and storage against demonstrable sample value and the
 local prerequisites, rather than adding Azure services solely for a diagram.
 
-The eventual `aspire deploy` path must guide Azure configuration and verify the
-deployed customer/operations sites from a fresh generated project. The current
-per-UI-server `PublishWithContainerFiles` wiring is packaging groundwork, not evidence that
-Azure deployment works. No successful deployment is claimed.
+The AppHost targets Azure Container Apps and uses Aspire's native Vite builds and
+per-server `PublishWithContainerFiles` wiring. The backend and simulators are
+limited to one replica for their in-memory state and event consumers; this is not
+a highly available design. A successful end-to-end Azure deployment from a fresh
+generated project has not yet been verified.
