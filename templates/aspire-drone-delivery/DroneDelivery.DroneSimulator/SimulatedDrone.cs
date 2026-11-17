@@ -38,6 +38,9 @@ public sealed class SimulatedDrone(string id, DroneSpec spec, GeoPoint homePad, 
     public ConcurrentQueue<(ManualControlRequested Request, ActivityContext Trace)> ManualRequests { get; } = new();
     public ManualControlState? Manual { get; set; }
     public double CameraYawDegrees { get; set; }
+    public double CameraZoom { get; set; } = 1;
+    /// <summary>Manual focus distance in metres; 0 is autofocus.</summary>
+    public double CameraFocusMetres { get; set; }
     /// <summary>True while flying a leg, the only time a takeover can be accepted.</summary>
     public bool InFlightLeg { get; set; }
     (ManualControlInput Input, DateTimeOffset ReceivedAt)? latestInput;
@@ -61,7 +64,7 @@ public sealed class SimulatedDrone(string id, DroneSpec spec, GeoPoint homePad, 
         Id, Spec.Class, Interlocked.Increment(ref sequence), now, Position, HomePad,
         Math.Round(AltitudeMetres, 1), Math.Round(Heading), Math.Round(BatteryPercent, 1),
         State, Manoeuvre, Mission?.MissionId, Mission?.OrderId, Queue.Count, FlightProgress, CameraPitchDegrees, Control, CarryingPackage,
-        PitchDegrees, RollDegrees, SpeedMetresPerSecond, PlannedRoute, RoutingError, Pad?.Id, Manual, CameraYawDegrees, StageEndsAt);
+        PitchDegrees, RollDegrees, SpeedMetresPerSecond, PlannedRoute, RoutingError, Pad?.Id, Manual, CameraYawDegrees, StageEndsAt, CameraZoom, CameraFocusMetres);
 
     /// <summary>Parked drones sit on their charging pad and top up.</summary>
     public void ChargeFor(TimeSpan elapsed)

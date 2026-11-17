@@ -64,9 +64,14 @@ simulator: this is not a real flight-control or collision-avoidance system.
 **Take control** (drawer, airborne drones on a flight leg with no command pending)
 floats the camera feed to the centre of the screen and suspends autonomous flight in
 the simulator. Controls: **W/S** forward/back, **A/D** strafe, **Q/E** yaw,
-**Space/Shift** up/down, mouse over the feed to look (slightly above the horizon to
-straight down, left/right). Roll and pitch bank automatically and braking arrests
-momentum. A Web Audio synthesized motor sound plays while flying. **Esc** offers
+**Space/Z** up/down, mouse over the feed to aim the camera (slightly above the horizon
+to straight down, left/right), mouse **wheel** to zoom (1–8×), **Shift+wheel** to set
+the focus distance and **F** to return to autofocus. The gimbal turns at up to 45°/s:
+a dashed circle marks the requested aim and a solid circle the camera's actual aim.
+Control starts from the drone's current camera aim, zoom and focus, so the pilot view
+matches the operations feed. On release the camera returns to forward-facing, 1× and
+autofocus. The header shows the live battery level. Roll and pitch bank automatically
+and braking arrests momentum. A Web Audio synthesized motor sound plays while flying. **Esc** offers
 *Resume previous programming* (replan from the current position) or *Cancel and
 return to base* (the active order becomes unable to complete).
 

@@ -4,9 +4,9 @@
 import type { Footprint } from '../../frontend-shared/buildings';
 import type { CameraPose } from '../../frontend-shared/pose';
 
-export type ManualInput = {
-  forward: number; strafe: number; vertical: number; yaw: number; cameraPitchDegrees: number; cameraYawDegrees: number;
-};
+/** The operator's requested camera: gimbal aim, optical zoom (1–8×) and focus distance in metres (0 = autofocus). */
+export type Look = { cameraPitchDegrees: number; cameraYawDegrees: number; cameraZoom: number; cameraFocusMetres: number };
+export type ManualInput = { forward: number; strafe: number; vertical: number; yaw: number } & Look;
 export type DroneClass = 'Piccolo' | 'Doppio' | 'Abbondante';
 export const specs: Record<DroneClass, { cruise: number; vertical: number }> = {
   Piccolo: { cruise: 16, vertical: 4 }, Doppio: { cruise: 14, vertical: 3.5 }, Abbondante: { cruise: 12, vertical: 3 },
@@ -16,6 +16,11 @@ const horizontalAcceleration = 3, verticalAcceleration = 2, maxYawRate = 60, yaw
 export const maxTilt = 14;
 export const cameraPitchRange = [-90, 10] as const;
 export const cameraYawLimit = 90;
+/** Mirrors ManualFlight: the gimbal slews at most this fast so aim changes stay smooth. */
+export const cameraSlewDegreesPerSecond = 45;
+export const maxZoom = 8, zoomPerSecond = 2, focusRange = [5, 400] as const;
+/** The feed's vertical field of view at 1× zoom (DroneCam). */
+export const baseFieldOfView = 62;
 export const floorMetres = 20, ceilingMetres = 120, clearanceMetres = 6;
 const metresPerDegree = 6_371_000 * Math.PI / 180;
 const area = { south: -37.845, north: -37.826, west: 144.950, east: 144.978 };
@@ -25,8 +30,10 @@ const finite = (value: number, fallback = 0) => Number.isFinite(value) ? value :
 const approach = (value: number, target: number, step: number) => value < target ? Math.min(target, value + step) : Math.max(target, value - step);
 const wrap = (degrees: number) => (degrees % 360 + 360) % 360;
 
-export const hover = (look?: Pick<ManualInput, 'cameraPitchDegrees' | 'cameraYawDegrees'>): ManualInput =>
-  ({ forward: 0, strafe: 0, vertical: 0, yaw: 0, cameraPitchDegrees: look?.cameraPitchDegrees ?? -30, cameraYawDegrees: look?.cameraYawDegrees ?? 0 });
+export const hover = (look?: Partial<Look>): ManualInput => ({
+  forward: 0, strafe: 0, vertical: 0, yaw: 0, cameraPitchDegrees: look?.cameraPitchDegrees ?? -30, cameraYawDegrees: look?.cameraYawDegrees ?? 0,
+  cameraZoom: look?.cameraZoom ?? 1, cameraFocusMetres: look?.cameraFocusMetres ?? 0,
+});
 
 export function clampInput(input: ManualInput): ManualInput {
   return {
@@ -34,16 +41,18 @@ export function clampInput(input: ManualInput): ManualInput {
     vertical: clamp(finite(input.vertical), -1, 1), yaw: clamp(finite(input.yaw), -1, 1),
     cameraPitchDegrees: clamp(finite(input.cameraPitchDegrees, -30), ...cameraPitchRange),
     cameraYawDegrees: clamp(finite(input.cameraYawDegrees), -cameraYawLimit, cameraYawLimit),
+    cameraZoom: clamp(finite(input.cameraZoom, 1), 1, maxZoom),
+    cameraFocusMetres: !(finite(input.cameraFocusMetres) > 0) ? 0 : clamp(input.cameraFocusMetres, ...focusRange),
   };
 }
 
-/** Keys held → stick positions. W/S forward-back, A/D strafe, Space/Shift up-down, Q/E yaw. */
-export const controlKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'Space', 'ShiftLeft', 'ShiftRight']);
-export function inputFromKeys(keys: ReadonlySet<string>, look: Pick<ManualInput, 'cameraPitchDegrees' | 'cameraYawDegrees'>): ManualInput {
+/** Keys held → stick positions. W/S forward-back, A/D strafe, Space/Z up-down, Q/E yaw. */
+export const controlKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'Space', 'KeyZ']);
+export function inputFromKeys(keys: ReadonlySet<string>, look: Look): ManualInput {
   const axis = (positive: boolean, negative: boolean) => (positive ? 1 : 0) - (negative ? 1 : 0);
   return clampInput({
     forward: axis(keys.has('KeyW'), keys.has('KeyS')), strafe: axis(keys.has('KeyD'), keys.has('KeyA')),
-    vertical: axis(keys.has('Space'), keys.has('ShiftLeft') || keys.has('ShiftRight')), yaw: axis(keys.has('KeyE'), keys.has('KeyQ')),
+    vertical: axis(keys.has('Space'), keys.has('KeyZ')), yaw: axis(keys.has('KeyE'), keys.has('KeyQ')),
     ...look,
   });
 }
@@ -54,6 +63,25 @@ export function lookFromPointer(x: number, y: number) {
     cameraYawDegrees: clamp((clamp(x, 0, 1) * 2 - 1) * cameraYawLimit, -cameraYawLimit, cameraYawLimit),
     cameraPitchDegrees: clamp(cameraPitchRange[1] - clamp(y, 0, 1) * (cameraPitchRange[1] - cameraPitchRange[0]), ...cameraPitchRange),
   };
+}
+
+/** Mouse wheel → zoom; each notch (~100 px) is about 15%. Scrolling up zooms in. */
+export function zoomBy(zoom: number, deltaPixels: number) {
+  return clamp(finite(zoom, 1) * Math.exp(-deltaPixels * .0015), 1, maxZoom);
+}
+
+/** Shift+wheel → focus distance. Starts from the current subject when on autofocus; scrolling up focuses nearer. */
+export function focusBy(focus: number, subjectMetres: number, deltaPixels: number) {
+  const from = focus > 0 ? focus : clamp(finite(subjectMetres, 60), ...focusRange);
+  return clamp(from * Math.exp(deltaPixels * .002), ...focusRange);
+}
+
+/** Where the requested aim sits in the feed, as a fraction of its width and height from the top-left (0.5, 0.5 is the actual aim). */
+export function aimOffset(actual: { pitch: number; yaw: number }, desired: { pitch: number; yaw: number }, zoom: number, aspect: number) {
+  const half = Math.tan(baseFieldOfView / clamp(finite(zoom, 1), 1, maxZoom) / 2 * Math.PI / 180);
+  const x = Math.tan(clamp(desired.yaw - actual.yaw, -89, 89) * Math.PI / 180) / (half * Math.max(.1, aspect));
+  const y = Math.tan(clamp(desired.pitch - actual.pitch, -89, 89) * Math.PI / 180) / half;
+  return { x: clamp(.5 + x / 2, 0, 1), y: clamp(.5 - y / 2, 0, 1), inView: Math.abs(x) <= 1 && Math.abs(y) <= 1 };
 }
 
 export type Airspace = { clearance(latitude: number, longitude: number): number };
@@ -89,15 +117,28 @@ export function airspaceFrom(footprints: readonly Footprint[]): Airspace {
 export type FlightState = {
   latitude: number; longitude: number; altitude: number; heading: number;
   velocityEast: number; velocityNorth: number; verticalSpeed: number; yawRate: number;
-  pitch: number; roll: number; cameraPitch: number; cameraYaw: number;
+  pitch: number; roll: number; cameraPitch: number; cameraYaw: number; cameraZoom: number; cameraFocus: number;
 };
 
-export function startState(pose: { position: { latitude: number; longitude: number }; altitudeMetres: number; heading: number }): FlightState {
+type StartPose = {
+  position: { latitude: number; longitude: number }; altitudeMetres: number; heading: number;
+  cameraPitchDegrees?: number; cameraYawDegrees?: number; cameraZoom?: number; cameraFocusMetres?: number;
+};
+
+/** Takes over from the drone's current pose and camera, so the pilot view opens exactly where the operations feed was looking. */
+export function startState(pose: StartPose): FlightState {
+  const camera = clampInput(hover({ cameraPitchDegrees: pose.cameraPitchDegrees, cameraYawDegrees: pose.cameraYawDegrees,
+    cameraZoom: pose.cameraZoom, cameraFocusMetres: pose.cameraFocusMetres }));
   return {
     latitude: pose.position.latitude, longitude: pose.position.longitude, altitude: pose.altitudeMetres, heading: wrap(pose.heading),
-    velocityEast: 0, velocityNorth: 0, verticalSpeed: 0, yawRate: 0, pitch: 0, roll: 0, cameraPitch: -30, cameraYaw: 0,
+    velocityEast: 0, velocityNorth: 0, verticalSpeed: 0, yawRate: 0, pitch: 0, roll: 0,
+    cameraPitch: camera.cameraPitchDegrees, cameraYaw: camera.cameraYawDegrees, cameraZoom: camera.cameraZoom, cameraFocus: camera.cameraFocusMetres,
   };
 }
+
+/** The requested camera that holds the drone's current one. */
+export const lookOf = (state: FlightState): Look =>
+  ({ cameraPitchDegrees: state.cameraPitch, cameraYawDegrees: state.cameraYaw, cameraZoom: state.cameraZoom, cameraFocusMetres: state.cameraFocus });
 
 const inside = (latitude: number, longitude: number) =>
   latitude >= area.south && latitude <= area.north && longitude >= area.west && longitude <= area.east;
@@ -107,7 +148,13 @@ export function step(state: FlightState, raw: ManualInput, seconds: number, dron
   // Animation frames can share a timestamp; a zero step would divide by zero in the tilt model.
   if (!(seconds > 0)) return state;
   const input = clampInput(raw), spec = specs[droneClass];
-  const s = { ...state, cameraPitch: input.cameraPitchDegrees, cameraYaw: input.cameraYawDegrees };
+  const s = {
+    ...state,
+    cameraPitch: approach(state.cameraPitch, input.cameraPitchDegrees, cameraSlewDegreesPerSecond * seconds),
+    cameraYaw: approach(state.cameraYaw, input.cameraYawDegrees, cameraSlewDegreesPerSecond * seconds),
+    cameraZoom: approach(state.cameraZoom, input.cameraZoom, zoomPerSecond * seconds),
+    cameraFocus: input.cameraFocusMetres,
+  };
   s.yawRate = approach(s.yawRate, input.yaw * maxYawRate, yawAcceleration * seconds);
   s.heading = wrap(s.heading + s.yawRate * seconds);
   const h = s.heading * Math.PI / 180;
@@ -217,7 +264,7 @@ export class ManualPredictor {
     return {
       droneId, timestamp: new Date(at).toISOString(), position: { latitude: s.latitude, longitude: s.longitude },
       altitudeMetres: s.altitude, heading: s.heading, cameraPitchDegrees: s.cameraPitch, cameraYawDegrees: s.cameraYaw,
-      pitchDegrees: s.pitch, rollDegrees: s.roll,
+      pitchDegrees: s.pitch, rollDegrees: s.roll, cameraZoom: s.cameraZoom, cameraFocusMetres: s.cameraFocus,
     };
   }
 }

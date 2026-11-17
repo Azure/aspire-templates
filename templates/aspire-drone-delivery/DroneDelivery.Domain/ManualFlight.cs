@@ -5,16 +5,25 @@ public enum ManualAction { Take, Resume, ReturnToBase }
 /// <summary>Published to <see cref="Hubs.DroneMissions"/>: an operator takes or releases manual control.</summary>
 public sealed record ManualControlRequested(string RequestId, string DroneId, string SessionId, ManualAction Action);
 
-/// <summary>Stick positions in [-1, 1] (forward, right, up, clockwise yaw) and the requested camera gimbal angles.</summary>
+/// <summary>
+/// Stick positions in [-1, 1] (forward, right, up, clockwise yaw), the requested camera gimbal angles, optical zoom and
+/// focus distance (0 = autofocus). The gimbal and zoom slew towards these; focus is applied directly.
+/// </summary>
 public sealed record ManualInput(double Forward, double Strafe, double Vertical, double Yaw,
-    double CameraPitchDegrees = -30, double CameraYawDegrees = 0)
+    double CameraPitchDegrees = -30, double CameraYawDegrees = 0, double CameraZoom = 1, double CameraFocusMetres = 0)
 {
     public static readonly ManualInput Hover = new(0, 0, 0, 0);
 
     public ManualInput Clamped() => new(Math.Clamp(Finite(Forward), -1, 1), Math.Clamp(Finite(Strafe), -1, 1),
         Math.Clamp(Finite(Vertical), -1, 1), Math.Clamp(Finite(Yaw), -1, 1),
         Math.Clamp(Finite(CameraPitchDegrees, -30), ManualFlight.CameraPitchMin, ManualFlight.CameraPitchMax),
-        Math.Clamp(Finite(CameraYawDegrees), -ManualFlight.CameraYawLimit, ManualFlight.CameraYawLimit));
+        Math.Clamp(Finite(CameraYawDegrees), -ManualFlight.CameraYawLimit, ManualFlight.CameraYawLimit),
+        Math.Clamp(Finite(CameraZoom, 1), 1, ManualFlight.MaxZoom),
+        Finite(CameraFocusMetres) <= 0 ? 0 : Math.Clamp(CameraFocusMetres, ManualFlight.MinFocusMetres, ManualFlight.MaxFocusMetres));
+
+    /// <summary>Centred sticks that hold this input's camera settings.</summary>
+    public ManualInput Holding() => Hover with
+        { CameraPitchDegrees = CameraPitchDegrees, CameraYawDegrees = CameraYawDegrees, CameraZoom = CameraZoom, CameraFocusMetres = CameraFocusMetres };
 
     static double Finite(double value, double fallback = 0) => double.IsFinite(value) ? value : fallback;
 }
@@ -37,7 +46,8 @@ public sealed record ManualControlState(string SessionId, ManualStatus Status, l
 /// Sticks command body-frame velocities; the airframe accelerates towards them, so yawing while moving leaves momentum that
 /// the drone arrests by banking. Building clearance, the en-route floor, the ceiling and the service area are hard limits.
 /// </summary>
-public sealed class ManualFlight(DroneSpec spec, GeoPoint position, double altitude, double heading)
+public sealed class ManualFlight(DroneSpec spec, GeoPoint position, double altitude, double heading,
+    double cameraPitch = -30, double cameraYaw = 0, double cameraZoom = 1, double cameraFocus = 0)
 {
     public const double StepSeconds = .1;
     public const double HorizontalAcceleration = 3;
@@ -47,6 +57,9 @@ public sealed class ManualFlight(DroneSpec spec, GeoPoint position, double altit
     public const double StrafeFraction = .6;
     public const double MaxTiltDegrees = 14;
     public const double CameraPitchMin = -90, CameraPitchMax = 10, CameraYawLimit = 90;
+    /// <summary>The gimbal turns no faster than this, so the operator's aim moves smoothly rather than snapping.</summary>
+    public const double CameraSlewDegreesPerSecond = 45;
+    public const double MaxZoom = 8, ZoomPerSecond = 2, MinFocusMetres = 5, MaxFocusMetres = 400;
     /// <summary>Without a fresh input for this long the sticks are treated as centred and the drone brakes to a hover.</summary>
     public static readonly TimeSpan InputTimeout = TimeSpan.FromSeconds(1);
     /// <summary>After this long without the operator's link the drone resumes its previous programming.</summary>
@@ -62,8 +75,11 @@ public sealed class ManualFlight(DroneSpec spec, GeoPoint position, double altit
     public double YawRate { get; private set; }
     public double Pitch { get; private set; }
     public double Roll { get; private set; }
-    public double CameraPitch { get; private set; } = -30;
-    public double CameraYaw { get; private set; }
+    public double CameraPitch { get; private set; } = Math.Clamp(cameraPitch, CameraPitchMin, CameraPitchMax);
+    public double CameraYaw { get; private set; } = Math.Clamp(cameraYaw, -CameraYawLimit, CameraYawLimit);
+    public double CameraZoom { get; private set; } = Math.Clamp(cameraZoom, 1, MaxZoom);
+    /// <summary>Manual focus distance in metres; 0 is autofocus.</summary>
+    public double CameraFocus { get; private set; } = cameraFocus;
     public double Speed => Math.Sqrt(VelocityEast * VelocityEast + VelocityNorth * VelocityNorth);
     /// <summary>Distance travelled, for battery accounting.</summary>
     public double HorizontalMetres { get; private set; }
@@ -78,8 +94,10 @@ public sealed class ManualFlight(DroneSpec spec, GeoPoint position, double altit
     public void Step(ManualInput input, double seconds, BuildingAirspace airspace)
     {
         input = input.Clamped();
-        CameraPitch = input.CameraPitchDegrees;
-        CameraYaw = input.CameraYawDegrees;
+        CameraPitch = Approach(CameraPitch, input.CameraPitchDegrees, CameraSlewDegreesPerSecond * seconds);
+        CameraYaw = Approach(CameraYaw, input.CameraYawDegrees, CameraSlewDegreesPerSecond * seconds);
+        CameraZoom = Approach(CameraZoom, input.CameraZoom, ZoomPerSecond * seconds);
+        CameraFocus = input.CameraFocusMetres;
 
         YawRate = Approach(YawRate, input.Yaw * MaxYawRate, YawAcceleration * seconds);
         Heading = ((Heading + YawRate * seconds) % 360 + 360) % 360;

@@ -329,10 +329,13 @@ public sealed class DroneFleetSimulator(
             links: drone.Mission is null ? [] : [new ActivityLink(drone.MissionTrace)])
             ?.SetTag("drone_delivery.drone.id", drone.Id).SetTag("drone_delivery.manual.request.id", take.RequestId);
         logger.LogInformation("Operator took manual control of {DroneId}", drone.Id);
-        var flight = new ManualFlight(drone.Spec, drone.Position, drone.AltitudeMetres, drone.Heading);
+        // Start from the camera the operations view already shows, so taking control does not jump the feed.
+        var flight = new ManualFlight(drone.Spec, drone.Position, drone.AltitudeMetres, drone.Heading,
+            drone.CameraPitchDegrees, drone.CameraYawDegrees, drone.CameraZoom, drone.CameraFocusMetres);
         var now = time.GetUtcNow();
         var (lastStep, lastInput, lastReport, lastPhoto) = (now, now, DateTimeOffset.MinValue, now);
-        var sticks = ManualInput.Hover;
+        var sticks = ManualInput.Hover with
+            { CameraPitchDegrees = flight.CameraPitch, CameraYawDegrees = flight.CameraYaw, CameraZoom = flight.CameraZoom, CameraFocusMetres = flight.CameraFocus };
         long acknowledged = 0;
         double applied = 0;
         var battery = drone.BatteryPercent;
@@ -377,7 +380,7 @@ public sealed class DroneFleetSimulator(
                     return;
 
                 var lost = silent > ManualFlight.InputTimeout;
-                var input = lost ? ManualInput.Hover with { CameraPitchDegrees = sticks.CameraPitchDegrees, CameraYawDegrees = sticks.CameraYawDegrees } : sticks;
+                var input = lost ? sticks.Holding() : sticks;
                 var dt = Math.Clamp((now - lastStep).TotalSeconds, 0, .25);
                 lastStep = now;
                 flight.Step(input, dt, BuildingAirspace.Shared);
@@ -393,6 +396,8 @@ public sealed class DroneFleetSimulator(
                 drone.SpeedMetresPerSecond = flight.Speed;
                 drone.CameraPitchDegrees = flight.CameraPitch;
                 drone.CameraYawDegrees = flight.CameraYaw;
+                drone.CameraZoom = flight.CameraZoom;
+                drone.CameraFocusMetres = flight.CameraFocus;
                 drone.Manoeuvre = Manoeuvre.Cruise;
                 drone.BatteryPercent = battery;
                 if (now - lastReport >= Tick)
@@ -419,7 +424,8 @@ public sealed class DroneFleetSimulator(
         }
         finally
         {
-            drone.CameraYawDegrees = 0;
+            // Back to the autonomous camera: forward-facing, wide and autofocus; the resumed leg sets the gimbal pitch.
+            (drone.CameraYawDegrees, drone.CameraZoom, drone.CameraFocusMetres) = (0, 1, 0);
             drone.Manual = (drone.Manual ?? new(take.SessionId, ManualStatus.Active, 0, 0, 0, "")) with
                 { Status = ManualStatus.Released, Acknowledged = acknowledged, LinkLostSeconds = 0, Message = outcome };
             activity?.SetTag("drone_delivery.manual.outcome", outcome);

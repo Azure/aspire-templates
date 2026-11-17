@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
-  airspaceFrom, clampInput, hover, inputFromKeys, lookFromPointer, ManualPredictor, speedOf, startState, step,
+  aimOffset, airspaceFrom, cameraSlewDegreesPerSecond, clampInput, focusBy, hover, inputFromKeys, lookFromPointer, lookOf, ManualPredictor,
+  speedOf, startState, step, zoomBy,
 } from '../src/manualFlight';
 import type { Airspace, FlightState } from '../src/manualFlight';
 import { takeControlUnavailable } from '../src/model';
 import type { Telemetry } from '../src/api';
 
-const look = { cameraPitchDegrees: -30, cameraYawDegrees: 0 };
+const look = { cameraPitchDegrees: -30, cameraYawDegrees: 0, cameraZoom: 1, cameraFocusMetres: 0 };
 const origin = { position: { latitude: -37.8355, longitude: 144.964 }, altitudeMetres: 40, heading: 0 };
 const fly = (state: FlightState, keys: string[], seconds: number, airspace?: Airspace) => {
   for (let t = 0; t < seconds; t += .1) state = step(state, inputFromKeys(new Set(keys), look), .1, 'Piccolo', airspace ?? { clearance: () => 0 });
@@ -14,11 +15,32 @@ const fly = (state: FlightState, keys: string[], seconds: number, airspace?: Air
 };
 
 describe('manual flight keys', () => {
-  it('maps WASD, Q/E and Space/Shift to sticks and cancels opposing keys', () => {
+  it('maps WASD, Q/E and Space/Z to sticks and cancels opposing keys', () => {
     expect(inputFromKeys(new Set(['KeyW', 'KeyD', 'Space', 'KeyE']), look)).toMatchObject({ forward: 1, strafe: 1, vertical: 1, yaw: 1 });
-    expect(inputFromKeys(new Set(['KeyS', 'KeyA', 'ShiftRight', 'KeyQ']), look)).toMatchObject({ forward: -1, strafe: -1, vertical: -1, yaw: -1 });
-    expect(inputFromKeys(new Set(['KeyW', 'KeyS', 'Space', 'ShiftLeft']), look)).toMatchObject({ forward: 0, vertical: 0 });
+    expect(inputFromKeys(new Set(['KeyS', 'KeyA', 'KeyZ', 'KeyQ']), look)).toMatchObject({ forward: -1, strafe: -1, vertical: -1, yaw: -1 });
+    expect(inputFromKeys(new Set(['KeyW', 'KeyS', 'Space', 'KeyZ']), look)).toMatchObject({ forward: 0, vertical: 0 });
     expect(inputFromKeys(new Set(), look)).toEqual(hover(look));
+    expect(inputFromKeys(new Set(['ShiftLeft']), look).vertical).toBe(0);
+  });
+
+  it('zooms with the wheel and focuses with Shift+wheel from the current subject when on autofocus', () => {
+    expect(zoomBy(1, -100)).toBeGreaterThan(1.1);
+    expect(zoomBy(1, 500)).toBe(1);
+    expect(zoomBy(7, -5000)).toBe(8);
+    expect(focusBy(0, 80, 0)).toBe(80);
+    expect(focusBy(80, 40, -100)).toBeLessThan(80);
+    expect(focusBy(0, 9999, 100)).toBe(400);
+    expect(clampInput({ ...hover(), cameraZoom: Number.NaN, cameraFocusMetres: 1 })).toMatchObject({ cameraZoom: 1, cameraFocusMetres: 5 });
+  });
+
+  it('places the requested aim circle relative to the actual aim, scaled by zoom', () => {
+    expect(aimOffset({ pitch: -30, yaw: 0 }, { pitch: -30, yaw: 0 }, 1, 16 / 9)).toEqual({ x: .5, y: .5, inView: true });
+    const right = aimOffset({ pitch: -30, yaw: 0 }, { pitch: -30, yaw: 10 }, 1, 16 / 9);
+    expect(right.x).toBeGreaterThan(.5);
+    expect(right.y).toBe(.5);
+    expect(aimOffset({ pitch: -30, yaw: 0 }, { pitch: -20, yaw: 0 }, 1, 16 / 9).y).toBeLessThan(.5);
+    expect(aimOffset({ pitch: -30, yaw: 0 }, { pitch: -30, yaw: 10 }, 4, 16 / 9).x).toBeGreaterThan(right.x);
+    expect(aimOffset({ pitch: -30, yaw: 0 }, { pitch: -30, yaw: 80 }, 1, 16 / 9)).toMatchObject({ x: 1, inView: false });
   });
 
   it('bounds the mouse look from slightly above the horizon to straight down', () => {
@@ -30,6 +52,19 @@ describe('manual flight keys', () => {
 });
 
 describe('manual flight model', () => {
+  it('takes over with the drone\'s current camera and slews the gimbal and zoom smoothly', () => {
+    const start = startState({ ...origin, cameraPitchDegrees: -90, cameraYawDegrees: 12, cameraZoom: 2, cameraFocusMetres: 50 });
+    expect(start).toMatchObject({ cameraPitch: -90, cameraYaw: 12, cameraZoom: 2, cameraFocus: 50 });
+    expect(lookOf(start)).toEqual({ cameraPitchDegrees: -90, cameraYawDegrees: 12, cameraZoom: 2, cameraFocusMetres: 50 });
+    expect(startState(origin)).toMatchObject({ cameraPitch: -30, cameraYaw: 0, cameraZoom: 1, cameraFocus: 0 });
+    const held = step(start, hover(lookOf(start)), .5, 'Piccolo', { clearance: () => 0 });
+    expect(held).toMatchObject({ cameraPitch: -90, cameraYaw: 12, cameraZoom: 2, cameraFocus: 50 });
+    const moved = step(start, { ...hover(), cameraPitchDegrees: 0, cameraYawDegrees: -90, cameraZoom: 6, cameraFocusMetres: 0 }, .5, 'Piccolo', { clearance: () => 0 });
+    expect(moved.cameraPitch).toBeCloseTo(-90 + cameraSlewDegreesPerSecond * .5, 6);
+    expect(moved.cameraYaw).toBeCloseTo(12 - cameraSlewDegreesPerSecond * .5, 6);
+    expect(moved).toMatchObject({ cameraZoom: 3, cameraFocus: 0 });
+  });
+
   it('accelerates, pitches into the move and brakes to a hover when released', () => {
     let state = fly(startState(origin), ['KeyW'], 1);
     expect(speedOf(state)).toBeCloseTo(3, 0);
@@ -57,7 +92,7 @@ describe('manual flight model', () => {
     const wall: Airspace = { clearance: (latitude) => latitude > -37.8352 ? 60 : 0 };
     let state = fly(startState(origin), ['KeyW'], 12, wall);
     expect(state.latitude).toBeLessThanOrEqual(-37.8352);
-    state = fly(state, ['ShiftLeft'], 20, wall);
+    state = fly(state, ['KeyZ'], 20, wall);
     expect(state.altitude).toBeCloseTo(20, 5);
     state = fly(state, ['Space', 'KeyW'], 20, wall);
     expect(state.altitude).toBeGreaterThan(60);

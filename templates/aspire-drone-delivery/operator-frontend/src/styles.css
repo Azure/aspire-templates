@@ -40,6 +40,20 @@
 .pilot-heading h2 { margin: 6px 0 0; font-size: 24px; font-weight: 500; }
 .pilot-link { font-size: 11px; padding: 6px 10px; border-radius: 99px; background: #1f4d3a; letter-spacing: .05em; }
 .pilot-link.degraded { background: #934b38; }
+.pilot-status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: end; }
+.pilot-battery { display: inline-flex; align-items: center; gap: 7px; font: 600 11px ui-monospace, monospace; padding: 5px 10px; border-radius: 99px; background: #1f4d3a; }
+.pilot-battery i { position: relative; width: 26px; height: 11px; border: 1.5px solid #eef3ec; border-radius: 3px; padding: 1px; }
+.pilot-battery i::after { content: ""; position: absolute; right: -4px; top: 2.5px; width: 2px; height: 4px; border-radius: 0 1px 1px 0; background: #eef3ec; }
+.pilot-battery b { display: block; height: 100%; border-radius: 1px; background: #7fd6a3; transition: width .4s; }
+.pilot-battery.low { background: #934b38; }
+.pilot-battery.low b { background: #f5b955; }
+.pilot-feed .cam-cross { display: none; }
+.aim-actual, .aim-desired { position: absolute; left: 50%; top: 50%; z-index: 3; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+.aim-actual { width: 38px; height: 38px; border: 1.5px solid #fffef5d0; box-shadow: 0 0 0 1px #0004; }
+.aim-actual::after { content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: #fffef5d0; }
+.aim-desired { width: 22px; height: 22px; border: 2px dashed #f5b955; box-shadow: 0 0 0 1px #0003; }
+.aim-desired[data-in-view="false"] { border-style: solid; opacity: .7; }
+.pilot-feed[data-paused="true"] .aim-desired { display: none; }
 .pilot-feed { position: relative; aspect-ratio: 16 / 9; max-height: calc(100vh - 210px); border-radius: 8px; overflow: hidden; box-shadow: 0 30px 80px #0008; outline: none; cursor: crosshair; }
 .pilot-feed .drone-cam { height: 100%; }
 .pilot-feed[data-paused="true"] { cursor: default; }

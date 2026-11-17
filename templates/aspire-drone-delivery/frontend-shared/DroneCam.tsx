@@ -400,6 +400,21 @@ export default function DroneCam({ pose, nearby = [], target: destination, pads 
       camera.up.set(forwardX * down, across, forwardZ * down);
       camera.lookAt(location.x + forwardX * across, height - down, location.y + forwardZ * across);
       camera.rotateZ(-roll * Math.PI / 180);
+      const zoom = Math.min(8, Math.max(1, sampled.cameraZoom ?? 1));
+      const fov = 62 / zoom;
+      if (Math.abs(camera.fov - fov) > .01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+      // Optical focus: the subject is where the aim meets the ground. Manual focus away from it defocuses the feed,
+      // more so when zoomed in (longer focal length); autofocus keeps it sharp.
+      const lookDown = Math.max(.02, Math.sin(-(sampled.cameraPitchDegrees + pitch) * Math.PI / 180));
+      const subject = Math.min(400, sampled.altitudeMetres / lookDown);
+      const focus = sampled.cameraFocusMetres ?? 0;
+      const blur = focus > 0 ? Math.min(6, 60 * Math.abs(1 / focus - 1 / subject) * zoom) : 0;
+      const filter = blur >= .15 ? `blur(${blur.toFixed(1)}px)` : '';
+      if (renderer.domElement.style.filter !== filter) renderer.domElement.style.filter = filter;
+      element.dataset.zoom = zoom.toFixed(2);
+      element.dataset.focus = focus.toFixed(1);
+      element.dataset.subject = subject.toFixed(1);
+      element.dataset.blur = blur.toFixed(2);
       const seen = new Set<string>();
       for (const reading of others.slice(0, 24)) {
         if (Date.now() - Date.parse(reading.timestamp) > 30000) continue;
@@ -436,7 +451,7 @@ export default function DroneCam({ pose, nearby = [], target: destination, pads 
       element.dataset.stale = String(stale);
       const readout = element.querySelector('.cam-readout');
       if (readout) readout.textContent = stale ? 'TELEMETRY PAUSED · LAST RECEIVED POSE'
-        : `ALT ${sampled.altitudeMetres.toFixed(1)} m · HDG ${sampled.heading.toFixed(0)}° · CAM ${sampled.cameraPitchDegrees.toFixed(0)}°${cameraYaw ? ` / ${cameraYaw > 0 ? 'R' : 'L'}${Math.abs(cameraYaw).toFixed(0)}°` : ''}`;
+        : `ALT ${sampled.altitudeMetres.toFixed(1)} m · HDG ${sampled.heading.toFixed(0)}° · CAM ${sampled.cameraPitchDegrees.toFixed(0)}°${Math.abs(cameraYaw) >= .5 ? ` / ${cameraYaw > 0 ? 'R' : 'L'}${Math.abs(cameraYaw).toFixed(0)}°` : ''}${zoom >= 1.05 ? ` · ${zoom.toFixed(1)}×` : ''}${focus > 0 ? ` · F ${focus.toFixed(0)} m` : ''}`;
       renderer.setScissorTest(false);
       renderer.setViewport(0, 0, element.clientWidth, element.clientHeight);
       renderer.render(scene, camera);

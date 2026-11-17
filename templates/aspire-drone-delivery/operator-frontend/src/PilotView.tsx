@@ -3,10 +3,13 @@ import type { CamPad } from '../../frontend-shared/DroneCam';
 import { manualControl, sendManualInput } from './api';
 import type { ManualAction, Telemetry } from './api';
 import type { DroneAudio } from './droneAudio';
-import { airspaceFrom, controlKeys, hover, inputFromKeys, lookFromPointer, ManualPredictor, speedOf, startState } from './manualFlight';
+import { aimOffset, airspaceFrom, controlKeys, focusBy, hover, inputFromKeys, lookFromPointer, lookOf, ManualPredictor, speedOf, startState, zoomBy } from './manualFlight';
+import type { Look } from './manualFlight';
 
 const DroneCam = lazy(() => import('../../frontend-shared/DroneCam'));
 const sendIntervalMs = 100;
+/** Matches DroneSpec.ReserveBatteryPercent: at this level the simulator takes the drone home. */
+const reserveBattery = 15;
 
 export type PilotOutcome = { message: string; failed?: boolean };
 
@@ -19,7 +22,9 @@ export default function PilotView({ drone, fleet, pads, sessionId, audio, onEnd 
 }) {
   const predictor = useRef(new ManualPredictor(startState(drone), drone.class));
   const keys = useRef(new Set<string>());
-  const look = useRef({ cameraPitchDegrees: -30, cameraYawDegrees: 0 });
+  // The requested camera starts as the drone's current one, so taking control doesn't move the view.
+  const look = useRef<Look>(lookOf(predictor.current.state));
+  const desired = useRef<HTMLSpanElement>(null);
   const paused = useRef(false);
   const sequence = useRef(0);
   const feed = useRef<HTMLDivElement>(null);
@@ -27,7 +32,7 @@ export default function PilotView({ drone, fleet, pads, sessionId, audio, onEnd 
   const [handing, setHanding] = useState<ManualAction | null>(null);
   const [error, setError] = useState('');
   const [linkIssue, setLinkIssue] = useState(false);
-  const [readout, setReadout] = useState({ speed: 0, altitude: drone.altitudeMetres, heading: drone.heading });
+  const [readout, setReadout] = useState({ speed: 0, altitude: drone.altitudeMetres, heading: drone.heading, zoom: 1, focus: 0 });
   const end = useRef(onEnd);
   end.current = onEnd;
   const droneId = drone.droneId;
@@ -74,8 +79,13 @@ export default function PilotView({ drone, fleet, pads, sessionId, audio, onEnd 
         return;
       }
       if (event.key === 'Tab') return;
+      if (event.code === 'KeyF') {
+        event.preventDefault(); event.stopPropagation();
+        if (!paused.current && !event.repeat) { look.current = { ...look.current, cameraFocusMetres: 0 }; send(); }
+        return;
+      }
       if (!controlKeys.has(event.code) && !event.code.startsWith('Arrow')) return;
-      // Space and arrows would scroll the page; Shift is also captured so the drawer never sees flight keys.
+      // Space and arrows would scroll the page; flight keys are captured so the drawer never sees them.
       event.preventDefault(); event.stopPropagation();
       if (paused.current || event.repeat || !controlKeys.has(event.code)) return;
       keys.current.add(event.code);
@@ -111,9 +121,18 @@ export default function PilotView({ drone, fleet, pads, sessionId, audio, onEnd 
       const state = predictor.current.state;
       audio.update(.3 * Math.min(1, speedOf(state) / 14) + .45 * Math.max(0, current.vertical) + .15 * Math.abs(current.yaw)
         + .1 * Math.hypot(state.pitch, state.roll) / 14);
+      const ring = desired.current, box = feed.current;
+      if (ring && box) {
+        const aim = aimOffset({ pitch: state.cameraPitch, yaw: state.cameraYaw },
+          { pitch: current.cameraPitchDegrees, yaw: current.cameraYawDegrees }, state.cameraZoom, box.clientWidth / Math.max(1, box.clientHeight));
+        ring.style.left = `${(aim.x * 100).toFixed(2)}%`;
+        ring.style.top = `${(aim.y * 100).toFixed(2)}%`;
+        ring.dataset.inView = String(aim.inView);
+        box.dataset.aimError = Math.hypot(current.cameraPitchDegrees - state.cameraPitch, current.cameraYawDegrees - state.cameraYaw).toFixed(2);
+      }
       if (now - shown > 200) {
         shown = now;
-        setReadout({ speed: speedOf(state), altitude: state.altitude, heading: state.heading });
+        setReadout({ speed: speedOf(state), altitude: state.altitude, heading: state.heading, zoom: state.cameraZoom, focus: state.cameraFocus });
       }
       frame = requestAnimationFrame(tick);
     };
@@ -122,6 +141,26 @@ export default function PilotView({ drone, fleet, pads, sessionId, audio, onEnd 
   }, [send, input, audio]);
 
   useEffect(() => { feed.current?.focus(); }, []);
+
+  // Wheel zooms; Shift+wheel focuses. A non-passive listener so the page behind the overlay never scrolls.
+  useEffect(() => {
+    const element = feed.current;
+    if (!element) return;
+    const wheel = (event: WheelEvent) => {
+      event.preventDefault();
+      if (paused.current) return;
+      // Browsers on macOS turn Shift+wheel into horizontal scrolling.
+      const delta = (event.deltaY || event.deltaX) * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 400 : 1);
+      if (!delta) return;
+      if (event.shiftKey) {
+        const subject = Number(element.querySelector<HTMLElement>('.drone-cam')?.dataset.subject ?? 60);
+        look.current = { ...look.current, cameraFocusMetres: focusBy(look.current.cameraFocusMetres, subject, delta) };
+      } else look.current = { ...look.current, cameraZoom: zoomBy(look.current.cameraZoom, delta) };
+      send();
+    };
+    element.addEventListener('wheel', wheel, { passive: false });
+    return () => element.removeEventListener('wheel', wheel);
+  }, [send]);
 
   const live = useCallback(() => predictor.current.pose(droneId, Date.now()), [droneId]);
   async function handBack(action: ManualAction) {
@@ -132,22 +171,31 @@ export default function PilotView({ drone, fleet, pads, sessionId, audio, onEnd 
   const lookAt = (event: React.PointerEvent) => {
     if (paused.current) return;
     const box = event.currentTarget.getBoundingClientRect();
-    look.current = lookFromPointer((event.clientX - box.left) / box.width, (event.clientY - box.top) / box.height);
+    look.current = { ...look.current, ...lookFromPointer((event.clientX - box.left) / box.width, (event.clientY - box.top) / box.height) };
   };
 
   return <div className="pilot-overlay" role="dialog" aria-modal="true" aria-labelledby="pilot-heading">
     <div className="pilot-frame">
       <header className="pilot-heading">
         <div><span className="eyebrow">MANUAL CONTROL · SIMULATION ONLY</span><h2 id="pilot-heading">Flying {droneId}</h2></div>
+        <div className="pilot-status">
+        <span className={`pilot-battery${drone.batteryPercent <= reserveBattery + 10 ? ' low' : ''}`} role="meter" aria-label="Battery"
+          aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(drone.batteryPercent)}>
+          <i aria-hidden="true"><b style={{ width: `${Math.max(0, Math.min(100, drone.batteryPercent))}%` }} /></i>
+          {Math.round(drone.batteryPercent)}%
+        </span>
         <span className={`pilot-link${linkIssue || drone.manual?.status === 'LinkLost' ? ' degraded' : ''}`} role="status">
           {drone.manual?.status === 'LinkLost' ? `Link lost · hovering · resumes in ${Math.max(0, 30 - Math.round(drone.manual.linkLostSeconds))} s`
             : linkIssue ? 'Control link degraded' : drone.manual?.status === 'Active' ? 'Control link up' : 'Connecting…'}
         </span>
+        </div>
       </header>
       <div className="pilot-feed" ref={feed} tabIndex={-1} onPointerMove={lookAt} data-paused={prompt}>
         <Suspense fallback={<div className="drone-cam"><p>Starting simulated feed…</p></div>}>
           <DroneCam pose={drone} live={live} nearby={fleet.filter(item => item.droneId !== droneId)} pads={pads} />
         </Suspense>
+        <span className="aim-actual" aria-hidden="true" title="Current aim" />
+        <span className="aim-desired" ref={desired} aria-hidden="true" title="Requested aim" />
         {prompt && <div className="pilot-prompt" role="alertdialog" aria-labelledby="pilot-prompt-heading">
           <h3 id="pilot-prompt-heading">Holding position</h3>
           <p>Hand {droneId} back to its programming, or cancel the mission and return to base.</p>
@@ -164,11 +212,14 @@ export default function PilotView({ drone, fleet, pads, sessionId, audio, onEnd 
           <div><dt><kbd>W</kbd><kbd>S</kbd></dt><dd>Forward / back</dd></div>
           <div><dt><kbd>A</kbd><kbd>D</kbd></dt><dd>Strafe</dd></div>
           <div><dt><kbd>Q</kbd><kbd>E</kbd></dt><dd>Yaw</dd></div>
-          <div><dt><kbd>Space</kbd><kbd>Shift</kbd></dt><dd>Up / down</dd></div>
-          <div><dt>Mouse</dt><dd>Look</dd></div>
+          <div><dt><kbd>Space</kbd><kbd>Z</kbd></dt><dd>Up / down</dd></div>
+          <div><dt>Mouse</dt><dd>Aim camera</dd></div>
+          <div><dt>Wheel</dt><dd>Zoom</dd></div>
+          <div><dt><kbd>Shift</kbd>+Wheel</dt><dd>Focus</dd></div>
+          <div><dt><kbd>F</kbd></dt><dd>Autofocus</dd></div>
           <div><dt><kbd>Esc</kbd></dt><dd>Exit</dd></div>
         </dl>
-        <span className="pilot-readout">{readout.speed.toFixed(1)} m/s · ALT {readout.altitude.toFixed(0)} m · HDG {readout.heading.toFixed(0)}°{audio.running ? ' · audio on' : ''}</span>
+        <span className="pilot-readout">{readout.speed.toFixed(1)} m/s · ALT {readout.altitude.toFixed(0)} m · HDG {readout.heading.toFixed(0)}° · {readout.zoom.toFixed(1)}× · FOCUS {readout.focus > 0 ? `${readout.focus.toFixed(0)} m` : 'auto'}{audio.running ? ' · audio on' : ''}</span>
       </div>
       <p className="pilot-note">Building clearance and the service area still apply. If this page loses its link the drone hovers, then resumes its programming after 30 s.</p>
     </div>

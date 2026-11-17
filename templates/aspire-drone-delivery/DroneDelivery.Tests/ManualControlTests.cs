@@ -93,8 +93,33 @@ public class ManualControlTests
     [Fact]
     public void Inputs_are_clamped_and_non_finite_values_centre()
     {
-        var input = new ManualInput(5, double.NaN, -3, double.PositiveInfinity, -200, 400).Clamped();
-        Assert.Equal(new ManualInput(1, 0, -1, 0, ManualFlight.CameraPitchMin, ManualFlight.CameraYawLimit), input);
+        var input = new ManualInput(5, double.NaN, -3, double.PositiveInfinity, -200, 400, 50, 1).Clamped();
+        Assert.Equal(new ManualInput(1, 0, -1, 0, ManualFlight.CameraPitchMin, ManualFlight.CameraYawLimit, ManualFlight.MaxZoom,
+            ManualFlight.MinFocusMetres), input);
+        Assert.Equal(0, new ManualInput(0, 0, 0, 0, CameraZoom: double.NaN, CameraFocusMetres: -4).Clamped().CameraFocusMetres);
+        Assert.Equal(1, new ManualInput(0, 0, 0, 0, CameraZoom: double.NaN).Clamped().CameraZoom);
+    }
+
+    [Fact]
+    public void Camera_starts_where_the_drone_was_looking_and_slews_smoothly_towards_the_requested_aim()
+    {
+        // Taken over mid-descent: the gimbal is straight down, zoomed and focused, and holds that until asked to move.
+        var flight = new ManualFlight(Spec, Start, 40, 0, cameraPitch: -90, cameraYaw: 10, cameraZoom: 2, cameraFocus: 60);
+        // A lost link centres the sticks but keeps the operator's camera settings.
+        var holding = new ManualInput(1, 1, 1, 1, -90, 10, 2, 60).Holding();
+        Assert.Equal(new ManualInput(0, 0, 0, 0, -90, 10, 2, 60), holding);
+        Fly(flight, holding, 1);
+        Assert.Equal((-90d, 10d, 2d, 60d), (flight.CameraPitch, flight.CameraYaw, flight.CameraZoom, flight.CameraFocus));
+
+        flight.Step(new(0, 0, 0, 0, 0, -90, 6, 0), .5, BuildingAirspace.Empty);
+        var slew = ManualFlight.CameraSlewDegreesPerSecond * .5;
+        Assert.Equal(-90 + slew, flight.CameraPitch, 6);
+        Assert.Equal(10 - slew, flight.CameraYaw, 6);
+        Assert.Equal(2 + ManualFlight.ZoomPerSecond * .5, flight.CameraZoom, 6);
+        Assert.Equal(0, flight.CameraFocus);
+
+        Fly(flight, new(0, 0, 0, 0, 0, -90, 6, 0), 3);
+        Assert.Equal((0d, -90d, 6d), (flight.CameraPitch, flight.CameraYaw, flight.CameraZoom));
     }
 
     static DroneTelemetry Airborne(DroneState state = DroneState.FlyingToCustomer, ManualControlState? manual = null, long sequence = 1,

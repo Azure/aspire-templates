@@ -6,6 +6,8 @@ export type CameraPose = {
   /** Gimbal yaw relative to the airframe's heading (manual control only). */
   cameraYawDegrees?: number;
   pitchDegrees?: number; rollDegrees?: number;
+  /** Optical zoom (1 = wide) and manual focus distance in metres (0 or absent = autofocus). */
+  cameraZoom?: number; cameraFocusMetres?: number;
   plannedRoute?: FlightWaypoint[] | null;
 };
 
@@ -44,6 +46,7 @@ export class PoseBuffer {
       pitchDegrees: mix(a.pitchDegrees ?? 0, b.pitchDegrees ?? 0),
       rollDegrees: mix(a.rollDegrees ?? 0, b.rollDegrees ?? 0),
       cameraYawDegrees: mix(a.cameraYawDegrees ?? 0, b.cameraYawDegrees ?? 0),
+      cameraZoom: mix(a.cameraZoom ?? 1, b.cameraZoom ?? 1), cameraFocusMetres: b.cameraFocusMetres ?? 0,
     };
   }
 }

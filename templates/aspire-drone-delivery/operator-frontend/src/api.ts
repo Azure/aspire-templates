@@ -11,7 +11,7 @@ export type Telemetry = {
   pitchDegrees?: number; rollDegrees?: number; speedMetresPerSecond?: number;
   plannedRoute?: FlightWaypoint[] | null; routingError?: string | null; padId?: string | null;
   control: { commandId: string; command: DroneCommand; status: 'Executing' | 'Completed' | 'Rejected'; message: string } | null;
-  manual?: ManualControlState | null; cameraYawDegrees?: number;
+  manual?: ManualControlState | null; cameraYawDegrees?: number; cameraZoom?: number; cameraFocusMetres?: number;
 };
 export type ManualControlState = {
   sessionId: string; status: 'Active' | 'LinkLost' | 'Released' | 'Rejected'; acknowledged: number;
