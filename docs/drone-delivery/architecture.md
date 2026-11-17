@@ -47,7 +47,7 @@ start at the latest event, so restarting a worker does not replay old missions.
 | Domain library | Drone classes, VTOL flight legs, logistics planner, dispatcher and event contracts | Pure .NET; unit tested |
 | Drone simulator | Fleet of Piccolo/Doppio/Abbondante drones; missions, charging, telemetry, camera shots | In-memory fleet; SVG placeholder images |
 | Customer simulator | Peak-and-quiet demand from many customers at random drop-offs | Synthetic only |
-| API and logistics | Accept orders, assign drones, estimate delivery, expose fleet/orders/photos | In-memory order state; no persistence |
+| API and logistics | Accept orders, assign drones, estimate delivery, expose fleet/orders/photos | Orders written through to Cosmos DB (serverless; vNext emulator locally) and restored on restart; lost restored missions are re-dispatched or failed |
 | Customer React site | Payload selection, coffee builder, tray, own orders/tracking | POST orders; scoped realtime receipt subscriptions; up to 20 localStorage receipts; no real authentication |
 | Operator React site | All stores, fleet, dispatch queue, battery, queued work and a per-drone camera/command drawer | Initial REST snapshot plus operator realtime stream; latest 100 orders; commands go through the backend |
 | CustomerServer / OperatorServer | Serve independent frontends and proxy backend REST/negotiate routes | No Event Hubs consumers, dispatch logic or authoritative state |
@@ -86,8 +86,8 @@ Reconnect reloads authoritative snapshots before updates resume.
 This is SignalR, not Web PubSub, and it does not silently fall back to polling.
 
 Receipt IDs filter the customer experience, not access to the API. There is no
-authentication/authorization; server-owned state resets on restart. Add an access
-boundary and persistence before treating this as a real customer service.
+authentication/authorization; fleet state resets on restart, while orders persist in
+Cosmos DB. Add an access boundary before treating this as a real customer service.
 
 ## Drone cameras and operator interventions
 
@@ -154,9 +154,9 @@ tile provider, which is a one-line URL change in `frontend-shared/osm.ts`.
 
 Orders, dispatch and the drone fleet now run on the backend. Next, move menus,
 recipe pricing and payload validation into the server, and stream fleet and order
-updates with authorization and persistence. Both sites already show backend
+updates with authorization. Both sites already show backend
 simulation state through SignalR. Keep the single-company ForthCoffee scope.
-Evaluate persistence and messaging against demonstrable sample value and the
+Evaluate further messaging and storage against demonstrable sample value and the
 local prerequisites, rather than adding Azure services solely for a diagram.
 
 The eventual `aspire deploy` path must guide Azure configuration and verify the

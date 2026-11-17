@@ -31,6 +31,9 @@ public sealed record OrderSnapshot(
     DroneTelemetry? Telemetry = null,
     IReadOnlyList<CameraPose>? NearbyDrones = null);
 
+/// <summary>What logistics persists for an order: its snapshot plus the mission and trace needed to resume it.</summary>
+public sealed record OrderRecord(OrderSnapshot Order, string? MissionId, string? TraceParent);
+
 public sealed class OrderView(OrderPlaced order, PickupLocation store, DateTimeOffset readyAt)
 {
     public OrderPlaced Order { get; } = order;
@@ -45,6 +48,9 @@ public sealed class OrderView(OrderPlaced order, PickupLocation store, DateTimeO
     public DateTimeOffset? DeliveredAt { get; set; }
     public string? Note { get; set; }
     public List<OrderPhoto> Photos { get; } = [];
+    public string? MissionId { get; set; }
+    /// <summary>Restored after a restart and not yet confirmed by the drone's telemetry.</summary>
+    public bool Recovered { get; set; }
     /// <summary>The span that accepted the order; later dispatch, mission and realtime spans join its trace.</summary>
     public ActivityContext Trace { get; init; }
 
@@ -66,13 +72,21 @@ public sealed class Dispatcher
     readonly Dictionary<string, OrderView> orders = [];
     readonly Dictionary<string, OrderView> byMission = [];
     readonly Dictionary<string, string> pendingCommands = [];
+    readonly HashSet<string> changed = new(StringComparer.Ordinal);
+
+    /// <summary>How long a restored mission may be overdue before it's treated as lost by a restarted simulator.</summary>
+    public static readonly TimeSpan RecoveryGrace = TimeSpan.FromSeconds(30);
 
     public OrderSnapshot Accept(OrderPlaced order, ActivityContext trace = default)
     {
         var store = ServiceArea.NearestStore(order.DropOff);
         var view = new OrderView(order, store, order.PlacedAt + LogisticsPlanner.PreparationTime(order.PayloadBays)) { Trace = trace };
         lock (gate)
-            return (orders.TryAdd(order.OrderId, view) ? view : orders[order.OrderId]).Snapshot();
+        {
+            if (orders.TryAdd(order.OrderId, view))
+                changed.Add(order.OrderId);
+            return orders[order.OrderId].Snapshot();
+        }
     }
 
     public void Observe(DroneTelemetry telemetry)
@@ -89,6 +103,47 @@ public sealed class Dispatcher
             if (outstanding.GetValueOrDefault(telemetry.DroneId) == 0 && telemetry.Manoeuvre == Manoeuvre.OnTheGround &&
                 telemetry.State is DroneState.Parked or DroneState.Charging)
                 committed[telemetry.DroneId] = new(telemetry.DroneId, telemetry.Class, telemetry.Position, telemetry.HomePad, telemetry.BatteryPercent, telemetry.Timestamp);
+            Reconcile(telemetry);
+        }
+    }
+
+    /// <summary>
+    /// Confirms or abandons missions restored after a restart. If the simulator restarted too it has forgotten them:
+    /// once the drone sits idle on its pad well past departure, the order is re-dispatched (or failed if it was aboard).
+    /// </summary>
+    void Reconcile(DroneTelemetry telemetry)
+    {
+        foreach (var (missionId, view) in byMission.Where(entry => entry.Value.Recovered && entry.Value.DroneId == telemetry.DroneId).ToList())
+        {
+            if (telemetry.MissionId == missionId)
+            {
+                view.Recovered = false;
+                continue;
+            }
+            if (telemetry.MissionId is not null || telemetry.Manoeuvre != Manoeuvre.OnTheGround ||
+                telemetry.State is not (DroneState.Parked or DroneState.Charging) ||
+                telemetry.Timestamp < (view.DepartAt ?? DateTimeOffset.MinValue) + RecoveryGrace)
+                continue;
+            byMission.Remove(missionId);
+            view.Recovered = false;
+            view.MissionId = null;
+            if (view.Status == OrderStatus.Delivered) { }
+            else if (view.Status == OrderStatus.PickedUp)
+            {
+                view.Status = OrderStatus.Failed;
+                view.Note = "Delivery lost while logistics restarted";
+                view.EstimatedDelivery = null;
+            }
+            else
+            {
+                view.Status = OrderStatus.AwaitingFleet;
+                view.Note = "Re-dispatching after a restart";
+                view.DroneId = null;
+                view.DroneClass = null;
+                view.DepartAt = view.EstimatedPickup = view.EstimatedDelivery = null;
+            }
+            changed.Add(view.Order.OrderId);
+            Release(telemetry.DroneId);
         }
     }
 
@@ -99,6 +154,7 @@ public sealed class Dispatcher
             if (!byMission.TryGetValue(progress.MissionId, out var view))
                 return;
             var spec = DroneSpec.For(view.DroneClass!.Value);
+            changed.Add(view.Order.OrderId);
             switch (progress.Milestone)
             {
                 case MissionMilestone.ArrivedAtPickup:
@@ -115,12 +171,14 @@ public sealed class Dispatcher
                     view.DeliveredAt = progress.Timestamp;
                     break;
                 case MissionMilestone.ReturnedToPad:
+                    view.MissionId = null;
                     Release(progress.DroneId);
                     byMission.Remove(progress.MissionId);
                     break;
                 case MissionMilestone.Rejected:
                     view.Status = OrderStatus.AwaitingFleet;
                     view.Note = progress.Reason;
+                    view.MissionId = null;
                     view.DroneId = null;
                     view.DroneClass = null;
                     view.DepartAt = view.EstimatedPickup = view.EstimatedDelivery = null;
@@ -134,6 +192,7 @@ public sealed class Dispatcher
                         view.Note = progress.Reason ?? "Delivery interrupted by fleet operations";
                         view.EstimatedDelivery = null;
                     }
+                    view.MissionId = null;
                     Release(progress.DroneId);
                     byMission.Remove(progress.MissionId);
                     break;
@@ -149,7 +208,10 @@ public sealed class Dispatcher
         lock (gate)
         {
             if (photo.OrderId is { } orderId && orders.TryGetValue(orderId, out var view))
+            {
                 view.Photos.Add(new(photo.BlobName, photo.Trigger, photo.ProofOfDelivery, photo.Timestamp));
+                changed.Add(orderId);
+            }
         }
     }
 
@@ -166,7 +228,7 @@ public sealed class Dispatcher
                     fleet[drone.DroneId].Control is not { Status: CommandStatus.Executing }).ToList();
                 if (available.Count == 0)
                 {
-                    view.Note = "Waiting for drones to report in";
+                    SetNote(view, "Waiting for drones to report in");
                     continue;
                 }
                 var request = new DeliveryRequest(view.Order.OrderId, view.Order.PayloadBays, view.Store.Location, view.Order.DropOff, view.ReadyAt);
@@ -174,10 +236,11 @@ public sealed class Dispatcher
                 {
                     if (committed.Values.Except(available).Any(drone => DroneSpec.For(drone.Class).CanCarry(view.Order.PayloadBays)))
                     {
-                        view.Note = "Waiting for a capable drone to return to dispatch";
+                        SetNote(view, "Waiting for a capable drone to return to dispatch");
                         continue;
                     }
                     view.Status = OrderStatus.Unserviceable;
+                    changed.Add(view.Order.OrderId);
                     view.Note = committed.Values.Any(drone => DroneSpec.For(drone.Class).CanCarry(view.Order.PayloadBays))
                         ? "Out of range for every capable drone"
                         : $"No drone in the fleet has {view.Order.PayloadBays} bays";
@@ -197,7 +260,9 @@ public sealed class Dispatcher
                 view.Note = plan.DepartAt - now > TimeSpan.FromMinutes(1)
                     ? $"Queued for {plan.Class} {plan.DroneId}"
                     : plan.ChargeBeforeDeparture > TimeSpan.Zero ? $"{plan.DroneId} is charging first" : null;
+                view.MissionId = missionId;
                 byMission[missionId] = view;
+                changed.Add(view.Order.OrderId);
                 missions.Add(new(missionId, view.Order.OrderId, plan.DroneId, view.Store.Location, view.Order.DropOff, view.Order.PayloadBays, plan.DepartAt, view.ReadyAt));
             }
         }
@@ -238,7 +303,10 @@ public sealed class Dispatcher
         lock (gate)
         {
             if (orders.TryGetValue(orderId, out var view) && view.ReadyAt > now)
+            {
                 view.ReadyAt = now;
+                changed.Add(orderId);
+            }
         }
     }
 
@@ -296,6 +364,70 @@ public sealed class Dispatcher
         lock (gate)
             if (pendingCommands.GetValueOrDefault(command.DroneId) == command.CommandId)
                 pendingCommands.Remove(command.DroneId);
+    }
+
+    /// <summary>Returns the orders changed since the last call, for persistence.</summary>
+    public IReadOnlyList<OrderRecord> TakeChanges()
+    {
+        lock (gate)
+        {
+            var records = changed.Select(orderId => Record(orders[orderId])).ToList();
+            changed.Clear();
+            return records;
+        }
+    }
+
+    /// <summary>Marks orders as changed again, e.g. after a failed write.</summary>
+    public void MarkChanged(IEnumerable<string> orderIds)
+    {
+        lock (gate)
+            changed.UnionWith(orderIds.Where(orders.ContainsKey));
+    }
+
+    /// <summary>Reloads persisted orders at startup. Active missions keep their drone reserved until they finish or are found lost.</summary>
+    public void Restore(IEnumerable<OrderRecord> records)
+    {
+        lock (gate)
+        {
+            foreach (var record in records)
+            {
+                var snapshot = record.Order;
+                var view = new OrderView(snapshot.Order, snapshot.Store, snapshot.ReadyAt)
+                {
+                    Status = snapshot.Status,
+                    DroneId = snapshot.DroneId,
+                    DroneClass = snapshot.DroneClass,
+                    DepartAt = snapshot.DepartAt,
+                    EstimatedPickup = snapshot.EstimatedPickup,
+                    EstimatedDelivery = snapshot.EstimatedDelivery,
+                    DeliveredAt = snapshot.DeliveredAt,
+                    Note = snapshot.Note,
+                    MissionId = record.MissionId,
+                    Trace = ActivityContext.TryParse(record.TraceParent, null, out var trace) ? trace : default,
+                };
+                view.Photos.AddRange(snapshot.Photos);
+                if (!orders.TryAdd(snapshot.Order.OrderId, view))
+                    continue;
+                if (view.MissionId is { } missionId && view.DroneId is { } droneId &&
+                    view.Status is OrderStatus.Scheduled or OrderStatus.DroneEnRoute or OrderStatus.PickedUp or OrderStatus.Delivered)
+                {
+                    view.Recovered = true;
+                    byMission[missionId] = view;
+                    outstanding[droneId] = outstanding.GetValueOrDefault(droneId) + 1;
+                }
+            }
+        }
+    }
+
+    static OrderRecord Record(OrderView view) => new(view.Snapshot(), view.MissionId,
+        view.Trace == default ? null : $"00-{view.Trace.TraceId}-{view.Trace.SpanId}-{(view.Trace.TraceFlags.HasFlag(ActivityTraceFlags.Recorded) ? "01" : "00")}");
+
+    void SetNote(OrderView view, string note)
+    {
+        if (view.Note == note)
+            return;
+        view.Note = note;
+        changed.Add(view.Order.OrderId);
     }
 
     void Release(string droneId)

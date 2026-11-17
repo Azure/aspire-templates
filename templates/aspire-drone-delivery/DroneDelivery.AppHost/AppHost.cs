@@ -15,6 +15,12 @@ var photos = eventHubs.AddHub("drone-photos").WithTags("infrastructure");
 // Camera images go to blob storage (Azurite locally); only their names travel through Event Hubs.
 var storage = builder.AddAzureStorage("storage").RunAsEmulator().WithTags("infrastructure");
 var photoStore = storage.AddBlobContainer("drone-photo-store").WithTags("infrastructure");
+// Orders persist in serverless Azure Cosmos DB (pay per request); locally the Cosmos DB emulator stands in.
+var cosmos = builder.AddAzureCosmosDB("cosmos")
+    .RunAsEmulator(emulator => emulator.WithDataExplorer())
+    .WithTags("infrastructure");
+var orderStore = cosmos.AddCosmosDatabase("drone-delivery").WithTags("infrastructure")
+    .AddContainer("order-store", "/id").WithTags("infrastructure");
 var signalr = builder.AddAzureSignalR("signalr", AzureSignalRServiceMode.Serverless).RunAsEmulator().WithTags("infrastructure");
 
 var droneSimulator = builder.AddDotnetProject("drone-simulator", "../DroneDelivery.DroneSimulator/DroneDelivery.DroneSimulator.csproj")
@@ -29,6 +35,7 @@ var backend = builder.AddDotnetProject("backend", "../DroneDelivery.Server/Drone
     .WithTags("servers")
     .WithReference(orders).WithReference(missions).WithReference(telemetry).WithReference(photos).WithReference(photoStore)
     .WithReference(signalr).WaitFor(signalr)
+    .WithReference(orderStore).WaitFor(orderStore)
     .WaitFor(eventHubs).WaitFor(photoStore).WaitFor(droneSimulator)
     .WithHttpHealthCheck("/health");
 
@@ -44,7 +51,6 @@ var customerServer = builder.AddDotnetProject("customer-server", "../DroneDelive
     .WithHttpEndpoint()
     .WithOtlpExporter(OtlpProtocol.HttpProtobuf)
     .WithReference(backend)
-    .WithEnvironment("BACKEND_HTTP", backend.GetEndpoint("http"))
     .WaitFor(backend)
     .WithHttpHealthCheck("/health")
     .WithExternalHttpEndpoints();
@@ -54,7 +60,6 @@ var operatorServer = builder.AddDotnetProject("operator-server", "../DroneDelive
     .WithHttpEndpoint()
     .WithOtlpExporter(OtlpProtocol.HttpProtobuf)
     .WithReference(backend)
-    .WithEnvironment("BACKEND_HTTP", backend.GetEndpoint("http"))
     .WaitFor(backend)
     .WithHttpHealthCheck("/health")
     .WithExternalHttpEndpoints();
@@ -81,16 +86,4 @@ var operatorSite = builder.AddViteApp("operator-site", "../operator-frontend")
 customerServer.PublishWithContainerFiles(customerSite, "wwwroot");
 operatorServer.PublishWithContainerFiles(operatorSite, "wwwroot");
 
-// Integrations add these visible child resources themselves; they don't inherit their parent's tags.
-TagGenerated("eventhubs-storage", "infrastructure");
-TagGenerated("storage-blobs", "infrastructure");
-TagGenerated("customer-site-installer", "frontends", "customer");
-TagGenerated("operator-site-installer", "frontends", "operator");
-
 builder.Build().Run();
-
-void TagGenerated(string name, params string[] tags)
-{
-    var resource = builder.Resources.Single(resource => resource.Name == name);
-    builder.CreateResourceBuilder(resource).WithTags(tags);
-}

@@ -20,9 +20,13 @@ foreach (var hub in new[] { Hubs.Orders, Hubs.DroneTelemetry, Hubs.DronePhotos }
 builder.AddKeyedAzureEventHubProducerClient(Hubs.Orders, settings => settings.DisableTracing = true);
 builder.AddKeyedAzureEventHubProducerClient(Hubs.DroneMissions, settings => settings.DisableTracing = true);
 builder.AddAzureBlobContainerClient(Hubs.PhotoContainer);
+builder.AddAzureCosmosContainer("order-store", configureClientOptions: (_, options) =>
+    options.UseSystemTextJsonSerializerWithOptions = EventSerializer.Options);
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<Dispatcher>();
+// Registered first so persisted orders are restored before logistics starts consuming events.
+builder.Services.AddHostedService<OrderStore>();
 builder.Services.AddHostedService<LogisticsWorker>();
 builder.Services.AddSingleton(sp => RealtimeContexts.CreateManager(
     builder.Configuration.GetConnectionString("signalr")

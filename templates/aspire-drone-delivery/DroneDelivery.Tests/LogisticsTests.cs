@@ -145,4 +145,61 @@ public class LogisticsTests
         Assert.Equal(OrderStatus.Delivered, dispatcher.Order("A")!.Status);
         Assert.True(next.DepartAt <= Now.AddMinutes(9), "no longer waiting on the first mission's projected return");
     }
+
+    static (Dispatcher Restored, MissionAssigned Mission) RestartDuringMission(MissionMilestone? reached = null)
+    {
+        var dispatcher = new Dispatcher();
+        dispatcher.Observe(new DroneTelemetry("PIC-01", DroneClass.Piccolo, 1, Now, Store, Store, 0, 0, 100, DroneState.Parked, Manoeuvre.OnTheGround, null, null, 0));
+        dispatcher.Accept(new OrderPlaced("A", "c", "Test", Customer, 1, [], Now, "test"));
+        var mission = Assert.Single(dispatcher.PlanPending(Now));
+        if (reached is { } milestone)
+            dispatcher.Observe(new MissionProgress(mission.MissionId, "A", "PIC-01", milestone, Now.AddMinutes(1), Store), Now.AddMinutes(1));
+
+        // Round-trip through the serializer the Cosmos DB client uses.
+        var json = System.Text.Json.JsonSerializer.Serialize(dispatcher.TakeChanges().Select(record => new Server.OrderStore.OrderDocument(record.Order.Order.OrderId, record)), EventSerializer.Options);
+        Assert.Contains("\"id\":\"A\"", json);
+        var restored = new Dispatcher();
+        restored.Restore(System.Text.Json.JsonSerializer.Deserialize<List<Server.OrderStore.OrderDocument>>(json, EventSerializer.Options)!.Select(document => document.Record));
+        Assert.Empty(dispatcher.TakeChanges());
+        return (restored, mission);
+    }
+
+    [Fact]
+    public void A_restored_mission_keeps_its_drone_and_resumes_tracking()
+    {
+        var (dispatcher, mission) = RestartDuringMission(MissionMilestone.Accepted);
+        dispatcher.Observe(new DroneTelemetry("PIC-01", DroneClass.Piccolo, 9, Now.AddMinutes(2), Store, Store, 40, 0, 90, DroneState.FlyingToPickup, Manoeuvre.Cruise, mission.MissionId, "A", 0));
+        dispatcher.Accept(new OrderPlaced("B", "c", "Test", Customer, 1, [], Now.AddMinutes(2), "test"));
+
+        Assert.Empty(dispatcher.PlanPending(Now.AddMinutes(2)));
+        Assert.Equal(OrderStatus.DroneEnRoute, dispatcher.Order("A")!.Status);
+        Assert.Equal("A", dispatcher.Order("A")!.Telemetry!.OrderId);
+
+        dispatcher.Observe(new MissionProgress(mission.MissionId, "A", "PIC-01", MissionMilestone.Delivered, Now.AddMinutes(5), Customer), Now.AddMinutes(5));
+        Assert.Equal(OrderStatus.Delivered, dispatcher.Order("A")!.Status);
+    }
+
+    [Fact]
+    public void A_restored_mission_the_simulator_forgot_is_redispatched()
+    {
+        var (dispatcher, mission) = RestartDuringMission();
+        var idle = new DroneTelemetry("PIC-01", DroneClass.Piccolo, 1, mission.DepartAt, Store, Store, 0, 0, 100, DroneState.Parked, Manoeuvre.OnTheGround, null, null, 0);
+        dispatcher.Observe(idle);
+        Assert.Equal(OrderStatus.Scheduled, dispatcher.Order("A")!.Status);
+
+        dispatcher.Observe(idle with { Sequence = 2, Timestamp = mission.DepartAt + Dispatcher.RecoveryGrace });
+        Assert.Equal(OrderStatus.AwaitingFleet, dispatcher.Order("A")!.Status);
+        var replanned = Assert.Single(dispatcher.PlanPending(mission.DepartAt + Dispatcher.RecoveryGrace));
+        Assert.NotEqual(mission.MissionId, replanned.MissionId);
+    }
+
+    [Fact]
+    public void A_restored_delivery_lost_with_the_package_aboard_fails()
+    {
+        var (dispatcher, mission) = RestartDuringMission(MissionMilestone.PickedUp);
+        dispatcher.Observe(new DroneTelemetry("PIC-01", DroneClass.Piccolo, 1, mission.DepartAt + Dispatcher.RecoveryGrace, Store, Store, 0, 0, 100, DroneState.Charging, Manoeuvre.OnTheGround, null, null, 0));
+
+        Assert.Equal(OrderStatus.Failed, dispatcher.Order("A")!.Status);
+        Assert.Empty(dispatcher.PlanPending(mission.DepartAt + Dispatcher.RecoveryGrace));
+    }
 }

@@ -206,7 +206,7 @@ public class RealtimeTests
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
-        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["BACKEND_HTTP"] = "http://backend.test" });
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["services:backend:http:0"] = "http://backend.test" });
         builder.AddBackendProxy();
         var forwarded = new List<string>();
         builder.Services.AddHttpClient("backend").ConfigurePrimaryHttpMessageHandler(() => new TestHandler(async request =>
@@ -233,7 +233,7 @@ public class RealtimeTests
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
-        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["BACKEND_HTTP"] = "http://backend.test" });
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["services:backend:http:0"] = "http://backend.test" });
         builder.AddBackendProxy();
         builder.Services.AddHttpClient("backend").ConfigurePrimaryHttpMessageHandler(() => new TestHandler(request =>
             request.RequestUri!.AbsolutePath == "/api/unavailable"
@@ -260,7 +260,7 @@ public class RealtimeTests
         builder.WebHost.UseTestServer();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["BACKEND_HTTP"] = "http://backend.test",
+            ["services:backend:http:0"] = "http://backend.test",
             ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://dashboard.test:4318/",
             ["OTEL_EXPORTER_OTLP_PROTOCOL"] = protocol,
             ["OTEL_EXPORTER_OTLP_HEADERS"] = "x-otlp-api-key=s%3Dcret",

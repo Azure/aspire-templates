@@ -9,8 +9,9 @@ namespace Microsoft.Extensions.Hosting;
 
 /// <summary>
 /// OpenTelemetry logs, metrics and traces for every DroneDelivery service, exported to the Aspire dashboard.
-/// Health checks are mapped by each host, and the UI hosts' proxy streams bodies, so this deliberately leaves out
-/// the starter's resilience handler and default endpoints.
+/// Service discovery resolves AppHost references such as <c>http://backend</c>. Health checks are mapped by each host,
+/// and the UI hosts' proxy streams bodies, so this deliberately leaves out the starter's resilience handler and
+/// default endpoints.
 /// </summary>
 public static class Extensions
 {
@@ -19,6 +20,9 @@ public static class Extensions
 
     public static TBuilder AddServiceDefaults<TBuilder>(this TBuilder builder) where TBuilder : IHostApplicationBuilder
     {
+        builder.Services.AddServiceDiscovery();
+        builder.Services.ConfigureHttpClientDefaults(http => http.AddServiceDiscovery());
+
         builder.Logging.AddOpenTelemetry(logging =>
         {
             logging.IncludeFormattedMessage = true;

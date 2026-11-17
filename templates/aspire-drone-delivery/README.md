@@ -82,11 +82,24 @@ The AppHost starts:
 | `customer-site` | Customer-only Vite/React app in `customer-frontend`, published into CustomerServer `wwwroot` |
 | `operator-site` | Independent Vite/React app in `operator-frontend`, published into OperatorServer `wwwroot` |
 | `signalr` | Azure SignalR Service local emulator, using Serverless mode |
+| `cosmos` | Azure Cosmos DB (serverless when deployed; the Linux vNext emulator locally) with the `drone-delivery` database and `order-store` container |
+
+Orders are written through to Cosmos DB once a second and reloaded when the backend
+starts, so a backend restart keeps every order and in-flight mission. If the drone
+simulator also restarted, a restored mission it no longer flies is re-dispatched, or
+failed if the coffee was already aboard. The emulator serves HTTPS with the ASP.NET
+developer certificate: on macOS, approve the keychain prompt the first time Aspire
+exports it. Its data lives in the container, so it resets when the AppHost stops.
+Serverless bills per request with no provisioned throughput, which suits a demo's low,
+spiky traffic but offers no throughput guarantees or multi-region writes.
+
+The UI servers reach the backend through `WithReference(backend)` and .NET service
+discovery (`http://backend`), with no separate backend URL setting.
 
 Every resource is tagged so the dashboard's **Filters → Tags** can slice by kind
 (`frontends`, `servers`, `simulators`, `infrastructure`) or by role (`customer`,
-`operator`). Generated children such as `eventhubs-storage`, `storage-blobs` and the
-npm installers are tagged explicitly because they don't inherit their parent's tags.
+`operator`). Tags are applied to the resources declared in `AppHost.cs`; children that
+integrations add themselves, such as `eventhubs-storage` and the npm installers, are untagged.
 `WithTags` is an evaluation API in Aspire 17 (`ASPIRERESOURCETRAITS001`).
 
 The development launch profile uses localhost HTTP endpoints; its unsecured
@@ -176,7 +189,8 @@ Tune the simulation with environment variables in `DroneDelivery.AppHost/AppHost
 | `CUSTOMER_SEED` | customer simulator | random |
 
 Active customers rise and fall between the quiet share and the peak over each
-demand cycle. Fleet state lives in memory, so it resets when the simulator restarts.
+demand cycle. Fleet state lives in memory, so it resets when the simulator restarts;
+orders persist in Cosmos DB.
 
 The backend exposes `GET /api/fleet`, `GET /api/stores`, `GET /api/orders`,
 `GET /api/orders/{id}`, `POST /api/orders` and
@@ -423,7 +437,7 @@ large vendor chunks produce a Vite size advisory.
 ## Not ready yet
 
 `aspire deploy` is **not configured in this design phase**. Real Azure deployment
-and production identity/persistence are subsequent work.
+and production identity are subsequent work.
 Customer and operator clients already use the authoritative backend and scoped
 SignalR updates. Do not treat this preview as meeting deployment acceptance criteria.
 

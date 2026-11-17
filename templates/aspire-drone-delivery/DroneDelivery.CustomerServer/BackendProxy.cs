@@ -15,13 +15,9 @@ public static class BackendProxy
         builder.AddServiceDefaults();
         builder.Services.AddHealthChecks();
         builder.Services.AddProblemDetails();
-        builder.Services.AddHttpClient("backend", client =>
-        {
-            var endpoint = builder.Configuration["BACKEND_HTTP"]
-                ?? builder.Configuration["services:backend:http:0"]
-                ?? throw new InvalidOperationException("The backend HTTP endpoint is required.");
-            client.BaseAddress = new Uri(endpoint);
-        }).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+        // WithReference(backend) in the AppHost supplies services:backend:http:0; service discovery resolves it.
+        builder.Services.AddHttpClient("backend", client => client.BaseAddress = new Uri("http://backend"))
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
         {
             AllowAutoRedirect = false,
             UseCookies = false,
