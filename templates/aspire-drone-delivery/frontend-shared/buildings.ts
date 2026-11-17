@@ -63,7 +63,7 @@ const palette = ['#f2efe4', '#e6e1d2', '#ddd8ca', '#efe6d4', '#d5dccf'].map(colo
  * ring winding from OpenStreetMap doesn't matter.
  */
 export function buildingGeometry(footprints: Footprint[], metresPerUnit: number) {
-  const positions: number[] = [], colors: number[] = [], ids: number[] = [];
+  const positions: number[] = [], colors: number[] = [];
   const wall = new THREE.Color(), roof = new THREE.Color();
   footprints.forEach((footprint, index) => {
     const { ring } = footprint;
@@ -71,7 +71,7 @@ export function buildingGeometry(footprints: Footprint[], metresPerUnit: number)
     const top = Math.max(.6, footprint.heightMetres / metresPerUnit);
     roof.copy(palette[index % palette.length]);
     wall.copy(roof).multiplyScalar(.82);
-    const push = (x: number, y: number, z: number, color: THREE.Color) => { positions.push(x, y, z); colors.push(color.r, color.g, color.b); ids.push(index); };
+    const push = (x: number, y: number, z: number, color: THREE.Color) => { positions.push(x, y, z); colors.push(color.r, color.g, color.b); };
     for (const [a, b, c] of THREE.ShapeUtils.triangulateShape(ring.map(([x, y]) => new THREE.Vector2(x, y)), [])) {
       for (const i of [a, b, c]) push(ring[i][0], top, ring[i][1], roof);
     }
@@ -84,47 +84,6 @@ export function buildingGeometry(footprints: Footprint[], metresPerUnit: number)
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  geometry.setAttribute('building', new THREE.Float32BufferAttribute(ids, 1));
   geometry.computeVertexNormals();
   return geometry;
-}
-
-export const maxHiddenBuildings = 16;
-
-const inside = (ring: [number, number][], x: number, y: number) => {
-  let result = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i], [xj, yj] = ring[j];
-    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) result = !result;
-  }
-  return result;
-};
-
-/** Finds the footprint under a point, so a landed drone's camera isn't buried inside a real building. */
-export function footprintIndex(footprints: Footprint[]) {
-  const grid = new Map<string, number[]>();
-  footprints.forEach(({ ring }, index) => {
-    const xs = ring.map(([x]) => x), ys = ring.map(([, y]) => y);
-    for (let gx = Math.floor(Math.min(...xs) / cell); gx <= Math.floor(Math.max(...xs) / cell); gx++)
-      for (let gy = Math.floor(Math.min(...ys) / cell); gy <= Math.floor(Math.max(...ys) / cell); gy++)
-        (grid.get(`${gx},${gy}`) ?? grid.set(`${gx},${gy}`, []).get(`${gx},${gy}`)!).push(index);
-  });
-  return (x: number, y: number) => (grid.get(`${Math.floor(x / cell)},${Math.floor(y / cell)}`) ?? [])
-    .find(index => inside(footprints[index].ring, x, y)) ?? -1;
-}
-
-/** Lambert material that discards the buildings listed in `hidden` (indices; -1 is unused). */
-export function buildingMaterial() {
-  const hidden = { value: new Array<number>(maxHiddenBuildings).fill(-1) };
-  const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
-  material.onBeforeCompile = shader => {
-    shader.uniforms.hiddenBuildings = hidden;
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float building;\nvarying float vBuilding;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBuilding = building;');
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying float vBuilding;\nuniform float hiddenBuildings[${maxHiddenBuildings}];`)
-      .replace('void main() {', `void main() {\n  for (int i = 0; i < ${maxHiddenBuildings}; i++) if (abs(vBuilding - hiddenBuildings[i]) < .5) discard;`);
-  };
-  return { material, hidden: hidden.value };
 }

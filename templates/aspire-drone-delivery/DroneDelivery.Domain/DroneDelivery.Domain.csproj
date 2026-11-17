@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="../frontend-shared/osm-buildings.json" LogicalName="osm-buildings.json" />
     <PackageReference Include="Azure.Messaging.EventHubs" Version="5.12.2" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
   </ItemGroup>

@@ -16,16 +16,16 @@ public class LogisticsTests
     {
         var leg = DroneSpec.For(DroneClass.Doppio).Leg(Store, Customer);
 
-        var climbing = leg.At(leg.VerticalDuration / 2);
+        var climbing = leg.At(leg.ClimbDuration / 2);
         Assert.Equal((Manoeuvre.VerticalClimb, Store), (climbing.Manoeuvre, climbing.Position));
-        Assert.Equal(DroneSpec.CruiseAltitudeMetres / 2, climbing.AltitudeMetres, 3);
+        Assert.Equal((leg.Path.LaunchAltitude + leg.Path.CruiseAltitude) / 2, climbing.AltitudeMetres, 3);
 
-        var cruising = leg.At(leg.VerticalDuration + leg.CruiseDuration / 2);
+        var cruising = leg.At(leg.ClimbDuration + leg.CruiseDuration / 2);
         Assert.Equal((Manoeuvre.Cruise, DroneSpec.CruiseAltitudeMetres), (cruising.Manoeuvre, cruising.AltitudeMetres));
 
-        var descending = leg.At(leg.Duration - leg.VerticalDuration / 2);
+        var descending = leg.At(leg.Duration - leg.DescentDuration / 2);
         Assert.Equal((Manoeuvre.VerticalDescent, Customer), (descending.Manoeuvre, descending.Position));
-        Assert.Equal((Manoeuvre.OnTheGround, 0d), (leg.At(leg.Duration).Manoeuvre, leg.At(leg.Duration).AltitudeMetres));
+        Assert.Equal((Manoeuvre.OnTheGround, leg.Path.LandingAltitude), (leg.At(leg.Duration).Manoeuvre, leg.At(leg.Duration).AltitudeMetres));
     }
 
     [Fact]
@@ -34,13 +34,13 @@ public class LogisticsTests
         foreach (var target in new[] { Customer, Store })
         {
             var leg = DroneSpec.For(DroneClass.Doppio).Leg(Store, target);
-            var climb = leg.At(leg.VerticalDuration / 2);
-            var cruise = leg.At(leg.VerticalDuration + leg.CruiseDuration / 2);
-            var descent = leg.At(leg.Duration - leg.VerticalDuration / 2);
+            var climb = leg.At(leg.ClimbDuration / 2);
+            var cruise = leg.At(leg.ClimbDuration + leg.CruiseDuration / 2);
+            var descent = leg.At(leg.Duration - leg.DescentDuration / 2);
 
             Assert.Equal(Manoeuvre.VerticalClimb, climb.Manoeuvre);
             Assert.True(climb.Progress > 0 && climb.Progress < .5);
-            Assert.Equal(.5, cruise.Progress, 6);
+            Assert.InRange(cruise.Progress, climb.Progress, descent.Progress);
             Assert.Equal(Manoeuvre.VerticalDescent, descent.Manoeuvre);
             Assert.True(descent.Progress > .5 && descent.Progress < 1);
             Assert.Equal(0, leg.At(TimeSpan.FromSeconds(-1)).Progress);

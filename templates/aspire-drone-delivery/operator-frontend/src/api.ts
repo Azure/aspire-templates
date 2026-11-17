@@ -1,4 +1,5 @@
 import { traced } from './telemetry';
+import type { FlightWaypoint } from '../../frontend-shared/pose';
 export type GeoPoint = { latitude: number; longitude: number };
 export type Telemetry = {
   droneId: string; class: 'Piccolo' | 'Doppio' | 'Abbondante'; sequence: number; timestamp: string;
@@ -6,6 +7,8 @@ export type Telemetry = {
   state: 'Charging' | 'Parked' | 'FlyingToPickup' | 'Loading' | 'FlyingToCustomer' | 'Unloading' | 'ReturningToPad' | 'EmergencyLanding' | 'Grounded' | 'FlyingToWaste' | 'DiscardingPackage';
   manoeuvre: 'OnTheGround' | 'VerticalClimb' | 'Cruise' | 'VerticalDescent'; orderId: string | null; queuedMissions: number;
   cameraPitchDegrees: number; carryingPackage: boolean;
+  pitchDegrees?: number; rollDegrees?: number; speedMetresPerSecond?: number;
+  plannedRoute?: FlightWaypoint[] | null; routingError?: string | null;
   control: { commandId: string; command: DroneCommand; status: 'Executing' | 'Completed' | 'Rejected'; message: string } | null;
 };
 export type DroneCommand = 'EmergencyLanding' | 'ReturnToBase' | 'DiscardPackage' | 'Reactivate';

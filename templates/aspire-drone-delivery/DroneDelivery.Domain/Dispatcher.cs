@@ -242,7 +242,7 @@ public sealed class Dispatcher
                     view.Status = OrderStatus.Unserviceable;
                     changed.Add(view.Order.OrderId);
                     view.Note = committed.Values.Any(drone => DroneSpec.For(drone.Class).CanCarry(view.Order.PayloadBays))
-                        ? "Out of range for every capable drone"
+                        ? "No building-clear round trip within battery range for any capable drone"
                         : $"No drone in the fleet has {view.Order.PayloadBays} bays";
                     using (var unserviceable = Tracing.Start("dispatch unserviceable", view.Trace))
                         unserviceable.Describe(view.Order)?.SetStatus(ActivityStatusCode.Error, view.Note);

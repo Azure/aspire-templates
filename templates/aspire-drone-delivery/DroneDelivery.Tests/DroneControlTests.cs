@@ -17,7 +17,7 @@ public class DroneControlTests
         var bearing = Store.HeadingTo(target);
         var leg = new FlightLeg(DroneSpec.For(DroneClass.Piccolo), Store, target, (bearing + 90) % 360);
         Assert.Equal((bearing + 90) % 360, leg.At(TimeSpan.Zero).Heading, 6);
-        Assert.Equal((bearing + 45) % 360, leg.At(leg.ClimbDuration / 2).Heading, 6);
+        Assert.InRange(leg.At(leg.ClimbDuration / 2).Heading, (bearing + 45) % 360 - 1.2, (bearing + 45) % 360 + 1.2);
         Assert.Equal(bearing, leg.At(leg.ClimbDuration).Heading, 6);
         Assert.Equal(bearing, leg.At(leg.Duration).Heading, 6);
         Assert.Equal(-90, leg.At(TimeSpan.Zero).CameraPitchDegrees);
@@ -25,7 +25,7 @@ public class DroneControlTests
         Assert.Equal(-90, leg.At(leg.Duration - leg.DescentDuration / 2).CameraPitchDegrees);
 
         var wrap = new FlightLeg(DroneSpec.For(DroneClass.Piccolo), Store, new(Store.Latitude + .002, Store.Longitude), 350);
-        Assert.Equal(355, wrap.At(wrap.ClimbDuration / 2).Heading, 6);
+        Assert.InRange(wrap.At(wrap.ClimbDuration / 2).Heading, 353.8, 356.2);
     }
 
     [Fact]

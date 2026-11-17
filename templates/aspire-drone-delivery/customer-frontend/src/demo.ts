@@ -228,7 +228,7 @@ const cameraSwingShare = .06;
 export type Manoeuvre = 'On the ground' | 'Vertical climb' | 'Cruise' | 'Vertical descent';
 export type OrderFlight = Point & {
   droneId: string | null; phase: 'Awaiting drone' | 'To pickup' | 'On the pad' | 'In flight' | 'Landed'; manoeuvre: Manoeuvre;
-  origin: Point; target: Destination;
+  origin: Point; target: Destination; route?: Point[];
   destination: Destination; progress: number; heading: number; altitude: number;
   /** Camera tilt below the horizon: 0 looks ahead, 1 looks straight down. */
   cameraDown: number; remainingMetres: number; etaSeconds: number;

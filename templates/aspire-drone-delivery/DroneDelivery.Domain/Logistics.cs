@@ -43,6 +43,12 @@ public static class LogisticsPlanner
 
     public static DeliveryPlan? PlanWith(DeliveryRequest request, DroneAvailability drone, DateTimeOffset now)
     {
+        try { return PlanClearRoute(request, drone, now); }
+        catch (FlightRoutingException) { return null; }
+    }
+
+    static DeliveryPlan? PlanClearRoute(DeliveryRequest request, DroneAvailability drone, DateTimeOffset now)
+    {
         var spec = DroneSpec.For(drone.Class);
         var toPickup = spec.Leg(drone.Location, request.Pickup);
         var toCustomer = spec.Leg(request.Pickup, request.DropOff);

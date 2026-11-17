@@ -5,6 +5,8 @@ export const droneLabel = (drone: Telemetry) => drone.state.replace(/([a-z])([A-
 export function fleetMap(drones: Telemetry[]) {
   return drones.map(drone => ({
     id: drone.droneId, ...fromLonLat(drone.position.longitude, drone.position.latitude), status: droneLabel(drone),
+    path: drone.plannedRoute?.map(waypoint => fromLonLat(waypoint.position.longitude, waypoint.position.latitude)),
+    heading: (drone.heading - 90) * Math.PI / 180,
   }));
 }
 export const airborne = (drone: Telemetry) => drone.manoeuvre !== 'OnTheGround';

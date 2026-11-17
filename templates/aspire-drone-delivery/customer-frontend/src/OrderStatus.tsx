@@ -49,7 +49,7 @@ function FollowMap({ flight }: { flight: OrderFlight }) {
   if (!flight.droneId) return null;
   return <div className="follow-map">
     <OsmMap center={flight} follow={flight} zoom={16} flights={flights} stores={pickup ? [] : stores}
-      route={{ origin: flight.origin, target: flight.target, targetLabel: pickup ? 'ForthCoffee pickup' : 'Your drop-off', current: flight }}
+      route={{ origin: flight.origin, target: flight.target, targetLabel: pickup ? 'ForthCoffee pickup' : 'Your drop-off', current: flight, path: flight.route }}
       ariaLabel={`OpenStreetMap overhead view centred on drone ${flight.droneId}`} />
     <div className="map-location"><span className="live-dot" /> Following {flight.droneId}</div>
   </div>;

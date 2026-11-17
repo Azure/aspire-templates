@@ -166,6 +166,32 @@ parked. Telemetry is sent every second in flight and every 10 seconds on the pad
 Pickup and delivery progress uses the simulator's elapsed fraction of the complete
 flight leg, including climb and descent, rather than horizontal distance alone.
 Missing, stale or unrelated telemetry never advances a flight bar.
+Horizontal travel accelerates and brakes at 2 m/s², using a triangular profile
+for short hops. Drones brake to a hover at route bends and turn over three seconds
+before accelerating again. Gentle deterministic turbulence changes pitch by up
+to 1.6°, roll by 2° and yaw by 1.2°; the autopilot holds the planned position and
+altitude. These attitudes are streamed, not independently invented by the browser.
+Reduced-motion preferences suppress camera pitch/roll wobble.
+
+The shared domain planner embeds the same bundled OSM building extract as the
+camera. It checks whole route segments against conservative building bounding
+boxes, with 6 m clearance, and uses a visibility graph to detour around tall
+buildings. Low buildings can be overflown. For clearance only, missing heights
+are conservatively treated as the renderer's 12 m estimation ceiling. Pickup
+locations, home pads and drop-offs inside or very close to a footprint are rooftop
+pads above its clearance envelope; buildings are no longer hidden around a drone.
+Cruise is at least 60 m, or higher when a rooftop requires it. Normal flights and
+operator diversions use this same planner; emergency landing descends to the safe
+pad altitude below the current position. Unsurveyed or blocked routes are refused
+explicitly and reported in order notes or the operator drawer, without a
+straight-line fallback.
+
+Telemetry includes the actual planned waypoints and speed. Both overhead maps
+draw that path, and the camera adds a translucent flight line and gates centred
+on it. Dispatch time and battery estimates use the detour distance and eased
+travel time. This is static building avoidance for a demo, not certified flight
+planning: there is no drone-to-drone separation, moving-obstacle avoidance,
+weather model or obstacle data beyond the bundled extract.
 The camera captures a shot at the start and end of each takeoff and landing and
 periodically in cruise; the landing at the customer is the proof-of-delivery shot.
 Images are illustrated SVGs labelled as simulated, not real photos.
@@ -373,9 +399,9 @@ then simplified and delta-encoded; about 110 KB gzipped, lazily loaded). The app
 never queries Overpass at runtime. Heights come from `height`, else
 `building:levels` × 3.2 m. Untagged buildings take the height of the nearest
 tagged building within about 170 m, capped at 12 m so a nearby tower doesn't
-turn houses into towers, or 7 m when none is near. Pads and drop-offs can sit
-inside real footprints, so the camera hides a building while a drone is below
-its roof.
+turn houses into towers, or 7 m when none is near. The simulator conservatively
+uses the 12 m ceiling for untagged collision envelopes and treats pads inside
+building envelopes as rooftop pads.
 
 The public OSM tile server is a volunteer-run service suitable for demos and
 development traffic only. Its [tile usage policy](https://operations.osmfoundation.org/policies/tiles/)

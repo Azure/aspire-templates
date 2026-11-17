@@ -2,7 +2,7 @@ import { coffeeDescription, menuItem, metresPerUnit } from './demo';
 import type { Bag, Destination, Order, OrderFlight, PayloadSize, Stage } from './demo';
 import { fromLonLat, toLonLat } from './mapGeometry';
 import { traced } from './telemetry';
-import type { CameraPose } from '../../frontend-shared/pose';
+import type { CameraPose, FlightWaypoint } from '../../frontend-shared/pose';
 
 export type GeoPoint = { latitude: number; longitude: number };
 export type Telemetry = {
@@ -12,6 +12,8 @@ export type Telemetry = {
   manoeuvre: 'OnTheGround' | 'VerticalClimb' | 'Cruise' | 'VerticalDescent'; orderId: string | null; queuedMissions: number;
   flightProgress?: number | null;
   cameraPitchDegrees?: number;
+  pitchDegrees?: number; rollDegrees?: number; speedMetresPerSecond?: number;
+  plannedRoute?: FlightWaypoint[] | null; routingError?: string | null;
 };
 export type OrderSnapshot = {
   order: { orderId: string; customerName: string; dropOff: GeoPoint; payloadBays: PayloadSize; lines: { item: string; bays: number }[]; placedAt: string };
@@ -69,7 +71,8 @@ export function trackingFor(snapshot: OrderSnapshot, now = Date.now()): OrderFli
   const inbound = drone.state === 'FlyingToPickup' || drone.state === 'Loading';
   if (!inbound && drone.state !== 'FlyingToCustomer' && drone.state !== 'Unloading') return undefined;
   const destination = { ...point(snapshot.order.dropOff), label: 'Your drop-off' };
-  const origin = inbound ? point(drone.homePad) : point(snapshot.store.location);
+  const origin = drone.plannedRoute?.length ? point(drone.plannedRoute[0].position)
+    : inbound ? point(drone.homePad) : point(snapshot.store.location);
   const target = inbound ? { ...point(snapshot.store.location), label: 'ForthCoffee pickup' } : destination;
   const location = point(drone.position);
   const remaining = Math.hypot(target.x - location.x, target.y - location.y);
@@ -78,6 +81,7 @@ export function trackingFor(snapshot: OrderSnapshot, now = Date.now()): OrderFli
     : drone.state === 'FlyingToCustomer' ? 'In flight' : 'Landed';
   return {
     ...location, droneId: drone.droneId, phase, manoeuvre, origin, target, destination,
+    route: drone.plannedRoute?.map(waypoint => point(waypoint.position)),
     progress: drone.flightProgress === undefined || drone.flightProgress === null ? 0 : fraction(drone.flightProgress),
     heading: (drone.heading - 90) * Math.PI / 180, altitude: Math.round(drone.altitudeMetres),
     cameraDown: drone.cameraPitchDegrees === undefined ? (manoeuvre === 'Cruise' ? 0 : 1) : fraction((-drone.cameraPitchDegrees - 30) / 60),

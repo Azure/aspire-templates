@@ -12,9 +12,14 @@ public sealed class SimulatedDrone(string id, DroneSpec spec, GeoPoint homePad, 
     public DroneSpec Spec { get; } = spec;
     public GeoPoint HomePad { get; } = homePad;
     public GeoPoint Position { get; set; } = homePad;
-    public double AltitudeMetres { get; set; }
+    public double AltitudeMetres { get; set; } = BuildingAirspace.Shared.PadAltitude(homePad);
     public double Heading { get; set; }
     public double CameraPitchDegrees { get; set; } = -90;
+    public double PitchDegrees { get; set; }
+    public double RollDegrees { get; set; }
+    public double SpeedMetresPerSecond { get; set; }
+    public IReadOnlyList<FlightWaypoint>? PlannedRoute { get; set; }
+    public string? RoutingError { get; set; }
     public bool CarryingPackage { get; set; }
     public DroneControl? Control { get; set; }
     public ActivityContext MissionTrace { get; set; }
@@ -30,7 +35,8 @@ public sealed class SimulatedDrone(string id, DroneSpec spec, GeoPoint homePad, 
     public DroneTelemetry Telemetry(DateTimeOffset now) => new(
         Id, Spec.Class, Interlocked.Increment(ref sequence), now, Position, HomePad,
         Math.Round(AltitudeMetres, 1), Math.Round(Heading), Math.Round(BatteryPercent, 1),
-        State, Manoeuvre, Mission?.MissionId, Mission?.OrderId, Queue.Count, FlightProgress, CameraPitchDegrees, Control, CarryingPackage);
+        State, Manoeuvre, Mission?.MissionId, Mission?.OrderId, Queue.Count, FlightProgress, CameraPitchDegrees, Control, CarryingPackage,
+        PitchDegrees, RollDegrees, SpeedMetresPerSecond, PlannedRoute, RoutingError);
 
     /// <summary>Parked drones sit on their charging pad and top up.</summary>
     public void ChargeFor(TimeSpan elapsed)
@@ -38,6 +44,7 @@ public sealed class SimulatedDrone(string id, DroneSpec spec, GeoPoint homePad, 
         BatteryPercent = Math.Min(100, BatteryPercent + Spec.ChargePerMinute * elapsed.TotalMinutes);
         State = BatteryPercent < 100 ? DroneState.Charging : DroneState.Parked;
         FlightProgress = null;
+        PlannedRoute = null;
     }
 
     public static IReadOnlyList<SimulatedDrone> CreateFleet(FleetOptions options)

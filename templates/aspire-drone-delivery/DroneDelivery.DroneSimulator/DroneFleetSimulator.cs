@@ -107,6 +107,21 @@ public sealed class DroneFleetSimulator(
             {
                 return;
             }
+            catch (FlightRoutingException exception)
+            {
+                logger.LogError(exception, "Drone {DroneId} cannot fly a safe route", drone.Id);
+                drone.RoutingError = exception.Message;
+                drone.PlannedRoute = null;
+                drone.State = DroneState.Grounded;
+                drone.SpeedMetresPerSecond = 0;
+                drone.PitchDegrees = drone.RollDegrees = 0;
+                if (drone.Control is { Status: CommandStatus.Executing } control)
+                    drone.Control = control with { Status = CommandStatus.Rejected, Message = exception.Message };
+                if (drone.Mission is { } failed)
+                    await MilestoneAsync(drone, failed, drone.MissionTrace, MissionMilestone.Interrupted, cancellationToken, exception.Message);
+                drone.Mission = null;
+                await ReportAsync(drone, cancellationToken);
+            }
             catch (Exception exception)
             {
                 logger.LogError(exception, "Drone {DroneId} simulation step failed", drone.Id);
@@ -119,6 +134,8 @@ public sealed class DroneFleetSimulator(
     {
         var trace = traces.TryRemove(mission.MissionId, out var context) ? context : default;
         Activity? Step(string name) => Tracing.Start(name, trace).Describe(mission);
+        drone.Mission = mission;
+        drone.MissionTrace = trace;
         var toPickup = drone.Spec.Leg(drone.Position, mission.Pickup);
         var toCustomer = drone.Spec.Leg(mission.Pickup, mission.DropOff);
         var toPad = drone.Spec.Leg(mission.DropOff, drone.HomePad);
@@ -127,6 +144,7 @@ public sealed class DroneFleetSimulator(
         {
             await MilestoneAsync(drone, mission, trace, MissionMilestone.Rejected, cancellationToken,
                 needed > 100 ? "Round trip exceeds battery range" : $"{drone.Spec.Class} has {drone.Spec.Bays} bays");
+            drone.Mission = null;
             return;
         }
 
@@ -192,6 +210,12 @@ public sealed class DroneFleetSimulator(
     async Task FlyAsync(SimulatedDrone drone, FlightLeg leg, DroneState state, bool proofOfDelivery, CancellationToken cancellationToken)
     {
         drone.State = state;
+        drone.RoutingError = null;
+        drone.PlannedRoute = [
+            new(leg.From, leg.Path.LaunchAltitude),
+            .. leg.Path.Points,
+            new(leg.To, leg.Path.LandingAltitude),
+        ];
         var start = time.GetUtcNow();
         var startBattery = drone.BatteryPercent;
         var previous = Manoeuvre.OnTheGround;
@@ -214,6 +238,9 @@ public sealed class DroneFleetSimulator(
             drone.AltitudeMetres = sample.AltitudeMetres;
             drone.Heading = sample.Heading;
             drone.CameraPitchDegrees = sample.CameraPitchDegrees;
+            drone.PitchDegrees = sample.PitchDegrees;
+            drone.RollDegrees = sample.RollDegrees;
+            drone.SpeedMetresPerSecond = sample.SpeedMetresPerSecond;
             drone.Manoeuvre = sample.Manoeuvre;
             drone.BatteryPercent = startBattery - leg.BatteryPercent * sample.Progress;
 

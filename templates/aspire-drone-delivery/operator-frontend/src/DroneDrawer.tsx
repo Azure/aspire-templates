@@ -55,6 +55,7 @@ export default function DroneDrawer({ drone, fleet, onSelect, onClose }: {
       </Suspense>
       <div className="drawer-body">
         <div className="drone-facts"><strong>{droneLabel(drone)}</strong><span>{drone.class} · {drone.batteryPercent.toFixed(0)}% battery</span><span>{drone.carryingPackage ? 'Package on board' : 'No package on board'} · {drone.queuedMissions} queued</span><small>{drone.orderId ?? 'No active order'}</small></div>
+        {drone.routingError && <p className="form-error" role="alert">Flight blocked: {drone.routingError}</p>}
         <p className="command-disclaimer">Interrupting a mission marks that delivery unable to complete. Queued orders are reassigned. Commands run one at a time.</p>
         {error && <p className="form-error" role="alert">{error}</p>}
         {awaiting ? <p className="command-status" role="status">Command accepted. Waiting for the simulator…</p>

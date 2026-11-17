@@ -4,7 +4,7 @@ import type { MapFlight, MapStore } from '../../frontend-shared/OsmMap';
 
 export type Flight = MapFlight;
 const overview = { x: 640, y: 375 };
-const operationsArea: [{ x: number; y: number }, { x: number; y: number }] = [{ x: 470, y: 230 }, { x: 830, y: 520 }];
+const operationsArea: [{ x: number; y: number }, { x: number; y: number }] = [{ x: 360, y: 170 }, { x: 960, y: 610 }];
 
 export default function DeliveryMap({ fleet, stores }: { fleet: Flight[]; stores: MapStore[] }) {
   return <div className="delivery-map">

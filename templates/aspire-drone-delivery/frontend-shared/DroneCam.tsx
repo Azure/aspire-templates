@@ -141,19 +141,17 @@ function buildScenery(scene: THREE.Scene, disposables: { dispose(): void }[]): T
   return target;
 }
 
-type BuildingLayer = { heights: number[]; under: (x: number, y: number) => number; hidden: number[] };
-
 /** Adds extruded OpenStreetMap building footprints once the bundled extract has loaded. */
-async function addBuildings(scene: THREE.Scene, disposables: { dispose(): void }[], signal: AbortSignal): Promise<BuildingLayer | null> {
-  const [{ default: data }, { buildingGeometry, buildingMaterial, decodeBuildings, footprintIndex }] =
+async function addBuildings(scene: THREE.Scene, disposables: { dispose(): void }[], signal: AbortSignal): Promise<number | null> {
+  const [{ default: data }, { buildingGeometry, decodeBuildings }] =
     await Promise.all([import('./osm-buildings.json'), import('./buildings')]);
   if (signal.aborted) return null;
   const footprints = decodeBuildings(data);
   const geometry = buildingGeometry(footprints, metresPerUnit);
-  const { material, hidden } = buildingMaterial();
+  const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   scene.add(new THREE.Mesh(geometry, material));
   disposables.push(geometry, material);
-  return { heights: footprints.map(item => item.heightMetres), under: footprintIndex(footprints), hidden };
+  return footprints.length;
 }
 
 function droneModel(id: string, selected: boolean, disposables: { dispose(): void }[]) {
@@ -261,12 +259,23 @@ export default function DroneCam({ pose, nearby = [], target: destination }: {
     scene.add(plane);
     disposables.push(texture, planeGeometry, planeMaterial);
     const target = buildScenery(scene, disposables);
-    let buildings: BuildingLayer | null = null;
     addBuildings(scene, disposables, controller.signal)
-      .then(layer => { if (layer) { buildings = layer; element.dataset.buildings = String(layer.heights.length); } })
+      .then(count => { if (count !== null) element.dataset.buildings = String(count); })
       .catch(() => { if (!controller.signal.aborted) element.dataset.buildings = '0'; });
     target.visible = false;
     const models = new Map<string, THREE.Group>();
+    const routeMaterial = new THREE.MeshBasicMaterial({ color: '#f5b955', transparent: true, opacity: .36, depthWrite: false });
+    const routeGroup = new THREE.Group();
+    scene.add(routeGroup);
+    const clearRoute = () => {
+      for (const child of [...routeGroup.children]) {
+        if (child instanceof THREE.Mesh) child.geometry.dispose();
+        routeGroup.remove(child);
+      }
+    };
+    disposables.push(routeMaterial, { dispose: clearRoute });
+    let routeReading: CameraPose | undefined;
+    let routeKey = '';
     const frustum = new THREE.Frustum(), viewProjection = new THREE.Matrix4();
     if (composedGround?.scale === scale) {
       ctx.drawImage(composedGround.image, 0, 0);
@@ -309,8 +318,37 @@ export default function DroneCam({ pose, nearby = [], target: destination }: {
     const render = () => {
       const still = reduce.matches;
       const { pose: current, nearby: others, destination: goal } = latest.current;
+      if (current !== routeReading) {
+        routeReading = current;
+        const key = JSON.stringify(current.plannedRoute ?? []);
+        if (key !== routeKey) {
+          routeKey = key;
+          clearRoute();
+          const points = (current.plannedRoute ?? []).map(waypoint => {
+            const point = fromLonLat(waypoint.position.longitude, waypoint.position.latitude);
+            return new THREE.Vector3(point.x, waypoint.altitudeMetres / metresPerUnit, point.y);
+          });
+          for (let i = 1; i < points.length; i++) {
+            const direction = points[i].clone().sub(points[i - 1]);
+            if (direction.length() < .01) continue;
+            const length = direction.length();
+            const segment = new THREE.Mesh(new THREE.CylinderGeometry(.3, .3, length, 8), routeMaterial);
+            segment.position.copy(points[i - 1]).add(points[i]).multiplyScalar(.5);
+            segment.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+            routeGroup.add(segment);
+            // Gates make the true flight line legible even when the camera looks below a level route.
+            for (let distance = 4; distance < length; distance += 8) {
+              const gate = new THREE.Mesh(new THREE.TorusGeometry(1.1, .045, 6, 32), routeMaterial);
+              gate.position.copy(points[i - 1]).addScaledVector(direction, distance);
+              gate.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
+              routeGroup.add(gate);
+            }
+          }
+          element.dataset.routePoints = String(current.plannedRoute?.length ?? 0);
+        }
+      }
       target.visible = !!goal;
-      if (goal) target.position.set(goal.x, .05, goal.y);
+      if (goal) target.position.set(goal.x, (current.plannedRoute?.at(-1)?.altitudeMetres ?? 0) / metresPerUnit + .05, goal.y);
       const at = still ? Date.now() : Date.now() - 2000;
       const sampled = buffers.current.get(current.droneId)?.sample(at) ?? current;
       const location = fromLonLat(sampled.position.longitude, sampled.position.latitude);
@@ -318,10 +356,13 @@ export default function DroneCam({ pose, nearby = [], target: destination }: {
       const forwardX = Math.cos(heading), forwardZ = Math.sin(heading);
       const height = Math.max(.7, sampled.altitudeMetres / metresPerUnit);
       camera.position.set(location.x, height, location.y);
-      const tilt = -sampled.cameraPitchDegrees * Math.PI / 180;
+      const pitch = still ? 0 : sampled.pitchDegrees ?? 0;
+      const roll = still ? 0 : sampled.rollDegrees ?? 0;
+      const tilt = -(sampled.cameraPitchDegrees + pitch) * Math.PI / 180;
       const down = Math.sin(tilt), across = Math.cos(tilt);
       camera.up.set(forwardX * down, across, forwardZ * down);
       camera.lookAt(location.x + forwardX * across, height - down, location.y + forwardZ * across);
+      camera.rotateZ(-roll * Math.PI / 180);
       const seen = new Set<string>();
       for (const reading of others.slice(0, 24)) {
         if (Date.now() - Date.parse(reading.timestamp) > 30000) continue;
@@ -332,25 +373,15 @@ export default function DroneCam({ pose, nearby = [], target: destination }: {
         if (!model) { model = droneModel(other.droneId, other.droneId === current.droneId, disposables); models.set(other.droneId, model); scene.add(model); }
         const point = fromLonLat(other.position.longitude, other.position.latitude);
         model.position.set(point.x, Math.max(.25, other.altitudeMetres / metresPerUnit), point.y);
-        model.rotation.y = -other.heading * Math.PI / 180;
+        model.rotation.set(
+          still ? 0 : (other.pitchDegrees ?? 0) * Math.PI / 180,
+          -other.heading * Math.PI / 180,
+          still ? 0 : -(other.rollDegrees ?? 0) * Math.PI / 180, 'YXZ');
         model.scale.setScalar(.35);
         // The simulator permits co-located launch pads; do not render a hull around the camera lens.
         model.visible = camera.position.distanceTo(model.position) > 1;
       }
       for (const [id, model] of models) if (!seen.has(id)) model.visible = false;
-      if (buildings) {
-        // Real footprints can cover simulated pads and drop-offs; hide a building while a drone is below its roof.
-        const layer = buildings as BuildingLayer;
-        const low = [{ x: location.x, y: location.y, altitude: sampled.altitudeMetres }, ...[...models.values()]
-          .filter(model => model.visible).map(model => ({ x: model.position.x, y: model.position.z, altitude: model.position.y * metresPerUnit }))];
-        let slot = 0;
-        for (const point of low) {
-          const index = layer.under(point.x, point.y);
-          if (index >= 0 && point.altitude < layer.heights[index] + 2 && slot < layer.hidden.length && !layer.hidden.slice(0, slot).includes(index)) layer.hidden[slot++] = index;
-        }
-        layer.hidden.fill(-1, slot);
-        element.dataset.hiddenBuildings = String(slot);
-      }
       camera.updateMatrixWorld();
       scene.updateMatrixWorld();
       frustum.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
@@ -360,6 +391,8 @@ export default function DroneCam({ pose, nearby = [], target: destination }: {
       element.dataset.heading = sampled.heading.toFixed(2);
       element.dataset.altitude = sampled.altitudeMetres.toFixed(2);
       element.dataset.cameraPitch = sampled.cameraPitchDegrees.toFixed(2);
+      element.dataset.pitch = pitch.toFixed(2);
+      element.dataset.roll = roll.toFixed(2);
       element.dataset.airspaceDrones = element.querySelector('.cam-airspace-label')?.getAttribute('data-count') ?? '0';
       const stale = Date.now() - Date.parse(current.timestamp) > 10000;
       element.dataset.stale = String(stale);

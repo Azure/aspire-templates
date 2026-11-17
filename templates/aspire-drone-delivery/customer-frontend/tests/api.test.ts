@@ -40,6 +40,23 @@ test('inbound tracking and camera use the matching API fix and target the store'
   assert.deepEqual(orderFlight(order, 0), flight, 'browser time cannot fabricate movement beyond telemetry');
 });
 
+test('tracking and camera keep the simulator detour and attitude instead of drawing a straight delivery leg', () => {
+  const plannedRoute = [
+    { position: telemetry.homePad, altitudeMetres: 12 },
+    { position: telemetry.homePad, altitudeMetres: 60 },
+    { position: { latitude: -37.835, longitude: 144.971 }, altitudeMetres: 60 },
+    { position: snapshot.store.location, altitudeMetres: 60 },
+    { position: snapshot.store.location, altitudeMetres: 15 },
+  ];
+  const order = customerOrder({ ...snapshot, telemetry: {
+    ...telemetry, plannedRoute, pitchDegrees: 1.4, rollDegrees: -1.7,
+  } }, receipt, now);
+  assert.deepEqual(order.tracking?.route, plannedRoute.map(p => fromLonLat(p.position.longitude, p.position.latitude)));
+  assert.deepEqual(order.cameraPose?.plannedRoute, plannedRoute);
+  assert.equal(order.cameraPose?.pitchDegrees, 1.4);
+  assert.equal(order.cameraPose?.rollDegrees, -1.7);
+});
+
 test('queued assignment, unrelated telemetry, returning and stale fixes never become live views', () => {
   for (const update of [
     { ...snapshot, droneId: null }, { ...snapshot, telemetry: null },

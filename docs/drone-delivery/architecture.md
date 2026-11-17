@@ -93,13 +93,14 @@ Cosmos DB. Add an access boundary before treating this as a real customer servic
 
 The live feed never uses Blob images. Both sites render the same Three.js scene
 from telemetry carried by the existing SignalR snapshots. A bounded 12-pose buffer
-per drone plays two seconds behind, interpolating position, altitude, pitch and
-shortest-arc heading. It never extrapolates beyond the newest fix or bridges gaps
+per drone plays two seconds behind, interpolating position, altitude, camera pitch,
+airframe pitch/roll and shortest-arc heading. It never extrapolates beyond the newest fix or bridges gaps
 over five seconds; a paused-telemetry label appears after ten seconds. Nearby
 drones older than 30 seconds are hidden. The drone model is procedural and is
 placed at its reported coordinates, not on an illustrative loop. Co-located hulls
-within one map unit of the lens are hidden to avoid enclosing the camera; no
-collision avoidance or safe separation is simulated. A heading-aware airspace
+within one map unit of the lens are hidden to avoid enclosing the camera; there
+is no drone-to-drone separation. Static building avoidance is performed by the
+simulator, not the renderer. A heading-aware airspace
 inset plots current fleet positions so drones outside the camera frustum remain
 visible without changing the streamed camera direction.
 
@@ -123,12 +124,30 @@ are connected with links, and the capture queue preserves its enqueue-time conte
 
 Flight legs preserve arrival heading through landing and turn toward the next
 leg during ascent. Mid-air diversions start at the current altitude and blend
-heading over four seconds; an emergency descent has no horizontal leg. Camera
+heading during their ascent; an emergency descent has no horizontal leg. Camera
 pitch is explicit simulator telemetry, forward in cruise and downward for VTOL,
 with transitions near the top of climb/start of descent. Storage work runs in a
 separate bounded 64-frame queue so it cannot block flight updates. SVG images
 snapshot the capture-time pose, remain explicitly illustrative, and are not
 browser-canvas screenshots.
+
+`BuildingAirspace` embeds the camera's OSM footprint extract. It expands building
+bounding boxes by 6 m, checks complete segments at cruise altitude, and finds a
+visibility-graph detour when the direct leg is obstructed. Untagged buildings
+use a conservative 12 m envelope (the renderer's estimation ceiling).
+Pads in these envelopes sit above the roof; cruise is at least 60 m and higher
+when necessary to depart/approach a rooftop. An unsafe starting pose, an
+unsurveyed endpoint or an impossible route produces an explicit routing failure,
+not a fabricated direct flight. The operator drawer exposes routing failures.
+
+Each horizontal segment accelerates/brakes at 2 m/s². At bends, the drone stops
+and turns for three seconds before moving on. Duration and battery estimates
+use these routes. Bounded sinusoidal pitch/roll/yaw model gentle attitude
+correction, without position drift into buildings. Telemetry carries speed,
+attitude and the planned waypoints, including VTOL endpoints. The overhead maps
+and translucent Three.js flight line/gates use those exact waypoints. Neighbor
+camera poses still exclude other orders and routes. This is not a dynamic
+air-traffic or certified obstacle-avoidance system.
 
 ## Map provider
 

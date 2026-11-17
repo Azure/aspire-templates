@@ -55,6 +55,10 @@ The map is illustrative and cannot support navigation or real flight planning.
    order remains Ready for pickup. The same views continue through loading into
    delivery. Queued assignments, unrelated missions and stale fixes never become
    a misleading live view. The last captured backend frame is labelled separately.
+   The planned building-clear route appears on both views, with translucent
+   flight-line gates in the camera. Acceleration, braking and gentle pitch/yaw/roll
+   corrections come from simulator telemetry. Pads within building footprints
+   are rooftop pads, rather than holes cut in the scenery.
 
 The menu is five coffee styles plus a biscuit, cake and croissant. The company's
 single-bar experience replaces the earlier multi-vendor direction. Do not add a

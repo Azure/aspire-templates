@@ -3,9 +3,9 @@ import L from 'leaflet';
 import { latLng, osmAttribution, osmMaxZoom, osmTileUrl } from './osm';
 import type { Point } from './osm';
 
-export type MapFlight = Point & { id: string; status: string; heading?: number };
+export type MapFlight = Point & { id: string; status: string; heading?: number; path?: Point[] };
 export type MapStore = Point & { label: string };
-export type MapRoute = { origin: Point; target: Point; targetLabel: string; current?: Point };
+export type MapRoute = { origin: Point; target: Point; targetLabel: string; current?: Point; path?: Point[] };
 
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 const droneSvg = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="5" r="3"/><circle cx="19" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><path d="M7 7l3 3m4 0 3-3M7 17l3-3m4 0 3 3"/><rect x="10" y="10" width="4" height="4" rx="1"/></svg>';
@@ -33,6 +33,12 @@ function rotate(marker: L.Marker, heading?: number) {
   if (svg && heading !== undefined) svg.style.transform = `rotate(${heading * 180 / Math.PI}deg)`;
 }
 
+function plannedPath(points: Point[], group: L.LayerGroup) {
+  const path = points.map(latLng);
+  L.polyline(path, { color: '#fffdf5', weight: 6, opacity: .8, interactive: false }).addTo(group);
+  L.polyline(path, { color: '#b66b23', weight: 3, dashArray: '8 6', opacity: .9, interactive: false, className: 'osm-planned-route' }).addTo(group);
+}
+
 /** OpenStreetMap basemap (Leaflet) with themed drone, store and route overlays. */
 export default function OsmMap({ flights, stores = [], route, follow, center, zoom = 15, fit, ariaLabel }: {
   flights: MapFlight[]; stores?: MapStore[]; route?: MapRoute; follow?: Point; center: Point; zoom?: number;
@@ -41,7 +47,7 @@ export default function OsmMap({ flights, stores = [], route, follow, center, zo
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
-  const layers = useRef<{ drones: Map<string, L.Marker>; stores: L.LayerGroup; route: L.LayerGroup } | null>(null);
+  const layers = useRef<{ drones: Map<string, L.Marker>; stores: L.LayerGroup; route: L.LayerGroup; plans: L.LayerGroup } | null>(null);
   const initial = useRef({ center: follow ?? center, zoom, fit });
 
   useEffect(() => {
@@ -51,7 +57,7 @@ export default function OsmMap({ flights, stores = [], route, follow, center, zo
     if (initial.current.fit) instance.fitBounds(L.latLngBounds(initial.current.fit.map(latLng)), { padding: [12, 12], maxZoom: initial.current.zoom, animate: false });
     instance.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>');
     L.tileLayer(osmTileUrl, { maxZoom: osmMaxZoom, attribution: osmAttribution, crossOrigin: true }).addTo(instance);
-    layers.current = { drones: new Map(), stores: L.layerGroup().addTo(instance), route: L.layerGroup().addTo(instance) };
+    layers.current = { drones: new Map(), stores: L.layerGroup().addTo(instance), route: L.layerGroup().addTo(instance), plans: L.layerGroup().addTo(instance) };
     map.current = instance;
     const observer = new ResizeObserver(() => instance.invalidateSize());
     observer.observe(container.current);
@@ -70,10 +76,17 @@ export default function OsmMap({ flights, stores = [], route, follow, center, zo
     if (!group) return;
     group.clearLayers();
     if (!route) return;
-    L.polyline([latLng(route.origin), latLng(route.target)], { color: '#184b38', weight: 2.5, dashArray: '6 6', opacity: .6, interactive: false }).addTo(group);
-    if (route.current) L.polyline([latLng(route.origin), latLng(route.current)], { color: '#184b38', weight: 4, lineCap: 'round', interactive: false }).addTo(group);
+    plannedPath(route.path ?? [route.origin, route.target], group);
+    if (route.current && !route.path) L.polyline([latLng(route.origin), latLng(route.current)], { color: '#184b38', weight: 4, lineCap: 'round', interactive: false }).addTo(group);
     L.marker(latLng(route.target), { icon: L.divIcon({ html: label('osm-target', route.targetLabel), className: 'osm-marker', iconSize: [0, 0] }), keyboard: false, interactive: false }).addTo(group);
-  }, [route?.origin.x, route?.origin.y, route?.target.x, route?.target.y, route?.targetLabel, route?.current?.x, route?.current?.y]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [route?.origin.x, route?.origin.y, route?.target.x, route?.target.y, route?.targetLabel, route?.current?.x, route?.current?.y, route?.path]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const group = layers.current?.plans;
+    if (!group) return;
+    group.clearLayers();
+    for (const flight of flights) if (flight.path?.length) plannedPath(flight.path, group);
+  }, [flights]);
 
   useEffect(() => {
     const current = layers.current, instance = map.current;

@@ -10,11 +10,14 @@ const pose = (seconds: number, heading = 350): CameraPose => ({
 });
 test('playout interpolates received position, altitude and camera pitch across the heading seam', () => {
   const buffer = new PoseBuffer();
-  buffer.push(pose(0, 359)); buffer.push(pose(1, 1));
+  buffer.push({ ...pose(0, 359), pitchDegrees: -1, rollDegrees: 2 });
+  buffer.push({ ...pose(1, 1), pitchDegrees: 1, rollDegrees: -2 });
   const halfway = buffer.sample(start + 500)!;
   expect(halfway.heading).toBe(0);
   expect(halfway.altitudeMetres).toBe(2);
   expect(halfway.cameraPitchDegrees).toBe(-89.5);
+  expect(halfway.pitchDegrees).toBe(0);
+  expect(halfway.rollDegrees).toBe(0);
   expect(halfway.position.latitude).toBeCloseTo(-37.82995);
   expect(turnBetween(1, 359, .5)).toBe(0);
   // Inserting the next snapshot cannot reset the already buffered trajectory.

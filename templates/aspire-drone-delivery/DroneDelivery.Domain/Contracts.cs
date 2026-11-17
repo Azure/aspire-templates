@@ -48,7 +48,7 @@ public sealed record DroneControl(string CommandId, DroneCommand Command, Comman
 
 // Camera poses shared with customers contain no other customers' orders or mission details.
 public sealed record CameraPose(string DroneId, DateTimeOffset Timestamp, GeoPoint Position,
-    double AltitudeMetres, double Heading, double CameraPitchDegrees);
+    double AltitudeMetres, double Heading, double CameraPitchDegrees, double PitchDegrees = 0, double RollDegrees = 0);
 
 /// <summary>Published to <see cref="Hubs.DroneTelemetry"/> by the drone simulator, partitioned by drone.</summary>
 public sealed record DroneTelemetry(
@@ -69,9 +69,14 @@ public sealed record DroneTelemetry(
     double? FlightProgress = null,
     double CameraPitchDegrees = -90,
     DroneControl? Control = null,
-    bool CarryingPackage = false)
+    bool CarryingPackage = false,
+    double PitchDegrees = 0,
+    double RollDegrees = 0,
+    double SpeedMetresPerSecond = 0,
+    IReadOnlyList<FlightWaypoint>? PlannedRoute = null,
+    string? RoutingError = null)
 {
-    public CameraPose CameraPose() => new(DroneId, Timestamp, Position, AltitudeMetres, Heading, CameraPitchDegrees);
+    public CameraPose CameraPose() => new(DroneId, Timestamp, Position, AltitudeMetres, Heading, CameraPitchDegrees, PitchDegrees, RollDegrees);
 }
 
 public enum MissionMilestone

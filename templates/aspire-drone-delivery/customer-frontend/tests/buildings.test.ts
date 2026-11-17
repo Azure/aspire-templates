@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildingGeometry, decodeBuildings, footprintIndex, defaultHeightMetres, estimatedHeightCeilingMetres, resolveHeights } from '../../frontend-shared/buildings';
+import { buildingGeometry, decodeBuildings, defaultHeightMetres, estimatedHeightCeilingMetres, resolveHeights } from '../../frontend-shared/buildings';
 import type { Footprint } from '../../frontend-shared/buildings';
 import data from '../../frontend-shared/osm-buildings.json';
 
@@ -22,18 +22,10 @@ describe('OpenStreetMap camera buildings', () => {
     expect(lonely.heightMetres).toBe(defaultHeightMetres);
   });
 
-  it('finds the footprint under a landed drone so the camera can hide it', () => {
-    const under = footprintIndex([square(0, 0, 6), square(50, 50, 6)]);
-    expect(under(51, 51)).toBe(1);
-    expect(under(1, 1)).toBe(0);
-    expect(under(20, 20)).toBe(-1);
-  });
-
   it('extrudes roofs and walls into one geometry', () => {
     const geometry = buildingGeometry([square(0, 0, 8.4)], 4.2);
     // Two roof triangles plus four walls of two triangles each.
     expect(geometry.getAttribute('position').count).toBe((2 + 8) * 3);
-    expect(geometry.getAttribute('building').count).toBe((2 + 8) * 3);
     expect(geometry.boundingBox ?? (geometry.computeBoundingBox(), geometry.boundingBox)).toMatchObject({ max: { y: 2 } });
   });
 

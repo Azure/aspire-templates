@@ -1,7 +1,10 @@
+export type FlightWaypoint = { position: { latitude: number; longitude: number }; altitudeMetres: number };
 export type CameraPose = {
   droneId: string; timestamp: string;
   position: { latitude: number; longitude: number };
   altitudeMetres: number; heading: number; cameraPitchDegrees: number;
+  pitchDegrees?: number; rollDegrees?: number;
+  plannedRoute?: FlightWaypoint[] | null;
 };
 
 export function turnBetween(from: number, to: number, fraction: number) {
@@ -14,7 +17,8 @@ export class PoseBuffer {
   push(pose: CameraPose) {
     if (this.poses[0]?.droneId !== pose.droneId) this.poses = [];
     if (!Number.isFinite(Date.parse(pose.timestamp)) ||
-      ![pose.position.latitude, pose.position.longitude, pose.altitudeMetres, pose.heading, pose.cameraPitchDegrees].every(Number.isFinite)) return;
+      ![pose.position.latitude, pose.position.longitude, pose.altitudeMetres, pose.heading, pose.cameraPitchDegrees,
+        pose.pitchDegrees ?? 0, pose.rollDegrees ?? 0].every(Number.isFinite)) return;
     if (this.poses.length && Date.parse(pose.timestamp) <= Date.parse(this.poses.at(-1)!.timestamp)) return;
     this.poses = [...this.poses.slice(-11), pose];
   }
@@ -35,6 +39,8 @@ export class PoseBuffer {
       position: { latitude: mix(a.position.latitude, b.position.latitude), longitude: mix(a.position.longitude, b.position.longitude) },
       altitudeMetres: mix(a.altitudeMetres, b.altitudeMetres),
       heading: turnBetween(a.heading, b.heading, f), cameraPitchDegrees: mix(a.cameraPitchDegrees, b.cameraPitchDegrees),
+      pitchDegrees: mix(a.pitchDegrees ?? 0, b.pitchDegrees ?? 0),
+      rollDegrees: mix(a.rollDegrees ?? 0, b.rollDegrees ?? 0),
     };
   }
 }

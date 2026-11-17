@@ -24,6 +24,19 @@ test('airborne count follows manoeuvres, not a scheduled order or hard-coded fle
   assert.equal(airborne({ ...drone, manoeuvre: 'OnTheGround', state: 'Loading' }), false);
 });
 
+test('the fleet map preserves all simulator route bends and does not invent a path for parked drones', () => {
+  const plannedRoute = [drone.homePad, drone.position, { latitude: -37.8318, longitude: 144.958 }]
+    .map(position => ({ position, altitudeMetres: 60 }));
+  const [flight, parked] = fleetMap([{ ...drone, plannedRoute }, { ...drone, droneId: 'PIC-01', plannedRoute: null }]);
+  assert.equal(flight.path?.length, 3);
+  flight.path!.forEach((point, index) => {
+    const [lon, lat] = toLonLat(point.x, point.y);
+    assert.approximately(lon, plannedRoute[index].position.longitude, 1e-8);
+    assert.approximately(lat, plannedRoute[index].position.latitude, 1e-8);
+  });
+  assert.isUndefined(parked.path);
+});
+
 test('controls require the right payload and recovery state and serialize ongoing actions', () => {
   const current = { ...drone, timestamp: new Date().toISOString() };
   assert.notEqual(commandUnavailable(current, 'DiscardPackage'), '');
