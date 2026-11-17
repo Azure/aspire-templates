@@ -23,7 +23,7 @@ export type OrderSnapshot = {
   order: { orderId: string; customerName: string; payloadBays: 1 | 2 | 4; lines: { item: string; bays: number }[] };
   store: { id: string; name: string; location: GeoPoint }; readyAt: string;
   status: 'AwaitingFleet' | 'Scheduled' | 'DroneEnRoute' | 'PickedUp' | 'Delivered' | 'Unserviceable' | 'Failed';
-  droneId: string | null; estimatedDelivery: string | null; note: string | null;
+  droneId: string | null; estimatedDelivery: string | null; note: string | null; arrivalIndeterminate?: boolean;
 };
 export type Store = { id: string; name: string; location: GeoPoint; pads?: { id: string; number: number; location: GeoPoint }[]; deckAltitudeMetres?: number };
 

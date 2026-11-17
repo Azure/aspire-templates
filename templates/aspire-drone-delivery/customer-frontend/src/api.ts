@@ -22,6 +22,8 @@ export type OrderSnapshot = {
   store: { id: string; name: string; location: GeoPoint } & StorePads; readyAt: string;
   status: 'AwaitingFleet' | 'Scheduled' | 'DroneEnRoute' | 'PickedUp' | 'Delivered' | 'Unserviceable' | 'Failed';
   droneId: string | null; estimatedDelivery: string | null; deliveredAt: string | null; note: string | null;
+  /** An operator is flying the drone; no arrival time until it resumes its programming. */
+  arrivalIndeterminate?: boolean;
   photos: { blobName: string; trigger: string; proofOfDelivery: boolean; timestamp: string }[];
   telemetry?: Telemetry | null;
   nearbyDrones?: CameraPose[];
@@ -130,6 +132,7 @@ export function customerOrder(snapshot: OrderSnapshot, receipt: Receipt, now = D
     nearbyDrones: snapshot.nearbyDrones, pads: camPads([snapshot.store]),
     dropOff: { ...point(snapshot.order.dropOff), label: receipt.dropOff.label }, note: snapshot.note,
     etaSeconds: snapshot.estimatedDelivery ? Math.max(0, Math.ceil((Date.parse(snapshot.estimatedDelivery) - now) / 1000)) : undefined,
+    arrivalIndeterminate: !!snapshot.arrivalIndeterminate && snapshot.status !== 'Delivered' && snapshot.status !== 'Failed' && snapshot.status !== 'Unserviceable',
     photo: photo ? { url: `/api/photos/${photo.blobName.split('/').map(encodeURIComponent).join('/')}`, timestamp: photo.timestamp, proofOfDelivery: photo.proofOfDelivery } : undefined,
   };
 }

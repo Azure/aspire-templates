@@ -18,7 +18,7 @@ const stageCopy = {
 const duration = { Preparing: stageTicks.preparing, 'Ready for pickup': stageTicks.ready, Delivering: stageTicks.flight, Delivered: 1 } as const;
 
 function eta(seconds: number) {
-  if (seconds <= 0) return 'Arrived';
+  if (seconds <= 0) return 'Arriving now';
   const minutes = Math.floor(seconds / 60);
   return minutes ? `${minutes} min ${seconds % 60} s` : `${seconds} s`;
 }
@@ -90,7 +90,7 @@ export default function OrderStatus({ order, orderId, onBack }: {
     <button className="text-button back-link" onClick={onBack}><ArrowLeft size={15} />Back to the menu</button>
     <section className="status-header" aria-live="polite">
       <div><div className="eyebrow">ORDER {order.id} · FORTHCOFFEE · {payloadNames[order.payload].toUpperCase()} PAYLOAD</div><h1>{copy.title}</h1><p>{copy.detail}</p></div>
-      <div className="status-eta"><span>{order.failure ? 'DELIVERY INTERRUPTED' : order.stage === 'Delivered' ? 'DELIVERED' : 'ESTIMATED ARRIVAL'}</span><strong>{order.failure ? 'Unable to complete' : order.stage === 'Delivered' ? 'Arrived' : order.backend ? (order.etaSeconds === undefined ? 'Awaiting estimate' : eta(order.etaSeconds)) : flight.droneId ? eta(flight.etaSeconds) : 'Awaiting drone'}</strong><small>{order.backend ? 'Demo server estimate' : 'Accelerated demo time'}</small></div>
+      <div className="status-eta"><span>{order.failure ? 'DELIVERY INTERRUPTED' : order.stage === 'Delivered' ? 'DELIVERED' : 'ESTIMATED ARRIVAL'}</span><strong>{order.failure ? 'Unable to complete' : order.stage === 'Delivered' ? 'Arrived' : order.backend ? (order.arrivalIndeterminate ? 'Re-estimating' : order.etaSeconds === undefined ? 'Awaiting estimate' : eta(order.etaSeconds)) : flight.droneId ? eta(flight.etaSeconds) : 'Awaiting drone'}</strong><small>{order.arrivalIndeterminate && !order.failure ? 'A fleet pilot is guiding your drone. We’ll update your arrival when it’s back on its route.' : order.backend ? 'Live estimate from your drone' : 'Accelerated demo time'}</small></div>
     </section>
     {!order.failure && <ol className="status-steps" aria-label="Order progress">{stages.map((stage, index) => {
       const Icon = stageIcons[index];

@@ -206,4 +206,78 @@ public class LogisticsTests
         Assert.Equal(OrderStatus.Failed, dispatcher.Order("A")!.Status);
         Assert.Empty(dispatcher.PlanPending(mission.DepartAt + Dispatcher.RecoveryGrace));
     }
+
+    static (Dispatcher Dispatcher, MissionAssigned Mission) Dispatched()
+    {
+        var dispatcher = new Dispatcher();
+        dispatcher.Observe(new DroneTelemetry("PIC-01", DroneClass.Piccolo, 1, Now, Store, Store, 0, 0, 100, DroneState.Parked, Manoeuvre.OnTheGround, null, null, 0));
+        dispatcher.Accept(new OrderPlaced("A", "c", "Test", Customer, 1, [], Now, "test"));
+        return (dispatcher, Assert.Single(dispatcher.PlanPending(Now)));
+    }
+
+    static DroneTelemetry Flying(MissionAssigned mission, long sequence, DateTimeOffset at, DroneState state, DateTimeOffset? stageEndsAt,
+        ManualControlState? manual = null) =>
+        new("PIC-01", DroneClass.Piccolo, sequence, at, Store, Store, 40, 0, 80, state, Manoeuvre.Cruise, mission.MissionId, "A", 0,
+            Manual: manual, StageEndsAt: stageEndsAt);
+
+    [Fact]
+    public void Takeover_makes_arrival_indeterminate_and_resume_re_estimates_from_the_replanned_leg()
+    {
+        var (dispatcher, mission) = Dispatched();
+        dispatcher.Observe(new MissionProgress(mission.MissionId, "A", "PIC-01", MissionMilestone.PickedUp, Now.AddMinutes(3), Store), Now.AddMinutes(3));
+        dispatcher.Observe(Flying(mission, 2, Now.AddMinutes(3), DroneState.FlyingToCustomer, Now.AddMinutes(5)));
+        Assert.Equal(Now.AddMinutes(5), dispatcher.Order("A")!.EstimatedDelivery);
+        dispatcher.TakeChanges();
+
+        var active = new ManualControlState("s1", ManualStatus.Active, 1, 1, 0, "Operator in control");
+        dispatcher.Observe(Flying(mission, 3, Now.AddMinutes(4), DroneState.FlyingToCustomer, null, active));
+        var held = dispatcher.Order("A")!;
+        Assert.True(held.ArrivalIndeterminate);
+        Assert.Null(held.EstimatedDelivery);
+        Assert.True(Assert.Single(dispatcher.TakeChanges()).Order.ArrivalIndeterminate, "persisted so a restart doesn't revive the stale estimate");
+
+        // Still indeterminate while hovering on a lost link (or while the operator decides how to hand back).
+        dispatcher.Observe(Flying(mission, 4, Now.AddMinutes(9), DroneState.FlyingToCustomer, null, active with { Status = ManualStatus.LinkLost }));
+        Assert.True(dispatcher.Order("A")!.ArrivalIndeterminate);
+        Assert.Empty(dispatcher.TakeChanges());
+
+        // Resumed far from the original route: the new leg ends later than the stale countdown ever said.
+        dispatcher.Observe(Flying(mission, 5, Now.AddMinutes(10), DroneState.FlyingToCustomer, Now.AddMinutes(13), active with { Status = ManualStatus.Released }));
+        var resumed = dispatcher.Order("A")!;
+        Assert.False(resumed.ArrivalIndeterminate);
+        Assert.Equal(Now.AddMinutes(13), resumed.EstimatedDelivery);
+        Assert.Single(dispatcher.TakeChanges());
+
+        // Normal drift along the leg updates the live estimate without rewriting the order every tick.
+        dispatcher.Observe(Flying(mission, 6, Now.AddMinutes(11), DroneState.FlyingToCustomer, Now.AddMinutes(13).AddSeconds(1), active with { Status = ManualStatus.Released }));
+        Assert.Equal(Now.AddMinutes(13), dispatcher.Order("A")!.EstimatedDelivery);
+        Assert.Empty(dispatcher.TakeChanges());
+    }
+
+    [Fact]
+    public void Before_pickup_the_estimate_adds_any_preparation_wait_loading_and_the_delivery_leg()
+    {
+        var (dispatcher, mission) = Dispatched();
+        var order = dispatcher.Order("A")!;
+        var deliveryLeg = DroneSpec.For(DroneClass.Piccolo).Leg(order.Store.Location, Customer).Duration;
+
+        // Arriving before the order is ready: the drone waits for preparation, then loads.
+        dispatcher.Observe(Flying(mission, 2, Now.AddSeconds(10), DroneState.FlyingToPickup, order.ReadyAt.AddMinutes(-1)));
+        Assert.Equal(order.ReadyAt + LogisticsPlanner.LoadingTime, dispatcher.Order("A")!.EstimatedPickup);
+        Assert.Equal(order.ReadyAt + LogisticsPlanner.LoadingTime + deliveryLeg, dispatcher.Order("A")!.EstimatedDelivery);
+
+        var active = new ManualControlState("s1", ManualStatus.Active, 1, 1, 0, "Operator in control");
+        dispatcher.Observe(Flying(mission, 3, Now.AddSeconds(20), DroneState.FlyingToPickup, null, active));
+        Assert.True(dispatcher.Order("A")!.ArrivalIndeterminate);
+
+        // Resumed after the order became ready: arrival now follows the late leg, not the preparation time.
+        var late = order.ReadyAt.AddMinutes(2);
+        dispatcher.Observe(Flying(mission, 4, order.ReadyAt, DroneState.FlyingToPickup, late, active with { Status = ManualStatus.Released }));
+        var resumed = dispatcher.Order("A")!;
+        Assert.False(resumed.ArrivalIndeterminate);
+        Assert.Equal(late + LogisticsPlanner.LoadingTime + deliveryLeg, resumed.EstimatedDelivery);
+
+        dispatcher.Observe(Flying(mission, 5, late, DroneState.Loading, late + LogisticsPlanner.LoadingTime) with { Manoeuvre = Manoeuvre.OnTheGround });
+        Assert.Equal(late + LogisticsPlanner.LoadingTime + deliveryLeg, dispatcher.Order("A")!.EstimatedDelivery);
+    }
 }

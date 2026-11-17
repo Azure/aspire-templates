@@ -29,7 +29,8 @@ public sealed record OrderSnapshot(
     string? Note,
     IReadOnlyList<OrderPhoto> Photos,
     DroneTelemetry? Telemetry = null,
-    IReadOnlyList<CameraPose>? NearbyDrones = null);
+    IReadOnlyList<CameraPose>? NearbyDrones = null,
+    bool ArrivalIndeterminate = false);
 
 /// <summary>What logistics persists for an order: its snapshot plus the mission and trace needed to resume it.</summary>
 public sealed record OrderRecord(OrderSnapshot Order, string? MissionId, string? TraceParent);
@@ -49,12 +50,17 @@ public sealed class OrderView(OrderPlaced order, PickupLocation store, DateTimeO
     public string? Note { get; set; }
     public List<OrderPhoto> Photos { get; } = [];
     public string? MissionId { get; set; }
+    /// <summary>An operator is flying the drone, so no arrival time can be promised until it resumes its programming.</summary>
+    public bool ArrivalIndeterminate { get; set; }
+    /// <summary>Cached store-to-customer flight time, used to re-estimate before pickup.</summary>
+    public TimeSpan? DeliveryLeg { get; set; }
     /// <summary>Restored after a restart and not yet confirmed by the drone's telemetry.</summary>
     public bool Recovered { get; set; }
     /// <summary>The span that accepted the order; later dispatch, mission and realtime spans join its trace.</summary>
     public ActivityContext Trace { get; init; }
 
-    public OrderSnapshot Snapshot() => new(Order, Store, ReadyAt, Status, DroneId, DroneClass, DepartAt, EstimatedPickup, EstimatedDelivery, DeliveredAt, Note, [.. Photos]);
+    public OrderSnapshot Snapshot() => new(Order, Store, ReadyAt, Status, DroneId, DroneClass, DepartAt, EstimatedPickup, EstimatedDelivery, DeliveredAt, Note, [.. Photos],
+        ArrivalIndeterminate: ArrivalIndeterminate);
 }
 
 /// <summary>
@@ -110,7 +116,51 @@ public sealed class Dispatcher
                 telemetry.State is DroneState.Parked or DroneState.Charging)
                 committed[telemetry.DroneId] = new(telemetry.DroneId, telemetry.Class, telemetry.Position, telemetry.HomePad, telemetry.BatteryPercent, telemetry.Timestamp);
             Reconcile(telemetry);
+            Reestimate(telemetry);
         }
+    }
+
+    /// <summary>
+    /// Keeps the order's arrival estimate live from the drone's own schedule: indeterminate while an operator
+    /// flies it, then recomputed from the replanned remaining leg once it resumes its programming.
+    /// </summary>
+    void Reestimate(DroneTelemetry telemetry)
+    {
+        if (telemetry.MissionId is not { } missionId || !byMission.TryGetValue(missionId, out var view) ||
+            view.DroneId != telemetry.DroneId || view.Status is OrderStatus.Delivered or OrderStatus.Failed)
+            return;
+        if (telemetry.Manual is { Status: ManualStatus.Active or ManualStatus.LinkLost })
+        {
+            if (!view.ArrivalIndeterminate || view.EstimatedDelivery is not null)
+            {
+                view.ArrivalIndeterminate = true;
+                view.EstimatedDelivery = null;
+                changed.Add(view.Order.OrderId);
+            }
+            return;
+        }
+        if (telemetry.StageEndsAt is not { } stageEnds)
+            return;
+        TimeSpan DeliveryLeg() => view.DeliveryLeg ??=
+            DroneSpec.For(view.DroneClass ?? telemetry.Class).Leg(view.Store.Location, view.Order.DropOff).Duration;
+        var pickup = telemetry.State switch
+        {
+            DroneState.FlyingToPickup => (stageEnds > view.ReadyAt ? stageEnds : view.ReadyAt) + LogisticsPlanner.LoadingTime,
+            DroneState.Loading => stageEnds,
+            _ => (DateTimeOffset?)null,
+        };
+        DateTimeOffset? estimate = telemetry.State == DroneState.FlyingToCustomer ? stageEnds : pickup + DeliveryLeg();
+        if (estimate is not { } arrival)
+            return;
+        // Small drift is normal; only material moves are persisted, the realtime feed always carries the latest.
+        var moved = view.EstimatedDelivery is not { } current || (arrival - current).Duration() >= TimeSpan.FromSeconds(2);
+        if (!view.ArrivalIndeterminate && !moved)
+            return;
+        view.ArrivalIndeterminate = false;
+        view.EstimatedDelivery = arrival;
+        if (pickup is { } at)
+            view.EstimatedPickup = at;
+        changed.Add(view.Order.OrderId);
     }
 
     /// <summary>
@@ -148,6 +198,7 @@ public sealed class Dispatcher
                 view.DroneClass = null;
                 view.DepartAt = view.EstimatedPickup = view.EstimatedDelivery = null;
             }
+            view.ArrivalIndeterminate = false;
             changed.Add(view.Order.OrderId);
             Release(telemetry.DroneId);
         }
@@ -175,6 +226,7 @@ public sealed class Dispatcher
                 case MissionMilestone.Delivered:
                     view.Status = OrderStatus.Delivered;
                     view.DeliveredAt = progress.Timestamp;
+                    view.ArrivalIndeterminate = false;
                     break;
                 case MissionMilestone.ReturnedToPad:
                     view.MissionId = null;
@@ -188,6 +240,7 @@ public sealed class Dispatcher
                     view.DroneId = null;
                     view.DroneClass = null;
                     view.DepartAt = view.EstimatedPickup = view.EstimatedDelivery = null;
+                    view.ArrivalIndeterminate = false;
                     Release(progress.DroneId);
                     byMission.Remove(progress.MissionId);
                     break;
@@ -197,6 +250,7 @@ public sealed class Dispatcher
                         view.Status = OrderStatus.Failed;
                         view.Note = progress.Reason ?? "Delivery interrupted by fleet operations";
                         view.EstimatedDelivery = null;
+                        view.ArrivalIndeterminate = false;
                     }
                     view.MissionId = null;
                     Release(progress.DroneId);
@@ -473,6 +527,7 @@ public sealed class Dispatcher
                     EstimatedDelivery = snapshot.EstimatedDelivery,
                     DeliveredAt = snapshot.DeliveredAt,
                     Note = snapshot.Note,
+                    ArrivalIndeterminate = snapshot.ArrivalIndeterminate,
                     MissionId = record.MissionId,
                     Trace = ActivityContext.TryParse(record.TraceParent, null, out var trace) ? trace : default,
                 };

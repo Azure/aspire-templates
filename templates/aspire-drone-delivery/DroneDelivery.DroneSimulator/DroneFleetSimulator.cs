@@ -192,8 +192,9 @@ public sealed class DroneFleetSimulator(
         using (Step("drone load order"))
         {
             drone.State = DroneState.Loading;
-            await ReportAsync(drone, cancellationToken);
             var loaded = (time.GetUtcNow() > mission.ReadyAt ? time.GetUtcNow() : mission.ReadyAt) + LogisticsPlanner.LoadingTime;
+            drone.StageEndsAt = loaded;
+            await ReportAsync(drone, cancellationToken);
             await WaitUntilAsync(drone, loaded, DemoStage.ReadyForPickup, cancellationToken);
         }
         drone.CarryingPackage = true;
@@ -204,8 +205,9 @@ public sealed class DroneFleetSimulator(
         using (Step("drone unload order"))
         {
             drone.State = DroneState.Unloading;
+            drone.StageEndsAt = time.GetUtcNow() + LogisticsPlanner.UnloadingTime;
             await ReportAsync(drone, cancellationToken);
-            await WaitUntilAsync(drone, time.GetUtcNow() + LogisticsPlanner.UnloadingTime, DemoStage.Delivering, cancellationToken);
+            await WaitUntilAsync(drone, drone.StageEndsAt.Value, DemoStage.Delivering, cancellationToken);
         }
         drone.CarryingPackage = false;
         await MilestoneAsync(drone, mission, trace, MissionMilestone.Delivered, cancellationToken);
@@ -225,6 +227,7 @@ public sealed class DroneFleetSimulator(
         drone.RoutingError = null;
         drone.PlannedRoute = leg.PlannedRoute;
         var start = time.GetUtcNow();
+        drone.StageEndsAt = start + leg.Duration;
         var startBattery = drone.BatteryPercent;
         var previous = Manoeuvre.OnTheGround;
         var lastPhoto = start;
@@ -243,6 +246,8 @@ public sealed class DroneFleetSimulator(
                 leg = LegFromPose(drone, leg.To);
                 drone.PlannedRoute = leg.PlannedRoute;
                 start = lastPhoto = time.GetUtcNow();
+                // Re-estimate from wherever the operator left the drone.
+                drone.StageEndsAt = start + leg.Duration;
                 startBattery = drone.BatteryPercent;
                 previous = Manoeuvre.Cruise;
                 continue;
@@ -255,6 +260,8 @@ public sealed class DroneFleetSimulator(
                 _ => false,
             });
             var elapsed = skip ? leg.Duration : now - start;
+            if (skip)
+                drone.StageEndsAt = now;
             var sample = leg.At(elapsed);
             drone.FlightProgress = sample.Progress;
             drone.Position = sample.Position;
@@ -331,6 +338,7 @@ public sealed class DroneFleetSimulator(
         var battery = drone.BatteryPercent;
         var outcome = "Operator released control; resumed previous programming.";
         drone.PlannedRoute = null;
+        drone.StageEndsAt = null;
         drone.Manual = new(take.SessionId, ManualStatus.Active, 0, 0, 0, "Operator in control");
         try
         {
@@ -464,6 +472,7 @@ public sealed class DroneFleetSimulator(
                 // Preparation was shortened, but loading still takes its normal duration.
                 until = until > time.GetUtcNow() + LogisticsPlanner.LoadingTime
                     ? time.GetUtcNow() + LogisticsPlanner.LoadingTime : until;
+                drone.StageEndsAt = until;
             }
             await Task.Delay(remaining < Tick ? remaining : Tick, time, cancellationToken);
             await ReportAsync(drone, cancellationToken);

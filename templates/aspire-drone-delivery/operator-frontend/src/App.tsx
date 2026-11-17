@@ -46,7 +46,8 @@ export default function App() {
             <h3>{snapshot.order.customerName}</h3><p>{snapshot.store.name}</p>
             {snapshot.order.lines.map((line, index) => <p key={index}>{line.item}</p>)}
             <div className="queue-order-bottom"><span>{snapshot.droneId ?? 'Awaiting assignment'} · {snapshot.status}</span></div>
-            {snapshot.estimatedDelivery && <p>Estimated delivery: {new Date(snapshot.estimatedDelivery).toLocaleTimeString()}</p>}
+            {snapshot.arrivalIndeterminate ? <p className="eta-indeterminate">Estimated delivery: indeterminate (operator in control)</p>
+              : snapshot.estimatedDelivery && <p>Estimated delivery: {new Date(snapshot.estimatedDelivery).toLocaleTimeString()}</p>}
             {snapshot.note && <p>{snapshot.note}</p>}
           </article>)}</div>
           {!loading && !active.length && <p>No active orders in the latest snapshot.</p>}

@@ -172,3 +172,16 @@ test('a random drop-off is valid and stays the same from receipt to tracking and
     assert.ok(Math.hypot(order.tracking!.destination.x - dropOff.x, order.tracking!.destination.y - dropOff.y) < .5);
   } finally { vi.unstubAllGlobals(); }
 });
+
+test('arrival follows the live server estimate and is indeterminate while an operator flies the drone', () => {
+  const flying = { ...snapshot, status: 'PickedUp' as const, telemetry: { ...telemetry, state: 'FlyingToCustomer' as const } };
+  assert.equal(customerOrder(flying, receipt, now).etaSeconds, 120);
+  const held = customerOrder({ ...flying, estimatedDelivery: null, arrivalIndeterminate: true }, receipt, now);
+  assert.isTrue(held.arrivalIndeterminate);
+  assert.isUndefined(held.etaSeconds);
+  // Resumed later than the stale countdown would have said.
+  const resumed = customerOrder({ ...flying, estimatedDelivery: new Date(now + 300000).toISOString(), arrivalIndeterminate: false }, receipt, now);
+  assert.isFalse(resumed.arrivalIndeterminate);
+  assert.equal(resumed.etaSeconds, 300);
+  assert.isFalse(customerOrder({ ...flying, status: 'Failed', arrivalIndeterminate: true }, receipt, now).arrivalIndeterminate);
+});

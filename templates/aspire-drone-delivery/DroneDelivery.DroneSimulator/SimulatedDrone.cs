@@ -26,6 +26,8 @@ public sealed class SimulatedDrone(string id, DroneSpec spec, GeoPoint homePad, 
     public DroneControl? Control { get; set; }
     public ActivityContext MissionTrace { get; set; }
     public double? FlightProgress { get; set; }
+    /// <summary>When the current flight leg, loading or unloading is expected to finish; unknown under manual control.</summary>
+    public DateTimeOffset? StageEndsAt { get; set; }
     public double BatteryPercent { get; set; } = battery;
     public DroneState State { get; set; } = battery < 100 ? DroneState.Charging : DroneState.Parked;
     public Manoeuvre Manoeuvre { get; set; } = Manoeuvre.OnTheGround;
@@ -59,7 +61,7 @@ public sealed class SimulatedDrone(string id, DroneSpec spec, GeoPoint homePad, 
         Id, Spec.Class, Interlocked.Increment(ref sequence), now, Position, HomePad,
         Math.Round(AltitudeMetres, 1), Math.Round(Heading), Math.Round(BatteryPercent, 1),
         State, Manoeuvre, Mission?.MissionId, Mission?.OrderId, Queue.Count, FlightProgress, CameraPitchDegrees, Control, CarryingPackage,
-        PitchDegrees, RollDegrees, SpeedMetresPerSecond, PlannedRoute, RoutingError, Pad?.Id, Manual, CameraYawDegrees);
+        PitchDegrees, RollDegrees, SpeedMetresPerSecond, PlannedRoute, RoutingError, Pad?.Id, Manual, CameraYawDegrees, StageEndsAt);
 
     /// <summary>Parked drones sit on their charging pad and top up.</summary>
     public void ChargeFor(TimeSpan elapsed)
@@ -67,6 +69,7 @@ public sealed class SimulatedDrone(string id, DroneSpec spec, GeoPoint homePad, 
         BatteryPercent = Math.Min(100, BatteryPercent + Spec.ChargePerMinute * elapsed.TotalMinutes);
         State = BatteryPercent < 100 ? DroneState.Charging : DroneState.Parked;
         FlightProgress = null;
+        StageEndsAt = null;
         PlannedRoute = null;
     }
 

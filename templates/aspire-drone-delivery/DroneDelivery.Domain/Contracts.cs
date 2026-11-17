@@ -77,7 +77,8 @@ public sealed record DroneTelemetry(
     string? RoutingError = null,
     string? PadId = null,
     ManualControlState? Manual = null,
-    double CameraYawDegrees = 0)
+    double CameraYawDegrees = 0,
+    DateTimeOffset? StageEndsAt = null)
 {
     public CameraPose CameraPose() => new(DroneId, Timestamp, Position, AltitudeMetres, Heading, CameraPitchDegrees, PitchDegrees, RollDegrees, CameraYawDegrees);
 }
