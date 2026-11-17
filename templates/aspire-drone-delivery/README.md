@@ -509,7 +509,5 @@ and production identity are subsequent work.
 Customer and operator clients already use the authoritative backend and scoped
 SignalR updates. Do not treat this preview as meeting deployment acceptance criteria.
 
-The [design](https://github.com/Azure/aspire-templates/blob/feature/drone-delivery/docs/drone-delivery/design.md) and
-[architecture](https://github.com/Azure/aspire-templates/blob/feature/drone-delivery/docs/drone-delivery/architecture.md) notes in the repository
-describe the proposed next steps. Those links refer to repository documentation,
-not files generated into a new application.
+The [design](docs/design.md) and [architecture](docs/architecture.md) notes
+describe the proposed next steps.

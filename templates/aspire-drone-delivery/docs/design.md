@@ -1,8 +1,7 @@
 # ForthCoffee design spike
 
 Status: first direction for maintainer review. This is a working UX experiment
-inside `templates/aspire-drone-delivery`, not a separate throwaway prototype.
-Delivery target: `feature/drone-delivery`; all merges remain human-controlled.
+built into this application, not a separate throwaway prototype.
 
 ## Outcome
 
