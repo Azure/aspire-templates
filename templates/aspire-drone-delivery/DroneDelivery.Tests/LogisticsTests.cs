@@ -18,15 +18,16 @@ public class LogisticsTests
 
         var climbing = leg.At(leg.ClimbDuration / 2);
         Assert.Equal((Manoeuvre.VerticalClimb, Store), (climbing.Manoeuvre, climbing.Position));
-        Assert.Equal((leg.Path.LaunchAltitude + leg.Path.CruiseAltitude) / 2, climbing.AltitudeMetres, 3);
+        Assert.Equal((leg.Path.LaunchAltitude + leg.Path.DepartureAltitude) / 2, climbing.AltitudeMetres, 3);
 
         var cruising = leg.At(leg.ClimbDuration + leg.CruiseDuration / 2);
-        Assert.Equal((Manoeuvre.Cruise, DroneSpec.CruiseAltitudeMetres), (cruising.Manoeuvre, cruising.AltitudeMetres));
+        Assert.Equal(Manoeuvre.Cruise, cruising.Manoeuvre);
+        Assert.InRange(cruising.AltitudeMetres, BuildingAirspace.MinimumEnRouteAltitudeMetres, leg.Path.PeakAltitude);
 
         var descending = leg.At(leg.Duration - leg.DescentDuration / 2);
         Assert.Equal(Manoeuvre.VerticalDescent, descending.Manoeuvre);
         Assert.InRange(descending.Position.DistanceTo(Customer), .01, leg.ApproachRadiusMetres);
-        Assert.InRange(descending.AltitudeMetres, leg.Path.LandingAltitude, leg.Path.CruiseAltitude);
+        Assert.InRange(descending.AltitudeMetres, leg.Path.LandingAltitude, leg.Path.PeakAltitude);
         Assert.Equal(Customer, leg.At(leg.Duration).Position);
         Assert.Equal((Manoeuvre.OnTheGround, leg.Path.LandingAltitude), (leg.At(leg.Duration).Manoeuvre, leg.At(leg.Duration).AltitudeMetres));
     }

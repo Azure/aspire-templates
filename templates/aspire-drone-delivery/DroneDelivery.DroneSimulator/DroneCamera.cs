@@ -78,7 +78,7 @@ public sealed class DroneCamera(
         if (lookingDown)
         {
             // Closer to the ground the scene is magnified.
-            var zoom = 1 + (DroneSpec.CruiseAltitudeMetres - drone.AltitudeMetres) / DroneSpec.CruiseAltitudeMetres * 2;
+            var zoom = 1 + (DroneSpec.ReferenceManoeuvreMetres - drone.AltitudeMetres) / DroneSpec.ReferenceManoeuvreMetres * 2;
             svg.Append("""<rect width="640" height="480" fill="#d9d2bf"/>""");
             svg.Append(Invariant($"""<g transform="translate(320 240) scale({zoom:0.00}) translate(-320 -240)">"""));
             for (var i = 0; i < 14; i++)

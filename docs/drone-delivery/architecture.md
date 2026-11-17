@@ -132,11 +132,19 @@ snapshot the capture-time pose, remain explicitly illustrative, and are not
 browser-canvas screenshots.
 
 `BuildingAirspace` embeds the camera's OSM footprint extract. It expands building
-bounding boxes by 6 m, checks complete segments at cruise altitude, and finds a
-visibility-graph detour when the direct leg is obstructed. Untagged buildings
+bounding boxes by 6 m and plans low-clearance flights. An A* search over tall-building
+corners weighs horizontal length against climb energy: each metre of vertical change
+costs about 2.3 m of level flight, derived from the drone's battery rates. Edges that
+cross terrain above the 120 m ceiling are blocked. The search is limited to 600 m of
+extra distance and is a heuristic, not a globally optimal 3D plan. A vertical profile
+sampled every 5 m then holds each part of the route at the required clearance (at
+least 20 m en route, plus 10 m over the start and end pads). It applies the climb
+gradient limit (vertical speed / cruise speed) forward and backward, then simplifies
+the profile without ever dropping below it. Tests check clearance continuously along
+the flown trajectory, including take-off and landing. Untagged buildings
 use a conservative 12 m envelope (the renderer's estimation ceiling).
-Pads in these envelopes sit above the roof; cruise is at least 60 m and higher
-when necessary to depart/approach a rooftop. An unsafe starting pose, an
+Pads in these envelopes sit above the roof. Battery estimates add the profile's
+total climb and descent to the horizontal distance. An unsafe starting pose, an
 unsurveyed endpoint or an impossible route produces an explicit routing failure,
 not a fabricated direct flight. The operator drawer exposes routing failures.
 

@@ -10,7 +10,7 @@ public enum DroneClass
 
 /// <param name="Bays">Payload bays; a drone can carry any payload that needs this many bays or fewer.</param>
 /// <param name="BatteryPerKm">Percentage of a full battery used per kilometre of cruise.</param>
-/// <param name="BatteryPerVerticalManoeuvre">Percentage used by one vertical climb or descent.</param>
+/// <param name="BatteryPerVerticalManoeuvre">Percentage used per <see cref="ReferenceManoeuvreMetres"/> climbed or descended.</param>
 /// <param name="ChargePerMinute">Percentage regained per minute on a charging pad.</param>
 public sealed record DroneSpec(
     DroneClass Class,
@@ -21,7 +21,8 @@ public sealed record DroneSpec(
     double BatteryPerVerticalManoeuvre,
     double ChargePerMinute)
 {
-    public const double CruiseAltitudeMetres = 60;
+    /// <summary>Vertical distance that <see cref="BatteryPerVerticalManoeuvre"/> is quoted for.</summary>
+    public const double ReferenceManoeuvreMetres = 60;
     public const double ReserveBatteryPercent = 15;
 
     public static readonly IReadOnlyList<DroneSpec> All =
@@ -34,6 +35,12 @@ public sealed record DroneSpec(
     public static DroneSpec For(DroneClass droneClass) => All.Single(spec => spec.Class == droneClass);
 
     public bool CanCarry(int payloadBays) => payloadBays <= Bays;
+
+    /// <summary>Steepest en-route climb or descent: full vertical speed while at cruise speed.</summary>
+    public double MaxClimbGradient => VerticalSpeedMetresPerSecond / CruiseSpeedMetresPerSecond;
+
+    /// <summary>Battery for one metre of climb, expressed as horizontal metres (about 2.2-2.4 for this fleet).</summary>
+    public double ClimbCostMetresPerMetre => BatteryPerVerticalManoeuvre / ReferenceManoeuvreMetres / (BatteryPerKm / 1000);
 
     public FlightLeg Leg(GeoPoint from, GeoPoint to) => new(this, from, to);
 }
@@ -62,39 +69,40 @@ public enum Manoeuvre
 }
 
 /// <summary>
-/// A building-clear route: vertical take-off, eased travel between waypoints, then a curved final approach
-/// that bends from cruise down onto the pad (or a vertical descent where a curve would not clear buildings).
+/// A building-clear route: vertical take-off, eased travel between turns while following the low-clearance altitude
+/// profile, then a curved final approach that bends down onto the pad (or a vertical descent where a curve would not clear buildings).
 /// </summary>
 public sealed record FlightLeg(DroneSpec Spec, GeoPoint From, GeoPoint To,
     double? InitialHeading = null, double? InitialAltitudeMetres = null, bool LandingOnly = false, BuildingAirspace? Airspace = null)
 {
-    public FlightPath Path { get; } = (Airspace ?? BuildingAirspace.Shared).Plan(From, To, InitialAltitudeMetres, LandingOnly);
+    public FlightPath Path { get; } = (Airspace ?? BuildingAirspace.Shared).Plan(From, To, InitialAltitudeMetres, LandingOnly,
+        Spec.ClimbCostMetresPerMetre, Spec.MaxClimbGradient);
     public double DistanceMetres => LandingOnly ? 0 : Path.DistanceMetres;
-    public TimeSpan VerticalDuration => TimeSpan.FromSeconds(DroneSpec.CruiseAltitudeMetres / Spec.VerticalSpeedMetresPerSecond);
     public TimeSpan ClimbDuration => LandingOnly ? TimeSpan.Zero :
-        TimeSpan.FromSeconds((Path.CruiseAltitude - Path.LaunchAltitude) / Spec.VerticalSpeedMetresPerSecond);
+        TimeSpan.FromSeconds((Path.DepartureAltitude - Path.LaunchAltitude) / Spec.VerticalSpeedMetresPerSecond);
     /// <summary>Time spent descending: along the approach curve, or straight down when there is none.</summary>
     public TimeSpan DescentDuration => Approach is { } approach ? TimeSpan.FromSeconds(approach.Duration) : VerticalDescentDuration;
     public TimeSpan CruiseDuration => TravelDuration - (Approach is { } approach ? TimeSpan.FromSeconds(approach.Duration) : TimeSpan.Zero);
     public TimeSpan Duration => ClimbDuration + TravelDuration + VerticalDescentDuration;
     public double BatteryPercent => DistanceMetres / 1000 * Spec.BatteryPerKm + Spec.BatteryPerVerticalManoeuvre *
-        (LandingOnly ? Path.LaunchAltitude - Path.LandingAltitude : 2 * Path.CruiseAltitude - Path.LaunchAltitude - Path.LandingAltitude) /
-        DroneSpec.CruiseAltitudeMetres;
+        (LandingOnly ? Path.LaunchAltitude - Path.LandingAltitude :
+            Path.DepartureAltitude - Path.LaunchAltitude + Path.VerticalVariationMetres + Path.ArrivalAltitude - Path.LandingAltitude) /
+        DroneSpec.ReferenceManoeuvreMetres;
     /// <summary>Horizontal distance from the pad at which the final approach starts curving down; 0 for a vertical descent.</summary>
     public double ApproachRadiusMetres => Approach?.Radius ?? 0;
     const double TurnSeconds = 3;
     const int ArcSteps = 48;
 
     TimeSpan VerticalDescentDuration => Approach is not null ? TimeSpan.Zero : TimeSpan.FromSeconds(
-        ((LandingOnly ? Path.LaunchAltitude : Path.CruiseAltitude) - Path.LandingAltitude) / Spec.VerticalSpeedMetresPerSecond);
+        ((LandingOnly ? Path.LaunchAltitude : Path.ArrivalAltitude) - Path.LandingAltitude) / Spec.VerticalSpeedMetresPerSecond);
     TimeSpan TravelDuration => LandingOnly ? TimeSpan.Zero : TimeSpan.FromSeconds(
         Segments.Sum(segment => segment.Motion.Duration) + Math.Max(0, Segments.Length - 1) * TurnSeconds);
 
     /// <summary>
-    /// Quarter ellipse in the vertical plane of the final segment: it leaves cruise level tangentially at
+    /// Quarter ellipse in the vertical plane of the final segment: it leaves the profile altitude at
     /// <see cref="Start"/> and meets the pad vertically, so the touchdown is still a VTOL landing.
     /// </summary>
-    sealed record ApproachCurve(GeoPoint Start, double Radius, double Drop, double Straight, double[] ArcLengths, double Duration)
+    sealed record ApproachCurve(GeoPoint Start, double StartDistance, double Radius, double Drop, double Straight, double[] ArcLengths, double Duration)
     {
         public double Length => Straight + ArcLengths[^1];
         public double AngleAt(double arcDistance)
@@ -115,16 +123,17 @@ public sealed record FlightLeg(DroneSpec Spec, GeoPoint From, GeoPoint To,
         {
             if (approachResolved) return approach;
             approachResolved = true;
-            var last = Path.Points.Count >= 2 ? Path.Points[^2].Position : To;
+            var last = Path.Turns.Count >= 2 ? Path.Turns[^2] : To;
             var length = last.DistanceTo(To);
-            var drop = Path.CruiseAltitude - Path.LandingAltitude;
-            if (LandingOnly || length < 10 || drop < 1) return null;
+            var arrivalDrop = Path.ArrivalAltitude - Path.LandingAltitude;
+            if (LandingOnly || length < 10 || arrivalDrop < 1) return null;
             var airspace = Airspace ?? BuildingAirspace.Shared;
             foreach (var scale in new[] { .6, .4, .25 })
             {
-                var radius = Math.Min(drop * scale, length * .8);
+                var radius = Math.Min(arrivalDrop * scale, length * .8);
                 if (radius < 4) break;
                 var start = To.Towards(last, radius / length);
+                var drop = Path.AltitudeAt(Path.DistanceMetres - radius) - Path.LandingAltitude;
                 var points = Enumerable.Range(0, ArcSteps + 1).Select(i =>
                 {
                     var angle = Math.PI / 2 * i / ArcSteps;
@@ -139,6 +148,7 @@ public sealed record FlightLeg(DroneSpec Spec, GeoPoint From, GeoPoint To,
                     arc[i] = arc[i - 1] + Math.Sqrt(Math.Pow(points[i].Position.DistanceTo(points[i - 1].Position), 2) +
                         Math.Pow(points[i].AltitudeMetres - points[i - 1].AltitudeMetres, 2));
                 var straight = length - radius;
+                var top = Path.DistanceMetres - radius;
                 var motion = new TravelMotion(straight + arc[^1], Spec.CruiseSpeedMetresPerSecond);
                 double lo = 0, hi = motion.Duration;
                 for (var i = 0; i < 40; i++)
@@ -146,7 +156,7 @@ public sealed record FlightLeg(DroneSpec Spec, GeoPoint From, GeoPoint To,
                     var mid = (lo + hi) / 2;
                     if (motion.At(mid).Fraction * motion.Distance < straight) lo = mid; else hi = mid;
                 }
-                return approach = new(start, radius, drop, straight, arc, motion.Duration - hi);
+                return approach = new(start, top, radius, drop, straight, arc, motion.Duration - hi);
             }
             return null;
         }
@@ -164,15 +174,30 @@ public sealed record FlightLeg(DroneSpec Spec, GeoPoint From, GeoPoint To,
                 var angle = Math.PI / 2 * i / 12;
                 return new FlightWaypoint(curve.Start.Towards(To, Math.Sin(angle)), Path.LandingAltitude + curve.Drop * Math.Cos(angle));
             });
-            return [new(From, Path.LaunchAltitude), .. Path.Points.Take(Path.Points.Count - 1), new(curve.Start, Path.CruiseAltitude), .. arc, new(To, Path.LandingAltitude)];
+            var before = Path.Points.Where((_, i) => Path.PointDistances[i] < curve.StartDistance - .01);
+            return [new(From, Path.LaunchAltitude), .. before, new(curve.Start, Path.LandingAltitude + curve.Drop), .. arc, new(To, Path.LandingAltitude)];
         }
     }
 
-    (GeoPoint From, GeoPoint To, TravelMotion Motion)[]? segments;
-    (GeoPoint From, GeoPoint To, TravelMotion Motion)[] Segments => segments ??= Path.Points.Zip(Path.Points.Skip(1),
-        (a, b) => (a.Position, b.Position)).Select((pair, i) => (pair.Item1, pair.Item2, new TravelMotion(
-            i == Path.Points.Count - 2 && Approach is { } curve ? curve.Length : pair.Item1.DistanceTo(pair.Item2),
-            Spec.CruiseSpeedMetresPerSecond))).ToArray();
+    (GeoPoint From, GeoPoint To, double Along, TravelMotion Motion)[]? segments;
+    (GeoPoint From, GeoPoint To, double Along, TravelMotion Motion)[] Segments
+    {
+        get
+        {
+            if (segments is not null) return segments;
+            var turns = Path.Turns;
+            var list = new List<(GeoPoint, GeoPoint, double, TravelMotion)>();
+            double along = 0;
+            for (var i = 0; i + 1 < turns.Count; i++)
+            {
+                var length = turns[i].DistanceTo(turns[i + 1]);
+                list.Add((turns[i], turns[i + 1], along, new TravelMotion(
+                    i == turns.Count - 2 && Approach is { } curve ? curve.Length : length, Spec.CruiseSpeedMetresPerSecond)));
+                along += length;
+            }
+            return segments = list.ToArray();
+        }
+    }
 
     public FlightSample At(TimeSpan elapsed)
     {
@@ -185,7 +210,7 @@ public sealed record FlightLeg(DroneSpec Spec, GeoPoint From, GeoPoint To,
         var turn = Math.Clamp(t / Math.Max(1, vertical > 0 ? vertical : 4), 0, 1);
         var heading = Turn(InitialHeading ?? firstBearing, firstBearing, Smooth(turn));
         if (t < vertical)
-            return Sample(From, Path.LaunchAltitude + (Path.CruiseAltitude - Path.LaunchAltitude) * t / vertical,
+            return Sample(From, Path.LaunchAltitude + (Path.DepartureAltitude - Path.LaunchAltitude) * t / vertical,
                 Manoeuvre.VerticalClimb, heading, -90 + 60 * Math.Clamp((t / vertical - .75) * 4, 0, 1), Math.Sin(Math.PI * t / vertical));
         if (!LandingOnly && t < vertical + travel)
         {
@@ -198,7 +223,7 @@ public sealed record FlightLeg(DroneSpec Spec, GeoPoint From, GeoPoint To,
                 if (i > 0)
                 {
                     if (legTime < TurnSeconds)
-                        return Sample(segment.From, Path.CruiseAltitude, Manoeuvre.Cruise,
+                        return Sample(segment.From, Path.AltitudeAt(segment.Along), Manoeuvre.Cruise,
                             Turn(incoming, bearing, Smooth(legTime / TurnSeconds)), -30, .35 * Math.Sin(Math.PI * legTime / TurnSeconds));
                     legTime -= TurnSeconds;
                 }
@@ -210,14 +235,15 @@ public sealed record FlightLeg(DroneSpec Spec, GeoPoint From, GeoPoint To,
                     {
                         var distance = fraction * curve.Length;
                         if (distance < curve.Straight)
-                            return Sample(segment.From.Towards(curve.Start, distance / curve.Straight), Path.CruiseAltitude,
+                            return Sample(segment.From.Towards(curve.Start, distance / curve.Straight), Path.AltitudeAt(segment.Along + distance),
                                 Manoeuvre.Cruise, yaw, -30, Math.Min(1, speed / 3), speed);
                         var angle = curve.AngleAt(distance - curve.Straight);
                         return Sample(curve.Start.Towards(To, Math.Sin(angle)), Path.LandingAltitude + curve.Drop * Math.Cos(angle),
                             Manoeuvre.VerticalDescent, yaw, -30 - 60 * Smooth(Math.Clamp(angle / (Math.PI / 3), 0, 1)),
                             Math.Min(1, speed / 3), speed);
                     }
-                    return Sample(segment.From.Towards(segment.To, fraction), Path.CruiseAltitude, Manoeuvre.Cruise,
+                    return Sample(segment.From.Towards(segment.To, fraction),
+                        Path.AltitudeAt(segment.Along + fraction * segment.From.DistanceTo(segment.To)), Manoeuvre.Cruise,
                         yaw, -30, Math.Min(1, speed / 3), speed);
                 }
                 legTime -= segment.Motion.Duration;

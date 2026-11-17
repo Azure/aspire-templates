@@ -39,10 +39,12 @@ public class FlightRoutingTests
         var airspace = new BuildingAirspace([Block(140, -40, 220, 40, 90)]);
         Assert.False(airspace.SegmentClear(Point(0), Point(400), 60));
         var leg = new FlightLeg(Spec, Point(0), Point(400), Airspace: airspace);
-        Assert.True(leg.Path.Points.Count > 2);
+        Assert.True(leg.Path.Turns.Count > 2);
         Assert.True(leg.DistanceMetres > Point(0).DistanceTo(Point(400)));
+        // Detouring ~14 m is far cheaper than climbing ~76 m and back down, so the drone stays low.
+        Assert.True(leg.Path.PeakAltitude < 30);
         foreach (var (a, b) in leg.Path.Points.Zip(leg.Path.Points.Skip(1)))
-            Assert.True(airspace.SegmentClear(a.Position, b.Position, a.AltitudeMetres));
+            Assert.True(airspace.SegmentClear(a.Position, b.Position, Math.Min(a.AltitudeMetres, b.AltitudeMetres)));
         for (double t = 0; t < leg.Duration.TotalSeconds; t += .1)
         {
             var sample = leg.At(TimeSpan.FromSeconds(t));
@@ -57,7 +59,7 @@ public class FlightRoutingTests
     {
         var airspace = new BuildingAirspace([Block(140, -40, 220, 40, 20)]);
         var direct = airspace.Plan(Point(0), Point(400));
-        Assert.Equal(2, direct.Points.Count);
+        Assert.Equal(2, direct.Turns.Count);
         var leg = new FlightLeg(Spec, Point(180), Point(400), Airspace: airspace);
         Assert.Equal(26, leg.At(TimeSpan.Zero).AltitudeMetres);
         Assert.Equal(Point(180), leg.At(leg.ClimbDuration / 2).Position);
@@ -104,9 +106,9 @@ public class FlightRoutingTests
     public void Coventry_to_north_service_area_detours_around_the_real_osm_towers()
     {
         var leg = Spec.Leg(ServiceArea.Stores[0].Location, new(-37.8261, 144.9580));
-        Assert.True(leg.Path.Points.Count > 2);
-        Assert.All(leg.Path.Points.Zip(leg.Path.Points.Skip(1)),
-            pair => Assert.True(BuildingAirspace.Shared.SegmentClear(pair.First.Position, pair.Second.Position, leg.Path.CruiseAltitude)));
+        Assert.True(leg.Path.Turns.Count > 2);
+        Assert.All(leg.Path.Points.Zip(leg.Path.Points.Skip(1)), pair => Assert.True(BuildingAirspace.Shared.SegmentClear(
+            pair.First.Position, pair.Second.Position, Math.Min(pair.First.AltitudeMetres, pair.Second.AltitudeMetres))));
     }
 
     [Fact]
@@ -118,18 +120,19 @@ public class FlightRoutingTests
         for (var i = 0; i < 30; i++)
         {
             var leg = Spec.Leg(ServiceArea.RandomPoint(random), ServiceArea.RandomPoint(random));
-            foreach (var (a, b) in leg.Path.Points.Zip(leg.Path.Points.Skip(1)))
-                Assert.True(airspace.SegmentClear(a.Position, b.Position, a.AltitudeMetres));
+            AssertRouteClearance(airspace, leg.Path.Points);
+            AssertFlownClearance(airspace, leg);
         }
     }
 
     [Fact]
-    public void Final_approach_curves_from_cruise_onto_the_pad_and_touches_down_vertically()
+    public void Final_approach_curves_from_the_route_onto_the_pad_and_touches_down_vertically()
     {
         var leg = new FlightLeg(Spec, Point(0), Point(400), Airspace: BuildingAirspace.Empty);
-        Assert.InRange(leg.ApproachRadiusMetres, 20, 40);
+        // Low-clearance arrival (20 m floor onto a ground pad) still bends down a ~12 m radius curve.
+        Assert.Equal(.6 * (leg.Path.ArrivalAltitude - leg.Path.LandingAltitude), leg.ApproachRadiusMetres, 3);
         var start = leg.Duration - leg.DescentDuration;
-        double lastAltitude = leg.Path.CruiseAltitude, lastDistance = double.MaxValue;
+        double lastAltitude = leg.Path.PeakAltitude, lastDistance = double.MaxValue;
         for (var t = start; t <= leg.Duration; t += TimeSpan.FromSeconds(.1))
         {
             var sample = leg.At(t);
@@ -139,8 +142,8 @@ public class FlightRoutingTests
             lastAltitude = sample.AltitudeMetres;
             lastDistance = distance;
         }
-        // Halfway down the drone is still well off to the side; the last metres are effectively vertical.
-        Assert.True(leg.At(start + leg.DescentDuration / 3).Position.DistanceTo(Point(400)) > 5);
+        // A third of the way down the drone is still off to the side; the last metres are effectively vertical.
+        Assert.True(leg.At(start + leg.DescentDuration / 3).Position.DistanceTo(Point(400)) > 1);
         var flare = leg.At(leg.Duration - TimeSpan.FromSeconds(.5));
         Assert.True(flare.Position.DistanceTo(Point(400)) < .3 && flare.AltitudeMetres > leg.Path.LandingAltitude);
         Assert.Equal(-90, flare.CameraPitchDegrees, 3);
@@ -150,12 +153,12 @@ public class FlightRoutingTests
     [Fact]
     public void Approach_falls_back_to_vertical_descent_when_a_curve_would_clip_a_building()
     {
-        // A tower right beside the pad: cruise clears it, but any sloped approach would not.
-        var airspace = new BuildingAirspace([Block(388, -20, 392, 20, 40)]);
+        // A mid-rise right beside the pad: worth climbing over rather than detouring, but any sloped approach would clip it.
+        var airspace = new BuildingAirspace([Block(388, -20, 392, 20, 25)]);
         var leg = new FlightLeg(Spec, Point(0), Point(400), Airspace: airspace);
         Assert.Equal(0, leg.ApproachRadiusMetres);
         Assert.Equal(Point(400), leg.At(leg.Duration - leg.DescentDuration / 2).Position);
-        Assert.Equal([leg.Path.CruiseAltitude, leg.Path.LandingAltitude], leg.PlannedRoute.Where(waypoint => waypoint.Position == Point(400)).Select(waypoint => waypoint.AltitudeMetres));
+        Assert.Equal([leg.Path.ArrivalAltitude, leg.Path.LandingAltitude], leg.PlannedRoute.Where(waypoint => waypoint.Position == Point(400)).Select(waypoint => waypoint.AltitudeMetres));
     }
 
     [Fact]
@@ -176,6 +179,74 @@ public class FlightRoutingTests
                 Assert.True(DistanceToRoute(route, sample.Position, sample.AltitudeMetres) < 1.5, $"{pad.Id} drifted at {t}");
             }
             Assert.Equal(pad.Location, leg.At(leg.Duration).Position);
+        }
+    }
+
+    [Fact]
+    public void Low_roofs_are_crossed_a_few_metres_above_instead_of_at_a_fixed_cruise_altitude()
+    {
+        var airspace = new BuildingAirspace([Block(140, -40, 220, 40, 20)]);
+        var leg = new FlightLeg(Spec, Point(0), Point(400), Airspace: airspace);
+        Assert.Equal(2, leg.Path.Turns.Count);
+        Assert.Equal(BuildingAirspace.MinimumEnRouteAltitudeMetres, leg.Path.DepartureAltitude);
+        Assert.InRange(leg.Path.PeakAltitude, 26, 28.01);
+        Assert.InRange(leg.Path.AltitudeAt(40), 20, 21);
+        Assert.InRange(leg.Path.AltitudeAt(180), 26, 28.01);
+        AssertFlownClearance(airspace, leg);
+    }
+
+    [Fact]
+    public void A_long_mid_rise_wall_is_climbed_over_when_the_detour_would_cost_more_energy()
+    {
+        var airspace = new BuildingAirspace([Block(140, -500, 220, 500, 40)]);
+        var leg = new FlightLeg(Spec, Point(0), Point(400), Airspace: airspace);
+        Assert.Equal(2, leg.Path.Turns.Count);
+        Assert.InRange(leg.Path.PeakAltitude, 46, 48.01);
+        Assert.True(leg.Path.AltitudeAt(20) < 30 && leg.Path.AltitudeAt(380) < 46);
+        AssertFlownClearance(airspace, leg);
+    }
+
+    [Fact]
+    public void Clearance_is_continuous_through_take_off_climbs_descents_and_landing()
+    {
+        // Launch from one low roof, climb over a mid-rise, dip, and land on another roof.
+        var airspace = new BuildingAirspace([Block(-10, -10, 10, 10, 15), Block(120, -300, 160, 300, 34), Block(390, -10, 410, 10, 9)]);
+        var leg = new FlightLeg(Spec, Point(0), Point(400), Airspace: airspace);
+        Assert.True(leg.Path.PeakAltitude >= 40 && leg.Path.VerticalVariationMetres > 30);
+        AssertFlownClearance(airspace, leg);
+    }
+
+    /// <summary>Sloped segments are checked every half metre against the envelope directly below.</summary>
+    static void AssertRouteClearance(BuildingAirspace airspace, IReadOnlyList<FlightWaypoint> points)
+    {
+        foreach (var (a, b) in points.Zip(points.Skip(1)))
+        {
+            var steps = Math.Max(1, (int)Math.Ceiling(a.Position.DistanceTo(b.Position) / .5));
+            for (var k = 0; k <= steps; k++)
+            {
+                var position = a.Position.Towards(b.Position, (double)k / steps);
+                var altitude = a.AltitudeMetres + (b.AltitudeMetres - a.AltitudeMetres) * k / steps;
+                Assert.True(altitude >= airspace.ClearanceAltitude(position) - 1e-6);
+            }
+        }
+    }
+
+    /// <summary>Every flown sample clears the envelope under it, and the profile never exceeds the climb gradient.</summary>
+    static void AssertFlownClearance(BuildingAirspace airspace, FlightLeg leg)
+    {
+        for (var t = TimeSpan.Zero; t <= leg.Duration; t += TimeSpan.FromSeconds(.1))
+        {
+            var sample = leg.At(t);
+            Assert.True(sample.AltitudeMetres >= airspace.ClearanceAltitude(sample.Position) - 1e-6,
+                $"{sample.AltitudeMetres:F1} m is below clearance {airspace.ClearanceAltitude(sample.Position):F1} m at {t}");
+        }
+        var points = leg.Path.Points;
+        for (var i = 1; i < points.Count; i++)
+        {
+            var run = leg.Path.PointDistances[i] - leg.Path.PointDistances[i - 1];
+            if (run > .01)
+                Assert.True(Math.Abs(points[i].AltitudeMetres - points[i - 1].AltitudeMetres) <= leg.Spec.MaxClimbGradient * run + .01,
+                    $"{points[i - 1].AltitudeMetres:F2} -> {points[i].AltitudeMetres:F2} over {run:F2} m at {i}/{points.Count}");
         }
     }
 

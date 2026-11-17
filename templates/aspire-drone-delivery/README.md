@@ -177,12 +177,18 @@ Reduced-motion preferences suppress camera pitch/roll wobble.
 
 The shared domain planner embeds the same bundled OSM building extract as the
 camera. It checks whole route segments against conservative building bounding
-boxes, with 6 m clearance, and uses a visibility graph to detour around tall
-buildings. Low buildings can be overflown. For clearance only, missing heights
+boxes, with 6 m clearance. Drones skim rooftops: the altitude profile stays a few
+metres above whatever lies under each part of the route (minimum 20 m en route), so
+it rises over taller roofs and drops back afterwards. For tall buildings the planner
+compares climbing over against detouring around, using an energy cost where each metre
+of climb or descent counts as about 2.3 metres of level flight (from the drone's
+battery rates). It picks the cheaper of the two. This is a heuristic search, not a
+globally optimal 3D planner. For clearance only, missing heights
 are conservatively treated as the renderer's 12 m estimation ceiling. Pickup
 locations, home pads and drop-offs inside or very close to a footprint are rooftop
 pads above its clearance envelope; buildings are no longer hidden around a drone.
-Cruise is at least 60 m, or higher when a rooftop requires it. Normal flights and
+Climbs and descents are limited to the drone's vertical-to-cruise speed ratio, and
+legs never go above 120 m. Normal flights and
 operator diversions use this same planner; emergency landing descends to the safe
 pad altitude below the current position. Unsurveyed or blocked routes are refused
 explicitly and reported in order notes or the operator drawer, without a
@@ -409,7 +415,7 @@ Each store has four landing pads, 9 m apart on one shared deck. The drone simula
 reserves a pad before a drone leaves for pickup, so no two drones hold the same pad. A
 pad is released once its drone is 8 m clear. If every pad is taken, the drone waits,
 charging on its home pad, until one frees up. Legs end with a curved approach: the
-drone leaves cruise altitude on a quarter-ellipse and touches down vertically on its
+drone leaves its en-route altitude on a quarter-ellipse and touches down vertically on its
 pad. The approach falls back to a straight vertical descent when the curve would clip
 a building. The camera tunnel and both maps draw this same planned route, so they end
 on the assigned pad.
