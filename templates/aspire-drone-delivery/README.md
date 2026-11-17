@@ -60,6 +60,26 @@ mission marks its active order **unable to complete**, not Delivered; queued ord
 are released for reassignment. Previously delivered orders stay delivered.
 The waste point is fictional (`GET /api/waste`). All controls affect only the
 simulator: this is not a real flight-control or collision-avoidance system.
+
+**Take control** (drawer, airborne drones on a flight leg with no command pending)
+floats the camera feed to the centre of the screen and suspends autonomous flight in
+the simulator. Controls: **W/S** forward/back, **A/D** strafe, **Q/E** yaw,
+**Space/Shift** up/down, mouse over the feed to look (slightly above the horizon to
+straight down, left/right). Roll and pitch bank automatically and braking arrests
+momentum. A Web Audio synthesized motor sound plays while flying. **Esc** offers
+*Resume previous programming* (replan from the current position) or *Cancel and
+return to base* (the active order becomes unable to complete).
+
+Inputs are posted to `POST /api/fleet/{id}/manual/input` at 10 Hz (and on key
+change); `POST /api/fleet/{id}/manual` takes, resumes or returns to base. The
+simulator owns the authoritative state and still enforces building clearance,
+altitude limits and the service area. Telemetry is about 1 Hz, so the browser
+predicts locally with the same model and reconciles. Released keys, window blur or
+a hidden tab zero the input. If inputs stop for 1 s the drone hovers; after 30 s
+without a link it resumes its previous programming. Take control needs a keyboard
+and is not offered on the ground or during commands; reaching battery reserve
+ends control and returns to base.
+
 On the ground, drones retain their arrival heading; the next ascent turns by the
 shortest arc toward the new leg. Airborne diversions start at the actual altitude
 and blend their turn. The camera looks down during vertical flight, tilting forward

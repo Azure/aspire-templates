@@ -72,6 +72,9 @@ public sealed class Dispatcher
     readonly Dictionary<string, OrderView> orders = [];
     readonly Dictionary<string, OrderView> byMission = [];
     readonly Dictionary<string, string> pendingCommands = [];
+    // Takeovers accepted here but not yet confirmed by telemetry; they stop a second operator racing the first.
+    readonly Dictionary<string, (string SessionId, DateTimeOffset At)> manualClaims = [];
+    static readonly TimeSpan ManualClaimLifetime = TimeSpan.FromSeconds(10);
     readonly HashSet<string> changed = new(StringComparer.Ordinal);
 
     /// <summary>How long a restored mission may be overdue before it's treated as lost by a restarted simulator.</summary>
@@ -99,6 +102,9 @@ public sealed class Dispatcher
             if (telemetry.Control is { Status: CommandStatus.Completed or CommandStatus.Rejected } control &&
                 pendingCommands.GetValueOrDefault(telemetry.DroneId) == control.CommandId)
                 pendingCommands.Remove(telemetry.DroneId);
+            if (manualClaims.TryGetValue(telemetry.DroneId, out var claim) && telemetry.Timestamp > claim.At &&
+                telemetry.Manual is { Status: ManualStatus.Released or ManualStatus.Rejected } ended && ended.SessionId == claim.SessionId)
+                manualClaims.Remove(telemetry.DroneId);
             // A drone with no committed work is free now, wherever its telemetry says it is.
             if (outstanding.GetValueOrDefault(telemetry.DroneId) == 0 && telemetry.Manoeuvre == Manoeuvre.OnTheGround &&
                 telemetry.State is DroneState.Parked or DroneState.Charging)
@@ -357,6 +363,71 @@ public sealed class Dispatcher
             }
             return false;
         }
+    }
+
+    /// <summary>
+    /// Validates an operator's take/resume/cancel-and-RTB request. Only one session may fly a drone; takeover needs fresh
+    /// telemetry of an airborne drone on an autonomous leg with no command pending or executing.
+    /// </summary>
+    public bool TryBeginManual(ManualControlRequested request, DateTimeOffset now, out string error)
+    {
+        lock (gate)
+        {
+            error = "";
+            if (!fleet.TryGetValue(request.DroneId, out var drone))
+                error = "Drone not found.";
+            else if (now - drone.Timestamp > TimeSpan.FromSeconds(30))
+                error = "Waiting for current drone telemetry.";
+            else if (ManualHolder(drone, now) is { } holder && holder != request.SessionId)
+                error = "Another operator is flying this drone.";
+            else if (request.Action == ManualAction.Take)
+            {
+                if (ManualHolder(drone, now) == request.SessionId)
+                    return true;
+                if (pendingCommands.ContainsKey(drone.DroneId) || drone.Control is { Status: CommandStatus.Executing })
+                    error = "A command is in progress.";
+                else if (drone.Manoeuvre == Manoeuvre.OnTheGround ||
+                    drone.State is not (DroneState.FlyingToPickup or DroneState.FlyingToCustomer or DroneState.ReturningToPad))
+                    error = "Take control is available while the drone is airborne on a delivery or return flight.";
+                else
+                    manualClaims[drone.DroneId] = (request.SessionId, now);
+            }
+            else if (ManualHolder(drone, now) is null)
+                error = "This session is not flying the drone.";
+            else if (request.Action == ManualAction.ReturnToBase)
+            {
+                if (pendingCommands.ContainsKey(drone.DroneId))
+                    error = "A command is in progress.";
+                else
+                    pendingCommands[drone.DroneId] = request.RequestId;
+            }
+            return error.Length == 0;
+        }
+    }
+
+    /// <summary>True when <paramref name="sessionId"/> currently holds manual control of the drone.</summary>
+    public bool IsFlying(string droneId, string sessionId, DateTimeOffset now)
+    {
+        lock (gate)
+            return fleet.TryGetValue(droneId, out var drone) && ManualHolder(drone, now) == sessionId;
+    }
+
+    public void CancelManual(ManualControlRequested request)
+    {
+        lock (gate)
+        {
+            if (request.Action == ManualAction.Take && manualClaims.GetValueOrDefault(request.DroneId).SessionId == request.SessionId)
+                manualClaims.Remove(request.DroneId);
+            if (pendingCommands.GetValueOrDefault(request.DroneId) == request.RequestId)
+                pendingCommands.Remove(request.DroneId);
+        }
+    }
+
+    string? ManualHolder(DroneTelemetry drone, DateTimeOffset now)
+    {
+        if (drone.Manual is { Status: ManualStatus.Active or ManualStatus.LinkLost } manual)
+            return manual.SessionId;
+        return manualClaims.TryGetValue(drone.DroneId, out var claim) && now - claim.At < ManualClaimLifetime ? claim.SessionId : null;
     }
 
     public void CancelPendingCommand(DroneCommandRequested command)

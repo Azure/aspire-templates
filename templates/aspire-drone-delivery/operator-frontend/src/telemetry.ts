@@ -37,7 +37,7 @@ export async function startTelemetry() {
   });
   provider.register();
   registerInstrumentations({
-    instrumentations: [new FetchInstrumentation({ ignoreUrls: [/\/otlp\//, /tile\.openstreetmap\.org/] })],
+    instrumentations: [new FetchInstrumentation({ ignoreUrls: [/\/otlp\//, /tile\.openstreetmap\.org/, /\/manual\/input$/] })],
   });
 }
 

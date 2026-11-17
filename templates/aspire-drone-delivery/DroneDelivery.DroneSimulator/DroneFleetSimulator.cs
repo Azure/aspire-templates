@@ -42,6 +42,16 @@ public sealed class DroneFleetSimulator(
                 else
                     logger.LogWarning("Command {CommandId} is for unknown drone {DroneId}", command.CommandId, command.DroneId);
             }
+            else if (data.TryRead<ManualControlInput>(out var input))
+            {
+                if (fleet.TryGetValue(input.DroneId, out var flown))
+                    flown.Receive(input, time.GetUtcNow());
+            }
+            else if (data.TryRead<ManualControlRequested>(out var manual))
+            {
+                if (fleet.TryGetValue(manual.DroneId, out var piloted))
+                    piloted.ManualRequests.Enqueue((manual, Activity.Current?.Context ?? default));
+            }
             else if (data.TryRead<MissionAssigned>(out var mission))
             {
                 if (fleet.TryGetValue(mission.DroneId, out var drone))
@@ -218,10 +228,25 @@ public sealed class DroneFleetSimulator(
         var startBattery = drone.BatteryPercent;
         var previous = Manoeuvre.OnTheGround;
         var lastPhoto = start;
+        drone.InFlightLeg = true;
+        try
+        {
         while (true)
         {
             if (drone.Control is not { Status: CommandStatus.Executing })
                 InterruptIfRequested(drone);
+            if (NextTakeover(drone) is { } takeover)
+            {
+                await ManualAsync(drone, takeover.Request, takeover.Trace, cancellationToken);
+                // Cancel-and-RTB queued a ReturnToBase command; otherwise resume the leg from wherever the operator left the drone.
+                InterruptIfRequested(drone);
+                leg = LegFromPose(drone, leg.To);
+                drone.PlannedRoute = leg.PlannedRoute;
+                start = lastPhoto = time.GetUtcNow();
+                startBattery = drone.BatteryPercent;
+                previous = Manoeuvre.Cruise;
+                continue;
+            }
             var now = time.GetUtcNow();
             var skip = drone.Mission is { } mission && (state switch
             {
@@ -261,6 +286,136 @@ public sealed class DroneFleetSimulator(
             if (elapsed >= leg.Duration)
                 return;
             await Task.Delay(Tick, time, cancellationToken);
+        }
+        }
+        finally { drone.InFlightLeg = false; }
+    }
+
+    /// <summary>Returns a takeover the drone can accept now, rejecting any it cannot (on the ground or executing a command).</summary>
+    (ManualControlRequested Request, ActivityContext Trace)? NextTakeover(SimulatedDrone drone)
+    {
+        while (drone.ManualRequests.TryDequeue(out var queued))
+        {
+            var request = queued.Request;
+            // Resume/RTB outside manual control are stale (e.g. a duplicate after the session already ended).
+            if (request.Action != ManualAction.Take || !drone.ProcessedCommands.Add(ManualKey(request.RequestId)))
+                continue;
+            var reason = !drone.InFlightLeg || drone.Manoeuvre == Manoeuvre.OnTheGround ? "Take control is available while the drone is airborne."
+                : drone.Control is { Status: CommandStatus.Executing } ? "A command is in progress."
+                : null;
+            if (reason is null)
+                return queued;
+            drone.Manual = new(request.SessionId, ManualStatus.Rejected, 0, 0, 0, reason);
+            logger.LogWarning("Manual control of {DroneId} rejected: {Reason}", drone.Id, reason);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Flies the drone from the operator's stick inputs until they resume programming or cancel and return to base.
+    /// Missing inputs brake to a hover; after <see cref="ManualFlight.LinkLossResume"/> without the operator's link the
+    /// previous programming resumes. Operator commands (e.g. emergency landing) still interrupt manual flight.
+    /// </summary>
+    async Task ManualAsync(SimulatedDrone drone, ManualControlRequested take, ActivityContext trace, CancellationToken cancellationToken)
+    {
+        using var activity = Tracing.Start("drone manual control", trace,
+            links: drone.Mission is null ? [] : [new ActivityLink(drone.MissionTrace)])
+            ?.SetTag("drone_delivery.drone.id", drone.Id).SetTag("drone_delivery.manual.request.id", take.RequestId);
+        logger.LogInformation("Operator took manual control of {DroneId}", drone.Id);
+        var flight = new ManualFlight(drone.Spec, drone.Position, drone.AltitudeMetres, drone.Heading);
+        var now = time.GetUtcNow();
+        var (lastStep, lastInput, lastReport, lastPhoto) = (now, now, DateTimeOffset.MinValue, now);
+        var sticks = ManualInput.Hover;
+        long acknowledged = 0;
+        double applied = 0;
+        var battery = drone.BatteryPercent;
+        var outcome = "Operator released control; resumed previous programming.";
+        drone.PlannedRoute = null;
+        drone.Manual = new(take.SessionId, ManualStatus.Active, 0, 0, 0, "Operator in control");
+        try
+        {
+            while (true)
+            {
+                InterruptIfRequested(drone);
+                now = time.GetUtcNow();
+                ManualAction? ending = null;
+                string? endingId = null;
+                while (drone.ManualRequests.TryDequeue(out var queued))
+                    if (queued.Request.SessionId == take.SessionId && queued.Request.Action != ManualAction.Take &&
+                        drone.ProcessedCommands.Add(ManualKey(queued.Request.RequestId)))
+                    {
+                        (ending, endingId) = (queued.Request.Action, queued.Request.RequestId);
+                        if (ending == ManualAction.ReturnToBase)
+                            outcome = "Operator cancelled programming; returning to base.";
+                    }
+                if (drone.LatestInput(take.SessionId) is { } latest && latest.Input.Sequence > acknowledged)
+                {
+                    (acknowledged, sticks, lastInput, applied) = (latest.Input.Sequence, latest.Input.Input.Clamped(), latest.ReceivedAt, 0);
+                }
+                var silent = now - lastInput;
+                if (ending is null && silent >= ManualFlight.LinkLossResume)
+                {
+                    ending = ManualAction.Resume;
+                    outcome = $"Operator link lost for {ManualFlight.LinkLossResume.TotalSeconds:0} s; resumed previous programming.";
+                }
+                if (ending is null && now - lastReport >= Tick && battery - drone.Spec.Leg(drone.Position, drone.HomePad).BatteryPercent <= DroneSpec.ReserveBatteryPercent)
+                {
+                    (ending, endingId) = (ManualAction.ReturnToBase, Guid.NewGuid().ToString("N"));
+                    outcome = "Battery reserve reached; returning to base.";
+                }
+                if (ending == ManualAction.ReturnToBase)
+                    drone.Commands.Enqueue((new DroneCommandRequested(endingId!, drone.Id, DroneCommand.ReturnToBase), trace));
+                if (ending is not null)
+                    return;
+
+                var lost = silent > ManualFlight.InputTimeout;
+                var input = lost ? ManualInput.Hover with { CameraPitchDegrees = sticks.CameraPitchDegrees, CameraYawDegrees = sticks.CameraYawDegrees } : sticks;
+                var dt = Math.Clamp((now - lastStep).TotalSeconds, 0, .25);
+                lastStep = now;
+                flight.Step(input, dt, BuildingAirspace.Shared);
+                applied += dt;
+                battery = Math.Max(0, battery - flight.HorizontalMetres / 1000 * drone.Spec.BatteryPerKm
+                    - flight.VerticalMetres / DroneSpec.ReferenceManoeuvreMetres * drone.Spec.BatteryPerVerticalManoeuvre);
+                flight.ResetDistance();
+                drone.Position = flight.Position;
+                drone.AltitudeMetres = flight.Altitude;
+                drone.Heading = flight.Heading;
+                drone.PitchDegrees = flight.Pitch;
+                drone.RollDegrees = flight.Roll;
+                drone.SpeedMetresPerSecond = flight.Speed;
+                drone.CameraPitchDegrees = flight.CameraPitch;
+                drone.CameraYawDegrees = flight.CameraYaw;
+                drone.Manoeuvre = Manoeuvre.Cruise;
+                drone.BatteryPercent = battery;
+                if (now - lastReport >= Tick)
+                {
+                    drone.Manual = new(take.SessionId, lost ? ManualStatus.LinkLost : ManualStatus.Active, acknowledged, Math.Round(applied, 3),
+                        lost ? Math.Round(silent.TotalSeconds, 1) : 0,
+                        lost ? $"Operator link lost; hovering. Resuming previous programming in {Math.Max(0, ManualFlight.LinkLossResume.TotalSeconds - silent.TotalSeconds):0} s."
+                            : "Operator in control");
+                    await ReportAsync(drone, cancellationToken);
+                    lastReport = now;
+                }
+                if (now - lastPhoto >= options.CruisePhotoInterval)
+                {
+                    camera.CaptureFrame(drone, PhotoTrigger.Cruise, false, now);
+                    lastPhoto = now;
+                }
+                await Task.Delay(TimeSpan.FromSeconds(ManualFlight.StepSeconds), time, cancellationToken);
+            }
+        }
+        catch (CommandPendingException)
+        {
+            outcome = "An operator command took over from manual control.";
+            throw;
+        }
+        finally
+        {
+            drone.CameraYawDegrees = 0;
+            drone.Manual = (drone.Manual ?? new(take.SessionId, ManualStatus.Active, 0, 0, 0, "")) with
+                { Status = ManualStatus.Released, Acknowledged = acknowledged, LinkLostSeconds = 0, Message = outcome };
+            activity?.SetTag("drone_delivery.manual.outcome", outcome);
+            logger.LogInformation("Manual control of {DroneId} ended: {Outcome}", drone.Id, outcome);
         }
     }
 
@@ -317,6 +472,9 @@ public sealed class DroneFleetSimulator(
 
     static FlightLeg LegFromPose(SimulatedDrone drone, GeoPoint target) =>
         new(drone.Spec, drone.Position, target, drone.Heading, drone.AltitudeMetres);
+
+    // Manual requests share the dedupe set with commands; a cancel-and-RTB request's id becomes its ReturnToBase command id.
+    static string ManualKey(string requestId) => "manual:" + requestId;
 
     static void InterruptIfRequested(SimulatedDrone drone)
     {
@@ -428,6 +586,8 @@ public sealed class DroneFleetSimulator(
     // Position readings go out every second per drone, so they are not traced; legs and milestones are.
     Task ReportAsync(SimulatedDrone drone, CancellationToken cancellationToken)
     {
+        if (!drone.InFlightLeg)
+            NextTakeover(drone);
         // A pad is freed only once its drone is physically clear: after departing, or after being diverted elsewhere.
         if (drone.Pad is { } pad && drone.State is not (DroneState.FlyingToPickup or DroneState.Loading) &&
             pads.ReleaseIfClear(drone.Id, pad, drone.Position))

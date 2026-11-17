@@ -33,12 +33,33 @@ public sealed class SimulatedDrone(string id, DroneSpec spec, GeoPoint homePad, 
     public ConcurrentQueue<MissionAssigned> Queue { get; } = new();
     public ConcurrentQueue<(DroneCommandRequested Request, ActivityContext Trace)> Commands { get; } = new();
     public HashSet<string> ProcessedCommands { get; } = [];
+    public ConcurrentQueue<(ManualControlRequested Request, ActivityContext Trace)> ManualRequests { get; } = new();
+    public ManualControlState? Manual { get; set; }
+    public double CameraYawDegrees { get; set; }
+    /// <summary>True while flying a leg, the only time a takeover can be accepted.</summary>
+    public bool InFlightLeg { get; set; }
+    (ManualControlInput Input, DateTimeOffset ReceivedAt)? latestInput;
+    readonly Lock inputGate = new();
+
+    /// <summary>Keeps only the newest stick input; Event Hubs preserves per-drone order, but redelivery can repeat.</summary>
+    public void Receive(ManualControlInput input, DateTimeOffset now)
+    {
+        lock (inputGate)
+            if (latestInput is not { } current || current.Input.SessionId != input.SessionId || input.Sequence > current.Input.Sequence)
+                latestInput = (input, now);
+    }
+
+    public (ManualControlInput Input, DateTimeOffset ReceivedAt)? LatestInput(string sessionId)
+    {
+        lock (inputGate)
+            return latestInput is { } latest && latest.Input.SessionId == sessionId ? latest : null;
+    }
 
     public DroneTelemetry Telemetry(DateTimeOffset now) => new(
         Id, Spec.Class, Interlocked.Increment(ref sequence), now, Position, HomePad,
         Math.Round(AltitudeMetres, 1), Math.Round(Heading), Math.Round(BatteryPercent, 1),
         State, Manoeuvre, Mission?.MissionId, Mission?.OrderId, Queue.Count, FlightProgress, CameraPitchDegrees, Control, CarryingPackage,
-        PitchDegrees, RollDegrees, SpeedMetresPerSecond, PlannedRoute, RoutingError, Pad?.Id);
+        PitchDegrees, RollDegrees, SpeedMetresPerSecond, PlannedRoute, RoutingError, Pad?.Id, Manual, CameraYawDegrees);
 
     /// <summary>Parked drones sit on their charging pad and top up.</summary>
     public void ChargeFor(TimeSpan elapsed)

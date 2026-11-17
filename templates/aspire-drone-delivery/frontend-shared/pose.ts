@@ -3,6 +3,8 @@ export type CameraPose = {
   droneId: string; timestamp: string;
   position: { latitude: number; longitude: number };
   altitudeMetres: number; heading: number; cameraPitchDegrees: number;
+  /** Gimbal yaw relative to the airframe's heading (manual control only). */
+  cameraYawDegrees?: number;
   pitchDegrees?: number; rollDegrees?: number;
   plannedRoute?: FlightWaypoint[] | null;
 };
@@ -41,6 +43,7 @@ export class PoseBuffer {
       heading: turnBetween(a.heading, b.heading, f), cameraPitchDegrees: mix(a.cameraPitchDegrees, b.cameraPitchDegrees),
       pitchDegrees: mix(a.pitchDegrees ?? 0, b.pitchDegrees ?? 0),
       rollDegrees: mix(a.rollDegrees ?? 0, b.rollDegrees ?? 0),
+      cameraYawDegrees: mix(a.cameraYawDegrees ?? 0, b.cameraYawDegrees ?? 0),
     };
   }
 }

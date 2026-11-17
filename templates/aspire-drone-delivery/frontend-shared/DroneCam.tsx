@@ -200,12 +200,16 @@ function droneModel(id: string, selected: boolean, disposables: { dispose(): voi
   return group;
 }
 
-export default function DroneCam({ pose, nearby = [], target: destination, pads = [] }: {
+export default function DroneCam({ pose, nearby = [], target: destination, pads = [], live }: {
   pose: CameraPose; nearby?: readonly CameraPose[]; target?: { x: number; y: number }; pads?: readonly CamPad[];
+  /** Manual control: render this locally predicted pose every frame, with no playout delay. */
+  live?: () => CameraPose | undefined;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const buffers = useRef(new Map<string, PoseBuffer>());
   const latest = useRef({ pose, nearby, destination });
+  const liveRef = useRef(live);
+  liveRef.current = live;
   // Pads are static store geometry, so the scene reads them once at mount.
   const padsRef = useRef(pads);
   padsRef.current = pads;
@@ -380,9 +384,12 @@ export default function DroneCam({ pose, nearby = [], target: destination, pads 
       target.visible = !!aim;
       if (aim) target.position.set(aim.x, (landing?.altitudeMetres ?? 0) / metresPerUnit + .1, aim.y);
       const at = still ? Date.now() : Date.now() - 2000;
-      const sampled = buffers.current.get(current.droneId)?.sample(at) ?? current;
+      const predicted = liveRef.current?.();
+      const sampled = predicted ?? buffers.current.get(current.droneId)?.sample(at) ?? current;
+      element.dataset.live = String(!!predicted);
       const location = fromLonLat(sampled.position.longitude, sampled.position.latitude);
-      const heading = (sampled.heading - 90) * Math.PI / 180;
+      const cameraYaw = sampled.cameraYawDegrees ?? 0;
+      const heading = (sampled.heading + cameraYaw - 90) * Math.PI / 180;
       const forwardX = Math.cos(heading), forwardZ = Math.sin(heading);
       const height = Math.max(.7, sampled.altitudeMetres / metresPerUnit);
       camera.position.set(location.x, height, location.y);
@@ -421,6 +428,7 @@ export default function DroneCam({ pose, nearby = [], target: destination, pads 
       element.dataset.heading = sampled.heading.toFixed(2);
       element.dataset.altitude = sampled.altitudeMetres.toFixed(2);
       element.dataset.cameraPitch = sampled.cameraPitchDegrees.toFixed(2);
+      element.dataset.cameraYaw = cameraYaw.toFixed(2);
       element.dataset.pitch = pitch.toFixed(2);
       element.dataset.roll = roll.toFixed(2);
       element.dataset.airspaceDrones = element.querySelector('.cam-airspace-label')?.getAttribute('data-count') ?? '0';
@@ -428,7 +436,7 @@ export default function DroneCam({ pose, nearby = [], target: destination, pads 
       element.dataset.stale = String(stale);
       const readout = element.querySelector('.cam-readout');
       if (readout) readout.textContent = stale ? 'TELEMETRY PAUSED · LAST RECEIVED POSE'
-        : `ALT ${sampled.altitudeMetres.toFixed(1)} m · HDG ${sampled.heading.toFixed(0)}° · CAM ${sampled.cameraPitchDegrees.toFixed(0)}°`;
+        : `ALT ${sampled.altitudeMetres.toFixed(1)} m · HDG ${sampled.heading.toFixed(0)}° · CAM ${sampled.cameraPitchDegrees.toFixed(0)}°${cameraYaw ? ` / ${cameraYaw > 0 ? 'R' : 'L'}${Math.abs(cameraYaw).toFixed(0)}°` : ''}`;
       renderer.setScissorTest(false);
       renderer.setViewport(0, 0, element.clientWidth, element.clientHeight);
       renderer.render(scene, camera);
@@ -458,7 +466,7 @@ export default function DroneCam({ pose, nearby = [], target: destination, pads 
     </div>
     <div className="cam-transmission" aria-hidden="true" />
     <div className="cam-airspace"><canvas aria-hidden="true" /><span className="cam-airspace-label">AIRSPACE</span></div>
-    <span className="cam-credit">{ground === 'osm' ? 'Map tiles and buildings © OpenStreetMap contributors (ODbL)' : 'Illustrated ground · buildings © OpenStreetMap contributors (ODbL)'} · ~2 s playout · not video</span>
+    <span className="cam-credit">{ground === 'osm' ? 'Map tiles and buildings © OpenStreetMap contributors (ODbL)' : 'Illustrated ground · buildings © OpenStreetMap contributors (ODbL)'} · {live ? 'live prediction' : '~2 s playout'} · not video</span>
     {groundNote && <span className="cam-note" role="status">{groundNote}</span>}
   </div>;
 }

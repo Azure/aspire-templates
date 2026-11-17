@@ -82,6 +82,46 @@ app.MapPost("/api/fleet/{droneId}/commands", async (
     return Results.Accepted(value: new { request.CommandId });
 });
 
+// Manual control: take, resume previous programming, or cancel and return to base. Inputs stream separately (untraced).
+app.MapPost("/api/fleet/{droneId}/manual", async (
+    string droneId, ManualControlRequest body, Dispatcher dispatcher, TimeProvider time,
+    [FromKeyedServices(Hubs.DroneMissions)] EventHubProducerClient missions, CancellationToken cancellationToken) =>
+{
+    if (!Enum.IsDefined(body.Action) || string.IsNullOrWhiteSpace(body.SessionId) || body.SessionId.Length > 64)
+        return Results.BadRequest(new { message = "Specify a manual-control action and session." });
+    var request = new ManualControlRequested(Guid.NewGuid().ToString("N"), droneId, body.SessionId, body.Action);
+    using var activity = Tracing.Start("operator manual control")
+        ?.SetTag("drone_delivery.drone.id", droneId).SetTag("drone_delivery.manual.action", body.Action.ToString())
+        .SetTag("drone_delivery.manual.request.id", request.RequestId);
+    if (!dispatcher.TryBeginManual(request, time.GetUtcNow(), out var error))
+    {
+        activity?.SetStatus(ActivityStatusCode.Error, error);
+        return Results.Conflict(new { message = error });
+    }
+    try { await missions.SendAsync(request, droneId, cancellationToken); }
+    catch (Exception exception)
+    {
+        dispatcher.CancelManual(request);
+        activity.Failed(exception);
+        throw;
+    }
+    return Results.Accepted(value: new { request.RequestId });
+});
+
+// Several stick updates a second per controlling operator: not traced (see ServiceDefaults) and sent untraced.
+app.MapPost("/api/fleet/{droneId}/manual/input", async (
+    string droneId, ManualInputRequest body, Dispatcher dispatcher, TimeProvider time,
+    [FromKeyedServices(Hubs.DroneMissions)] EventHubProducerClient missions, CancellationToken cancellationToken) =>
+{
+    if (body.Input is null || string.IsNullOrWhiteSpace(body.SessionId))
+        return Results.BadRequest();
+    if (!dispatcher.IsFlying(droneId, body.SessionId, time.GetUtcNow()))
+        return Results.Conflict(new { message = "This session is not flying the drone." });
+    await missions.SendAsync(new ManualControlInput(droneId, body.SessionId, body.Sequence, body.Input.Clamped()), droneId,
+        cancellationToken, traced: false);
+    return Results.NoContent();
+});
+
 app.MapPost("/api/orders/{orderId}/demo/skip", async (
     string orderId, DemoStageSkipped request, Dispatcher dispatcher,
     [FromKeyedServices(Hubs.DroneMissions)] EventHubProducerClient missions,
@@ -149,3 +189,6 @@ static partial class Program
 {
     static readonly Regex PhotoName = new(@"^[A-Z]{3}-\d{2}/\d{8}T\d{9}-[A-Za-z]+\.svg$", RegexOptions.Compiled);
 }
+
+record ManualControlRequest(string SessionId, ManualAction Action);
+record ManualInputRequest(string SessionId, long Sequence, ManualInput? Input);

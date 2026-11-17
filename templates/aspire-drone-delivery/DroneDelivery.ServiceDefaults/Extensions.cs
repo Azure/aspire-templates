@@ -44,7 +44,9 @@ public static class Extensions
                 // Browser span exports relayed through /otlp would otherwise trace themselves every second.
                 .AddAspNetCoreInstrumentation(options => options.Filter = context =>
                     !context.Request.Path.StartsWithSegments("/health") && !context.Request.Path.StartsWithSegments("/alive") &&
-                    !context.Request.Path.StartsWithSegments("/otlp"))
+                    !context.Request.Path.StartsWithSegments("/otlp") &&
+                    // Manual-control stick inputs arrive several times a second while an operator flies a drone.
+                    !(context.Request.Path.Value ?? "").EndsWith("/manual/input", StringComparison.Ordinal))
                 .AddHttpClientInstrumentation());
 
         if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))

@@ -24,3 +24,15 @@ export function commandUnavailable(drone: Telemetry, command: DroneCommand) {
   if (command === 'DiscardPackage' && !drone.carryingPackage) return 'No package on board.';
   return '';
 }
+
+/** Mirrors the dispatcher's take-control gate so the button explains why it is unavailable. */
+export function takeControlUnavailable(drone: Telemetry, sessionId?: string) {
+  if (Date.now() - Date.parse(drone.timestamp) > 30000) return 'Waiting for current telemetry.';
+  const manual = drone.manual;
+  if (manual && (manual.status === 'Active' || manual.status === 'LinkLost') && manual.sessionId !== sessionId)
+    return 'Another operator is flying this drone.';
+  if (drone.control?.status === 'Executing') return 'A command is in progress.';
+  if (drone.manoeuvre === 'OnTheGround' || !['FlyingToPickup', 'FlyingToCustomer', 'ReturningToPad'].includes(drone.state))
+    return 'Available while the drone is airborne on a delivery or return flight.';
+  return '';
+}
