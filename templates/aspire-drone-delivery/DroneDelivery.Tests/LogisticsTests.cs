@@ -12,7 +12,7 @@ public class LogisticsTests
         new(id, droneClass, at ?? Store, at ?? Store, charge, Now);
 
     [Fact]
-    public void Legs_climb_and_descend_vertically()
+    public void Legs_climb_vertically_and_curve_down_onto_the_pad()
     {
         var leg = DroneSpec.For(DroneClass.Doppio).Leg(Store, Customer);
 
@@ -24,7 +24,10 @@ public class LogisticsTests
         Assert.Equal((Manoeuvre.Cruise, DroneSpec.CruiseAltitudeMetres), (cruising.Manoeuvre, cruising.AltitudeMetres));
 
         var descending = leg.At(leg.Duration - leg.DescentDuration / 2);
-        Assert.Equal((Manoeuvre.VerticalDescent, Customer), (descending.Manoeuvre, descending.Position));
+        Assert.Equal(Manoeuvre.VerticalDescent, descending.Manoeuvre);
+        Assert.InRange(descending.Position.DistanceTo(Customer), .01, leg.ApproachRadiusMetres);
+        Assert.InRange(descending.AltitudeMetres, leg.Path.LandingAltitude, leg.Path.CruiseAltitude);
+        Assert.Equal(Customer, leg.At(leg.Duration).Position);
         Assert.Equal((Manoeuvre.OnTheGround, leg.Path.LandingAltitude), (leg.At(leg.Duration).Manoeuvre, leg.At(leg.Duration).AltitudeMetres));
     }
 

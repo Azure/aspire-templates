@@ -1,4 +1,5 @@
 import type { CameraPose } from '../../frontend-shared/pose';
+import type { CamPad } from '../../frontend-shared/DroneCam';
 
 export type MenuItem = {
   id: string;
@@ -125,7 +126,7 @@ export function addToBag(bag: Bag, line: BagLine, payload: PayloadSize): Bag {
 
 export type Stage = 'Preparing' | 'Ready for pickup' | 'Delivering' | 'Delivered';
 export type DroneAssignment = { id: string; pickupOrigin: Point; assignedAt: number };
-export type Order = { id: string; customer: string; bag: Bag; payload: PayloadSize; stage: Stage; elapsed: number; manual: boolean; drone?: DroneAssignment; backend?: boolean; stageProgress?: number; tracking?: OrderFlight; pickup?: Destination; dropOff?: Destination; note?: string | null; etaSeconds?: number; photo?: { url: string; timestamp: string; proofOfDelivery: boolean }; cameraPose?: CameraPose; nearbyDrones?: CameraPose[]; failure?: string };
+export type Order = { id: string; customer: string; bag: Bag; payload: PayloadSize; stage: Stage; elapsed: number; manual: boolean; drone?: DroneAssignment; backend?: boolean; stageProgress?: number; tracking?: OrderFlight; pickup?: Destination; dropOff?: Destination; note?: string | null; etaSeconds?: number; photo?: { url: string; timestamp: string; proofOfDelivery: boolean }; cameraPose?: CameraPose; nearbyDrones?: CameraPose[]; pads?: CamPad[]; failure?: string };
 export type DemoState = { orders: Order[]; nextId: number; ticks: number; dronePads: Record<string, Point> };
 export const initialState: DemoState = {
   nextId: 1044, ticks: 0,

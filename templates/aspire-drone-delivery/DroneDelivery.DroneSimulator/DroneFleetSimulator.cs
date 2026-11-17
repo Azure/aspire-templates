@@ -21,6 +21,7 @@ public sealed class DroneFleetSimulator(
 {
     static readonly TimeSpan Tick = TimeSpan.FromSeconds(1);
     readonly DemoSkips skips = new();
+    readonly PadAllocator pads = new();
     // Each mission's spans join the trace that assigned it.
     readonly ConcurrentDictionary<string, ActivityContext> traces = new();
 
@@ -173,8 +174,9 @@ public sealed class DroneFleetSimulator(
             }
         }
 
+        var pickup = await ReservePadAsync(drone, mission, cancellationToken);
         using (Step("drone fly to pickup"))
-            await FlyAsync(drone, LegFromPose(drone, mission.Pickup), DroneState.FlyingToPickup, proofOfDelivery: false, cancellationToken);
+            await FlyAsync(drone, LegFromPose(drone, pickup), DroneState.FlyingToPickup, proofOfDelivery: false, cancellationToken);
         await MilestoneAsync(drone, mission, trace, MissionMilestone.ArrivedAtPickup, cancellationToken);
 
         using (Step("drone load order"))
@@ -211,11 +213,7 @@ public sealed class DroneFleetSimulator(
     {
         drone.State = state;
         drone.RoutingError = null;
-        drone.PlannedRoute = [
-            new(leg.From, leg.Path.LaunchAltitude),
-            .. leg.Path.Points,
-            new(leg.To, leg.Path.LandingAltitude),
-        ];
+        drone.PlannedRoute = leg.PlannedRoute;
         var start = time.GetUtcNow();
         var startBattery = drone.BatteryPercent;
         var previous = Manoeuvre.OnTheGround;
@@ -264,6 +262,38 @@ public sealed class DroneFleetSimulator(
                 return;
             await Task.Delay(Tick, time, cancellationToken);
         }
+    }
+
+    /// <summary>
+    /// Reserves one of the store's pads before leaving home. When every pad is reserved the drone waits on its
+    /// own pad, charging, rather than approaching an occupied store; the mission resumes as soon as a pad frees.
+    /// </summary>
+    async Task<GeoPoint> ReservePadAsync(SimulatedDrone drone, MissionAssigned mission, CancellationToken cancellationToken)
+    {
+        if (ServiceArea.StoreAt(mission.Pickup) is not { } store)
+            return mission.Pickup;
+        using var waiting = Tracing.Start("drone reserve pad", drone.MissionTrace).Describe(mission);
+        var lastReport = time.GetUtcNow();
+        var logged = false;
+        while (pads.TryReserve(store, drone.Id) is not { } pad)
+        {
+            if (!logged)
+            {
+                logger.LogInformation("{DroneId} is holding at home: all {Count} pads at {Store} are reserved", drone.Id, store.Pads.Count, store.Id);
+                logged = true;
+            }
+            InterruptIfRequested(drone);
+            await Task.Delay(Tick, time, cancellationToken);
+            drone.ChargeFor(Tick);
+            if (time.GetUtcNow() - lastReport >= options.ParkedTelemetryInterval)
+            {
+                await ReportAsync(drone, cancellationToken);
+                lastReport = time.GetUtcNow();
+            }
+        }
+        drone.Pad = store.Pads.Single(candidate => pads.HolderOf(candidate.Id) == drone.Id);
+        waiting?.SetTag("drone.pad", drone.Pad.Id);
+        return drone.Pad.Location;
     }
 
     async Task WaitUntilAsync(SimulatedDrone drone, DateTimeOffset until, DemoStage stage, CancellationToken cancellationToken)
@@ -396,8 +426,14 @@ public sealed class DroneFleetSimulator(
     sealed class CommandPendingException : Exception;
 
     // Position readings go out every second per drone, so they are not traced; legs and milestones are.
-    Task ReportAsync(SimulatedDrone drone, CancellationToken cancellationToken) =>
-        telemetry.SendAsync(drone.Telemetry(time.GetUtcNow()), drone.Id, cancellationToken, traced: false);
+    Task ReportAsync(SimulatedDrone drone, CancellationToken cancellationToken)
+    {
+        // A pad is freed only once its drone is physically clear: after departing, or after being diverted elsewhere.
+        if (drone.Pad is { } pad && drone.State is not (DroneState.FlyingToPickup or DroneState.Loading) &&
+            pads.ReleaseIfClear(drone.Id, pad, drone.Position))
+            drone.Pad = null;
+        return telemetry.SendAsync(drone.Telemetry(time.GetUtcNow()), drone.Id, cancellationToken, traced: false);
+    }
 
     Task MilestoneAsync(SimulatedDrone drone, MissionAssigned mission, ActivityContext trace, MissionMilestone milestone, CancellationToken cancellationToken, string? reason = null)
     {

@@ -8,7 +8,7 @@ export type Telemetry = {
   manoeuvre: 'OnTheGround' | 'VerticalClimb' | 'Cruise' | 'VerticalDescent'; orderId: string | null; queuedMissions: number;
   cameraPitchDegrees: number; carryingPackage: boolean;
   pitchDegrees?: number; rollDegrees?: number; speedMetresPerSecond?: number;
-  plannedRoute?: FlightWaypoint[] | null; routingError?: string | null;
+  plannedRoute?: FlightWaypoint[] | null; routingError?: string | null; padId?: string | null;
   control: { commandId: string; command: DroneCommand; status: 'Executing' | 'Completed' | 'Rejected'; message: string } | null;
 };
 export type DroneCommand = 'EmergencyLanding' | 'ReturnToBase' | 'DiscardPackage' | 'Reactivate';
@@ -18,7 +18,7 @@ export type OrderSnapshot = {
   status: 'AwaitingFleet' | 'Scheduled' | 'DroneEnRoute' | 'PickedUp' | 'Delivered' | 'Unserviceable' | 'Failed';
   droneId: string | null; estimatedDelivery: string | null; note: string | null;
 };
-export type Store = { id: string; name: string; location: GeoPoint };
+export type Store = { id: string; name: string; location: GeoPoint; pads?: { id: string; number: number; location: GeoPoint }[]; deckAltitudeMetres?: number };
 
 async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await traced('operator load snapshot', { 'url.path': path.split('?')[0] }, () => fetch(path, { signal }));

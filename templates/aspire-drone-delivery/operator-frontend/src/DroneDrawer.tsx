@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import type { CamPad } from '../../frontend-shared/DroneCam';
 import { X } from 'lucide-react';
 import { commandDrone } from './api';
 import type { DroneCommand, Telemetry } from './api';
@@ -12,8 +13,8 @@ const commands: { command: DroneCommand; title: string; detail: string }[] = [
   { command: 'Reactivate', title: 'Reactivate', detail: 'Recover a grounded drone: return to base and rejoin dispatch.' },
 ];
 
-export default function DroneDrawer({ drone, fleet, onSelect, onClose }: {
-  drone: Telemetry; fleet: Telemetry[]; onSelect: (id: string) => void; onClose: () => void;
+export default function DroneDrawer({ drone, fleet, pads = [], onSelect, onClose }: {
+  drone: Telemetry; fleet: Telemetry[]; pads?: CamPad[]; onSelect: (id: string) => void; onClose: () => void;
 }) {
   const panel = useRef<HTMLElement>(null);
   const [sending, setSending] = useState(false);
@@ -51,7 +52,7 @@ export default function DroneDrawer({ drone, fleet, onSelect, onClose }: {
       <header className="drawer-heading"><div><span className="eyebrow">FLEET CONTROL / SIMULATION ONLY</span><h2 id="drone-heading">{drone.droneId}</h2></div><button className="icon-button" aria-label="Close drone panel" onClick={onClose}><X size={20} /></button></header>
       <label className="drone-select">Inspect drone<select value={drone.droneId} onChange={event => onSelect(event.target.value)}>{fleet.map(item => <option key={item.droneId}>{item.droneId}</option>)}</select></label>
       <Suspense fallback={<div className="drone-cam"><p>Starting simulated feed…</p></div>}>
-        <DroneCam pose={drone} nearby={fleet.filter(item => item.droneId !== drone.droneId)} />
+        <DroneCam pose={drone} nearby={fleet.filter(item => item.droneId !== drone.droneId)} pads={pads} />
       </Suspense>
       <div className="drawer-body">
         <div className="drone-facts"><strong>{droneLabel(drone)}</strong><span>{drone.class} · {drone.batteryPercent.toFixed(0)}% battery</span><span>{drone.carryingPackage ? 'Package on board' : 'No package on board'} · {drone.queuedMissions} queued</span><small>{drone.orderId ?? 'No active order'}</small></div>

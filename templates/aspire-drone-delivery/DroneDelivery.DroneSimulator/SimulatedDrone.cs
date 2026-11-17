@@ -20,6 +20,8 @@ public sealed class SimulatedDrone(string id, DroneSpec spec, GeoPoint homePad, 
     public double SpeedMetresPerSecond { get; set; }
     public IReadOnlyList<FlightWaypoint>? PlannedRoute { get; set; }
     public string? RoutingError { get; set; }
+    /// <summary>The store pad this drone has reserved or occupies, if any.</summary>
+    public LandingPad? Pad { get; set; }
     public bool CarryingPackage { get; set; }
     public DroneControl? Control { get; set; }
     public ActivityContext MissionTrace { get; set; }
@@ -36,7 +38,7 @@ public sealed class SimulatedDrone(string id, DroneSpec spec, GeoPoint homePad, 
         Id, Spec.Class, Interlocked.Increment(ref sequence), now, Position, HomePad,
         Math.Round(AltitudeMetres, 1), Math.Round(Heading), Math.Round(BatteryPercent, 1),
         State, Manoeuvre, Mission?.MissionId, Mission?.OrderId, Queue.Count, FlightProgress, CameraPitchDegrees, Control, CarryingPackage,
-        PitchDegrees, RollDegrees, SpeedMetresPerSecond, PlannedRoute, RoutingError);
+        PitchDegrees, RollDegrees, SpeedMetresPerSecond, PlannedRoute, RoutingError, Pad?.Id);
 
     /// <summary>Parked drones sit on their charging pad and top up.</summary>
     public void ChargeFor(TimeSpan elapsed)

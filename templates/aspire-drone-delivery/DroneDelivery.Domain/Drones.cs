@@ -61,7 +61,10 @@ public enum Manoeuvre
     VerticalDescent,
 }
 
-/// <summary>A building-clear route, with vertical take-off/landing and eased travel between waypoints.</summary>
+/// <summary>
+/// A building-clear route: vertical take-off, eased travel between waypoints, then a curved final approach
+/// that bends from cruise down onto the pad (or a vertical descent where a curve would not clear buildings).
+/// </summary>
 public sealed record FlightLeg(DroneSpec Spec, GeoPoint From, GeoPoint To,
     double? InitialHeading = null, double? InitialAltitudeMetres = null, bool LandingOnly = false, BuildingAirspace? Airspace = null)
 {
@@ -70,22 +73,111 @@ public sealed record FlightLeg(DroneSpec Spec, GeoPoint From, GeoPoint To,
     public TimeSpan VerticalDuration => TimeSpan.FromSeconds(DroneSpec.CruiseAltitudeMetres / Spec.VerticalSpeedMetresPerSecond);
     public TimeSpan ClimbDuration => LandingOnly ? TimeSpan.Zero :
         TimeSpan.FromSeconds((Path.CruiseAltitude - Path.LaunchAltitude) / Spec.VerticalSpeedMetresPerSecond);
-    public TimeSpan DescentDuration => TimeSpan.FromSeconds(
-        ((LandingOnly ? Path.LaunchAltitude : Path.CruiseAltitude) - Path.LandingAltitude) / Spec.VerticalSpeedMetresPerSecond);
-    public TimeSpan CruiseDuration => LandingOnly ? TimeSpan.Zero : TimeSpan.FromSeconds(
-        Segments.Sum(segment => segment.Motion.Duration) + Math.Max(0, Segments.Length - 1) * TurnSeconds);
-    public TimeSpan Duration => ClimbDuration + CruiseDuration + DescentDuration;
-    public double BatteryPercent => DistanceMetres / 1000 * Spec.BatteryPerKm +
-        Spec.BatteryPerVerticalManoeuvre * (ClimbDuration + DescentDuration).TotalSeconds / VerticalDuration.TotalSeconds;
+    /// <summary>Time spent descending: along the approach curve, or straight down when there is none.</summary>
+    public TimeSpan DescentDuration => Approach is { } approach ? TimeSpan.FromSeconds(approach.Duration) : VerticalDescentDuration;
+    public TimeSpan CruiseDuration => TravelDuration - (Approach is { } approach ? TimeSpan.FromSeconds(approach.Duration) : TimeSpan.Zero);
+    public TimeSpan Duration => ClimbDuration + TravelDuration + VerticalDescentDuration;
+    public double BatteryPercent => DistanceMetres / 1000 * Spec.BatteryPerKm + Spec.BatteryPerVerticalManoeuvre *
+        (LandingOnly ? Path.LaunchAltitude - Path.LandingAltitude : 2 * Path.CruiseAltitude - Path.LaunchAltitude - Path.LandingAltitude) /
+        DroneSpec.CruiseAltitudeMetres;
+    /// <summary>Horizontal distance from the pad at which the final approach starts curving down; 0 for a vertical descent.</summary>
+    public double ApproachRadiusMetres => Approach?.Radius ?? 0;
     const double TurnSeconds = 3;
+    const int ArcSteps = 48;
+
+    TimeSpan VerticalDescentDuration => Approach is not null ? TimeSpan.Zero : TimeSpan.FromSeconds(
+        ((LandingOnly ? Path.LaunchAltitude : Path.CruiseAltitude) - Path.LandingAltitude) / Spec.VerticalSpeedMetresPerSecond);
+    TimeSpan TravelDuration => LandingOnly ? TimeSpan.Zero : TimeSpan.FromSeconds(
+        Segments.Sum(segment => segment.Motion.Duration) + Math.Max(0, Segments.Length - 1) * TurnSeconds);
+
+    /// <summary>
+    /// Quarter ellipse in the vertical plane of the final segment: it leaves cruise level tangentially at
+    /// <see cref="Start"/> and meets the pad vertically, so the touchdown is still a VTOL landing.
+    /// </summary>
+    sealed record ApproachCurve(GeoPoint Start, double Radius, double Drop, double Straight, double[] ArcLengths, double Duration)
+    {
+        public double Length => Straight + ArcLengths[^1];
+        public double AngleAt(double arcDistance)
+        {
+            var i = Array.BinarySearch(ArcLengths, arcDistance);
+            if (i >= 0) return Math.PI / 2 * i / ArcSteps;
+            i = Math.Clamp(~i, 1, ArcSteps);
+            var f = (arcDistance - ArcLengths[i - 1]) / Math.Max(1e-9, ArcLengths[i] - ArcLengths[i - 1]);
+            return Math.PI / 2 * (i - 1 + Math.Clamp(f, 0, 1)) / ArcSteps;
+        }
+    }
+
+    bool approachResolved;
+    ApproachCurve? approach;
+    ApproachCurve? Approach
+    {
+        get
+        {
+            if (approachResolved) return approach;
+            approachResolved = true;
+            var last = Path.Points.Count >= 2 ? Path.Points[^2].Position : To;
+            var length = last.DistanceTo(To);
+            var drop = Path.CruiseAltitude - Path.LandingAltitude;
+            if (LandingOnly || length < 10 || drop < 1) return null;
+            var airspace = Airspace ?? BuildingAirspace.Shared;
+            foreach (var scale in new[] { .6, .4, .25 })
+            {
+                var radius = Math.Min(drop * scale, length * .8);
+                if (radius < 4) break;
+                var start = To.Towards(last, radius / length);
+                var points = Enumerable.Range(0, ArcSteps + 1).Select(i =>
+                {
+                    var angle = Math.PI / 2 * i / ArcSteps;
+                    return new FlightWaypoint(start.Towards(To, Math.Sin(angle)), Path.LandingAltitude + drop * Math.Cos(angle));
+                }).ToArray();
+                // Check every arc chord at its lower end, so a sloped approach never clips a buffered envelope.
+                if (!points.Zip(points.Skip(1)).All(pair => airspace.SegmentClear(pair.First.Position, pair.Second.Position,
+                        Math.Min(pair.First.AltitudeMetres, pair.Second.AltitudeMetres))))
+                    continue;
+                var arc = new double[ArcSteps + 1];
+                for (var i = 1; i <= ArcSteps; i++)
+                    arc[i] = arc[i - 1] + Math.Sqrt(Math.Pow(points[i].Position.DistanceTo(points[i - 1].Position), 2) +
+                        Math.Pow(points[i].AltitudeMetres - points[i - 1].AltitudeMetres, 2));
+                var straight = length - radius;
+                var motion = new TravelMotion(straight + arc[^1], Spec.CruiseSpeedMetresPerSecond);
+                double lo = 0, hi = motion.Duration;
+                for (var i = 0; i < 40; i++)
+                {
+                    var mid = (lo + hi) / 2;
+                    if (motion.At(mid).Fraction * motion.Distance < straight) lo = mid; else hi = mid;
+                }
+                return approach = new(start, radius, drop, straight, arc, motion.Duration - hi);
+            }
+            return null;
+        }
+    }
+
+    /// <summary>The route as flown, including the curved approach, for display alongside the drone.</summary>
+    public IReadOnlyList<FlightWaypoint> PlannedRoute
+    {
+        get
+        {
+            if (Approach is not { } curve)
+                return [new(From, Path.LaunchAltitude), .. Path.Points, new(To, Path.LandingAltitude)];
+            var arc = Enumerable.Range(1, 11).Select(i =>
+            {
+                var angle = Math.PI / 2 * i / 12;
+                return new FlightWaypoint(curve.Start.Towards(To, Math.Sin(angle)), Path.LandingAltitude + curve.Drop * Math.Cos(angle));
+            });
+            return [new(From, Path.LaunchAltitude), .. Path.Points.Take(Path.Points.Count - 1), new(curve.Start, Path.CruiseAltitude), .. arc, new(To, Path.LandingAltitude)];
+        }
+    }
+
     (GeoPoint From, GeoPoint To, TravelMotion Motion)[]? segments;
     (GeoPoint From, GeoPoint To, TravelMotion Motion)[] Segments => segments ??= Path.Points.Zip(Path.Points.Skip(1),
-        (a, b) => (a.Position, b.Position, new TravelMotion(a.Position.DistanceTo(b.Position), Spec.CruiseSpeedMetresPerSecond))).ToArray();
+        (a, b) => (a.Position, b.Position)).Select((pair, i) => (pair.Item1, pair.Item2, new TravelMotion(
+            i == Path.Points.Count - 2 && Approach is { } curve ? curve.Length : pair.Item1.DistanceTo(pair.Item2),
+            Spec.CruiseSpeedMetresPerSecond))).ToArray();
 
     public FlightSample At(TimeSpan elapsed)
     {
         var vertical = ClimbDuration.TotalSeconds;
-        var cruise = CruiseDuration.TotalSeconds;
+        var travel = TravelDuration.TotalSeconds;
         var t = Math.Clamp(elapsed.TotalSeconds, 0, Duration.TotalSeconds);
         var progress = Duration == TimeSpan.Zero ? 1 : t / Duration.TotalSeconds;
         var firstBearing = LandingOnly || DistanceMetres < .01 ? InitialHeading ?? 0 : Segments[0].From.HeadingTo(Segments[0].To);
@@ -95,7 +187,7 @@ public sealed record FlightLeg(DroneSpec Spec, GeoPoint From, GeoPoint To,
         if (t < vertical)
             return Sample(From, Path.LaunchAltitude + (Path.CruiseAltitude - Path.LaunchAltitude) * t / vertical,
                 Manoeuvre.VerticalClimb, heading, -90 + 60 * Math.Clamp((t / vertical - .75) * 4, 0, 1), Math.Sin(Math.PI * t / vertical));
-        if (!LandingOnly && t < vertical + cruise)
+        if (!LandingOnly && t < vertical + travel)
         {
             var legTime = t - vertical;
             var incoming = firstBearing;
@@ -113,8 +205,20 @@ public sealed record FlightLeg(DroneSpec Spec, GeoPoint From, GeoPoint To,
                 if (legTime < segment.Motion.Duration)
                 {
                     var (fraction, speed) = segment.Motion.At(legTime);
+                    var yaw = i == 0 ? heading : bearing;
+                    if (i == Segments.Length - 1 && Approach is { } curve)
+                    {
+                        var distance = fraction * curve.Length;
+                        if (distance < curve.Straight)
+                            return Sample(segment.From.Towards(curve.Start, distance / curve.Straight), Path.CruiseAltitude,
+                                Manoeuvre.Cruise, yaw, -30, Math.Min(1, speed / 3), speed);
+                        var angle = curve.AngleAt(distance - curve.Straight);
+                        return Sample(curve.Start.Towards(To, Math.Sin(angle)), Path.LandingAltitude + curve.Drop * Math.Cos(angle),
+                            Manoeuvre.VerticalDescent, yaw, -30 - 60 * Smooth(Math.Clamp(angle / (Math.PI / 3), 0, 1)),
+                            Math.Min(1, speed / 3), speed);
+                    }
                     return Sample(segment.From.Towards(segment.To, fraction), Path.CruiseAltitude, Manoeuvre.Cruise,
-                        i == 0 ? heading : bearing, -30, Math.Min(1, speed / 3), speed);
+                        yaw, -30, Math.Min(1, speed / 3), speed);
                 }
                 legTime -= segment.Motion.Duration;
                 incoming = bearing;

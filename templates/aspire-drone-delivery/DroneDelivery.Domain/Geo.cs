@@ -54,6 +54,86 @@ public static class ServiceArea
 
     public static PickupLocation NearestStore(GeoPoint point) =>
         Stores.MinBy(store => store.Location.DistanceTo(point))!;
+
+    public static PickupLocation? StoreAt(GeoPoint point) => Stores.FirstOrDefault(store => store.Location == point);
+
+    public const int PadsPerStore = 4;
+    public const double PadSpacingMetres = 9;
+
+    static readonly Dictionary<string, IReadOnlyList<LandingPad>> pads = Stores.ToDictionary(store => store.Id, store =>
+    {
+        // A 2 x 2 deck centred on the store, far enough apart that parked drones and their final descents never overlap.
+        var centre = AirPoint.From(store.Location);
+        var half = PadSpacingMetres / 2;
+        return (IReadOnlyList<LandingPad>)Enumerable.Range(0, PadsPerStore).Select(i => new LandingPad(
+            $"{store.Id}-{i + 1}", i + 1,
+            new AirPoint(centre.X + (i % 2 == 0 ? -half : half), centre.Y + (i < 2 ? -half : half)).Geo)).ToArray();
+    });
+
+    public static IReadOnlyList<LandingPad> PadsFor(string storeId) => pads.GetValueOrDefault(storeId) ?? [];
 }
 
-public sealed record PickupLocation(string Id, string Name, GeoPoint Location);
+public sealed record PickupLocation(string Id, string Name, GeoPoint Location)
+{
+    /// <summary>Physical landing pads; computed, so persisted or deserialised locations stay value-equal.</summary>
+    public IReadOnlyList<LandingPad> Pads => ServiceArea.PadsFor(Id);
+
+    /// <summary>The shared pad deck's altitude (rooftop decks sit above building clearance).</summary>
+    public double DeckAltitudeMetres => Pads.Count == 0 ? 0 : BuildingAirspace.Shared.PadAltitude(Pads[0].Location);
+}
+
+public sealed record LandingPad(string Id, int Number, GeoPoint Location);
+
+/// <summary>
+/// Authoritative, thread-safe pad reservations. A drone reserves a pad before it leaves for a store and
+/// keeps it until it is physically clear of it, so two drones never share or approach the same pad.
+/// </summary>
+public sealed class PadAllocator
+{
+    public const double ClearanceMetres = 8;
+    readonly object gate = new();
+    readonly Dictionary<string, string> holders = [];
+
+    public LandingPad? TryReserve(PickupLocation store, string droneId)
+    {
+        lock (gate)
+        {
+            if (store.Pads.FirstOrDefault(pad => holders.GetValueOrDefault(pad.Id) == droneId) is { } held)
+                return held;
+            ReleaseLocked(droneId);
+            var free = store.Pads.FirstOrDefault(pad => !holders.ContainsKey(pad.Id));
+            if (free is not null)
+                holders[free.Id] = droneId;
+            return free;
+        }
+    }
+
+    public void Release(string droneId)
+    {
+        lock (gate) ReleaseLocked(droneId);
+    }
+
+    /// <summary>Releases the drone's pad once it is horizontally clear; a drone parked or hovering on it keeps it.</summary>
+    public bool ReleaseIfClear(string droneId, LandingPad pad, GeoPoint position)
+    {
+        if (position.DistanceTo(pad.Location) < ClearanceMetres)
+            return false;
+        lock (gate)
+        {
+            if (holders.GetValueOrDefault(pad.Id) == droneId)
+                holders.Remove(pad.Id);
+        }
+        return true;
+    }
+
+    public string? HolderOf(string padId)
+    {
+        lock (gate) return holders.GetValueOrDefault(padId);
+    }
+
+    void ReleaseLocked(string droneId)
+    {
+        foreach (var pad in holders.Where(pair => pair.Value == droneId).Select(pair => pair.Key).ToArray())
+            holders.Remove(pad);
+    }
+}

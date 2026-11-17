@@ -3,6 +3,8 @@ import type { Bag, Destination, Order, OrderFlight, PayloadSize, Stage } from '.
 import { fromLonLat, toLonLat } from './mapGeometry';
 import { traced } from './telemetry';
 import type { CameraPose, FlightWaypoint } from '../../frontend-shared/pose';
+import { camPads } from '../../frontend-shared/pads';
+import type { StorePads } from '../../frontend-shared/pads';
 
 export type GeoPoint = { latitude: number; longitude: number };
 export type Telemetry = {
@@ -13,11 +15,11 @@ export type Telemetry = {
   flightProgress?: number | null;
   cameraPitchDegrees?: number;
   pitchDegrees?: number; rollDegrees?: number; speedMetresPerSecond?: number;
-  plannedRoute?: FlightWaypoint[] | null; routingError?: string | null;
+  plannedRoute?: FlightWaypoint[] | null; routingError?: string | null; padId?: string | null;
 };
 export type OrderSnapshot = {
   order: { orderId: string; customerName: string; dropOff: GeoPoint; payloadBays: PayloadSize; lines: { item: string; bays: number }[]; placedAt: string };
-  store: { id: string; name: string; location: GeoPoint }; readyAt: string;
+  store: { id: string; name: string; location: GeoPoint } & StorePads; readyAt: string;
   status: 'AwaitingFleet' | 'Scheduled' | 'DroneEnRoute' | 'PickedUp' | 'Delivered' | 'Unserviceable' | 'Failed';
   droneId: string | null; estimatedDelivery: string | null; deliveredAt: string | null; note: string | null;
   photos: { blobName: string; trigger: string; proofOfDelivery: boolean; timestamp: string }[];
@@ -73,7 +75,9 @@ export function trackingFor(snapshot: OrderSnapshot, now = Date.now()): OrderFli
   const destination = { ...point(snapshot.order.dropOff), label: 'Your drop-off' };
   const origin = drone.plannedRoute?.length ? point(drone.plannedRoute[0].position)
     : inbound ? point(drone.homePad) : point(snapshot.store.location);
-  const target = inbound ? { ...point(snapshot.store.location), label: 'ForthCoffee pickup' } : destination;
+  // Inbound legs land on the drone's assigned store pad: the planned route's final waypoint.
+  const pad = inbound ? drone.plannedRoute?.at(-1)?.position : undefined;
+  const target = inbound ? { ...point(pad ?? snapshot.store.location), label: 'ForthCoffee pickup' } : destination;
   const location = point(drone.position);
   const remaining = Math.hypot(target.x - location.x, target.y - location.y);
   const manoeuvre = ({ OnTheGround: 'On the ground', VerticalClimb: 'Vertical climb', Cruise: 'Cruise', VerticalDescent: 'Vertical descent' } as const)[drone.manoeuvre];
@@ -123,7 +127,7 @@ export function customerOrder(snapshot: OrderSnapshot, receipt: Receipt, now = D
     failure: snapshot.status === 'Failed' || snapshot.status === 'Unserviceable' ? snapshot.note ?? 'This delivery cannot be completed.' : undefined,
     cameraPose: tracking && snapshot.telemetry ? { ...snapshot.telemetry,
       cameraPitchDegrees: snapshot.telemetry.cameraPitchDegrees ?? (snapshot.telemetry.manoeuvre === 'Cruise' ? -30 : -90) } : undefined,
-    nearbyDrones: snapshot.nearbyDrones,
+    nearbyDrones: snapshot.nearbyDrones, pads: camPads([snapshot.store]),
     dropOff: { ...point(snapshot.order.dropOff), label: receipt.dropOff.label }, note: snapshot.note,
     etaSeconds: snapshot.estimatedDelivery ? Math.max(0, Math.ceil((Date.parse(snapshot.estimatedDelivery) - now) / 1000)) : undefined,
     photo: photo ? { url: `/api/photos/${photo.blobName.split('/').map(encodeURIComponent).join('/')}`, timestamp: photo.timestamp, proofOfDelivery: photo.proofOfDelivery } : undefined,

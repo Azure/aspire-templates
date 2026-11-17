@@ -8,8 +8,10 @@ import { fetchTile, tilesFor, tileToLonLat } from './osm';
 
 // Ground region (illustrated-map units) around the kitchen-to-drop-off corridor.
 const region = { x: 280, y: 100, width: 720, height: 550 };
-const kitchen = { x: 510, y: 318 };
 const metresPerUnit = 4.2;
+// Route tunnel rings: ~2.3 m across and one every ~15 m.
+const ringRadius = .55;
+const ringSpacing = 3.5;
 const tileZoom = 16;
 type GroundSource = 'illustrated' | 'osm';
 
@@ -132,12 +134,16 @@ async function drawOsmGround(ctx: CanvasRenderingContext2D, scale: number, signa
 /** The composited OSM ground, kept for the page so a remounted camera (e.g. at pickup) shows it immediately. */
 let composedGround: { scale: number; image: HTMLCanvasElement } | null = null;
 
+/** A store landing pad in camera space; altitude is the shared (possibly rooftop) deck height. */
+export type CamPad = { id: string; x: number; y: number; altitudeMetres: number };
+
+// Pads are 9 m apart, so each disc (radius 0.75 units, ~3 m) leaves clear deck between parked drones.
+const padRadius = .75;
+
 function buildScenery(scene: THREE.Scene, disposables: { dispose(): void }[]): THREE.Mesh {
-  const padGeometry = new THREE.CylinderGeometry(3, 3, .2, 32), padMaterial = new THREE.MeshLambertMaterial({ color: '#184b38' });
-  const pad = new THREE.Mesh(padGeometry, padMaterial); pad.position.set(kitchen.x, .15, kitchen.y);
-  const targetGeometry = new THREE.RingGeometry(2.2, 3, 40), targetMaterial = new THREE.MeshLambertMaterial({ color: '#e9b44c', side: THREE.DoubleSide });
-  const target = new THREE.Mesh(targetGeometry, targetMaterial); target.rotation.x = -Math.PI / 2; scene.add(pad, target);
-  disposables.push(padGeometry, padMaterial, targetGeometry, targetMaterial);
+  const targetGeometry = new THREE.RingGeometry(padRadius * .72, padRadius, 40), targetMaterial = new THREE.MeshLambertMaterial({ color: '#e9b44c', side: THREE.DoubleSide });
+  const target = new THREE.Mesh(targetGeometry, targetMaterial); target.rotation.x = -Math.PI / 2; scene.add(target);
+  disposables.push(targetGeometry, targetMaterial);
   return target;
 }
 
@@ -194,12 +200,15 @@ function droneModel(id: string, selected: boolean, disposables: { dispose(): voi
   return group;
 }
 
-export default function DroneCam({ pose, nearby = [], target: destination }: {
-  pose: CameraPose; nearby?: readonly CameraPose[]; target?: { x: number; y: number };
+export default function DroneCam({ pose, nearby = [], target: destination, pads = [] }: {
+  pose: CameraPose; nearby?: readonly CameraPose[]; target?: { x: number; y: number }; pads?: readonly CamPad[];
 }) {
   const host = useRef<HTMLDivElement>(null);
   const buffers = useRef(new Map<string, PoseBuffer>());
   const latest = useRef({ pose, nearby, destination });
+  // Pads are static store geometry, so the scene reads them once at mount.
+  const padsRef = useRef(pads);
+  padsRef.current = pads;
   const [status, setStatus] = useState<'loading' | 'live' | 'unavailable'>('loading');
   const [ground, setGround] = useState<GroundSource>(() => composedGround ? 'osm' : 'illustrated');
   const [groundNote, setGroundNote] = useState('');
@@ -263,17 +272,30 @@ export default function DroneCam({ pose, nearby = [], target: destination }: {
       .then(count => { if (count !== null) element.dataset.buildings = String(count); })
       .catch(() => { if (!controller.signal.aborted) element.dataset.buildings = '0'; });
     target.visible = false;
+    const padGeometry = new THREE.CylinderGeometry(padRadius, padRadius, .08, 32), padMaterial = new THREE.MeshLambertMaterial({ color: '#184b38' });
+    const markGeometry = new THREE.RingGeometry(padRadius * .35, padRadius * .45, 24), markMaterial = new THREE.MeshBasicMaterial({ color: '#fffdf5', side: THREE.DoubleSide });
+    const padGroup = new THREE.Group();
+    for (const pad of padsRef.current) {
+      const deck = pad.altitudeMetres / metresPerUnit;
+      const disc = new THREE.Mesh(padGeometry, padMaterial); disc.position.set(pad.x, deck + .04, pad.y);
+      const mark = new THREE.Mesh(markGeometry, markMaterial); mark.rotation.x = -Math.PI / 2; mark.position.set(pad.x, deck + .09, pad.y);
+      padGroup.add(disc, mark);
+    }
+    scene.add(padGroup);
+    element.dataset.pads = String(padsRef.current.length);
+    disposables.push(padGeometry, padMaterial, markGeometry, markMaterial);
     const models = new Map<string, THREE.Group>();
     const routeMaterial = new THREE.MeshBasicMaterial({ color: '#f5b955', transparent: true, opacity: .36, depthWrite: false });
     const routeGroup = new THREE.Group();
     scene.add(routeGroup);
     const clearRoute = () => {
       for (const child of [...routeGroup.children]) {
-        if (child instanceof THREE.Mesh) child.geometry.dispose();
+        if (child instanceof THREE.Mesh && child.geometry !== ringGeometry) child.geometry.dispose();
         routeGroup.remove(child);
       }
     };
-    disposables.push(routeMaterial, { dispose: clearRoute });
+    const ringGeometry = new THREE.TorusGeometry(ringRadius, .03, 6, 28);
+    disposables.push(routeMaterial, { dispose: clearRoute }, ringGeometry);
     let routeReading: CameraPose | undefined;
     let routeKey = '';
     const frustum = new THREE.Frustum(), viewProjection = new THREE.Matrix4();
@@ -328,27 +350,35 @@ export default function DroneCam({ pose, nearby = [], target: destination }: {
             const point = fromLonLat(waypoint.position.longitude, waypoint.position.latitude);
             return new THREE.Vector3(point.x, waypoint.altitudeMetres / metresPerUnit, point.y);
           });
-          for (let i = 1; i < points.length; i++) {
-            const direction = points[i].clone().sub(points[i - 1]);
-            if (direction.length() < .01) continue;
-            const length = direction.length();
-            const segment = new THREE.Mesh(new THREE.CylinderGeometry(.3, .3, length, 8), routeMaterial);
-            segment.position.copy(points[i - 1]).add(points[i]).multiplyScalar(.5);
-            segment.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
-            routeGroup.add(segment);
-            // Gates make the true flight line legible even when the camera looks below a level route.
-            for (let distance = 4; distance < length; distance += 8) {
-              const gate = new THREE.Mesh(new THREE.TorusGeometry(1.1, .045, 6, 32), routeMaterial);
-              gate.position.copy(points[i - 1]).addScaledVector(direction, distance);
+          const path = new THREE.CurvePath<THREE.Vector3>();
+          for (let i = 1; i < points.length; i++)
+            if (points[i].distanceTo(points[i - 1]) > .01) path.add(new THREE.LineCurve3(points[i - 1], points[i]));
+          const length = path.curves.length ? path.getLength() : 0;
+          if (length > 0) {
+            // A thin centre line plus small, closely spaced rings: the tunnel follows the curved descent onto the pad.
+            routeGroup.add(new THREE.Mesh(new THREE.TubeGeometry(path, Math.max(8, Math.ceil(length)), .1, 6, false), routeMaterial));
+            const lengths = path.getCurveLengths();
+            for (let distance = ringSpacing / 2; distance < length - ringSpacing / 4; distance += ringSpacing) {
+              const index = lengths.findIndex(total => total >= distance);
+              const curve = path.curves[index] as THREE.LineCurve3;
+              const start = index > 0 ? lengths[index - 1] : 0;
+              const point = curve.getPointAt((distance - start) / Math.max(1e-6, lengths[index] - start));
+              const direction = curve.v2.clone().sub(curve.v1).normalize();
+              const gate = new THREE.Mesh(ringGeometry, routeMaterial);
+              gate.position.copy(point);
               gate.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
               routeGroup.add(gate);
             }
+            element.dataset.routeRings = String(routeGroup.children.length - 1);
           }
           element.dataset.routePoints = String(current.plannedRoute?.length ?? 0);
         }
       }
-      target.visible = !!goal;
-      if (goal) target.position.set(goal.x, (current.plannedRoute?.at(-1)?.altitudeMetres ?? 0) / metresPerUnit + .05, goal.y);
+      // The gold target marks where this leg actually lands: the assigned pad when a route is planned.
+      const landing = current.plannedRoute?.at(-1);
+      const aim = landing ? fromLonLat(landing.position.longitude, landing.position.latitude) : goal;
+      target.visible = !!aim;
+      if (aim) target.position.set(aim.x, (landing?.altitudeMetres ?? 0) / metresPerUnit + .1, aim.y);
       const at = still ? Date.now() : Date.now() - 2000;
       const sampled = buffers.current.get(current.droneId)?.sample(at) ?? current;
       const location = fromLonLat(sampled.position.longitude, sampled.position.latitude);

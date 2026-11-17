@@ -55,7 +55,16 @@ public sealed class BuildingAirspace(IReadOnlyList<BuildingVolume> buildings)
         building.Ring.Max(p => p.X) + ClearanceMetres, building.Ring.Max(p => p.Y) + ClearanceMetres,
         Math.Max(.6 * 4.2, building.HeightMetres))).ToArray();
 
+    /// <summary>
+    /// Landing altitude for a point. A store's pads form one deck at the highest of their roof clearances,
+    /// so pads that straddle a roof edge are still level with each other.
+    /// </summary>
     public double PadAltitude(GeoPoint point) =>
+        ServiceArea.Stores.FirstOrDefault(store => store.Pads.Any(pad => pad.Location == point)) is { } store
+            ? store.Pads.Max(pad => SurfaceAltitude(pad.Location))
+            : SurfaceAltitude(point);
+
+    double SurfaceAltitude(GeoPoint point) =>
         envelopes.Where(e => e.Contains(AirPoint.From(point))).Select(e => e.Height + ClearanceMetres).DefaultIfEmpty(0).Max();
 
     public bool SegmentClear(GeoPoint from, GeoPoint to, double altitude) =>

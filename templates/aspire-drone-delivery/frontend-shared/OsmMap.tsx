@@ -4,7 +4,8 @@ import { latLng, osmAttribution, osmMaxZoom, osmTileUrl } from './osm';
 import type { Point } from './osm';
 
 export type MapFlight = Point & { id: string; status: string; heading?: number; path?: Point[] };
-export type MapStore = Point & { label: string };
+export type MapPad = Point & { id: string; held?: boolean };
+export type MapStore = Point & { label: string; pads?: MapPad[] };
 export type MapRoute = { origin: Point; target: Point; targetLabel: string; current?: Point; path?: Point[] };
 
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -68,6 +69,8 @@ export default function OsmMap({ flights, stores = [], route, follow, center, zo
     const group = layers.current?.stores;
     if (!group) return;
     group.clearLayers();
+    for (const store of stores) for (const pad of store.pads ?? [])
+      L.circleMarker(latLng(pad), { radius: 4, weight: 1.5, color: '#184b38', fillColor: pad.held ? '#e9b44c' : '#fffdf5', fillOpacity: .95, interactive: false, className: pad.held ? 'osm-pad osm-pad-held' : 'osm-pad' }).addTo(group);
     for (const store of stores) L.marker(latLng(store), { icon: L.divIcon({ html: label('osm-store', store.label), className: 'osm-marker', iconSize: [0, 0] }), keyboard: false, title: store.label }).addTo(group);
   }, [stores]);
 

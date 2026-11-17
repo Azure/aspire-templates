@@ -403,6 +403,15 @@ turn houses into towers, or 7 m when none is near. The simulator conservatively
 uses the 12 m ceiling for untagged collision envelopes and treats pads inside
 building envelopes as rooftop pads.
 
+Each store has four landing pads, 9 m apart on one shared deck. The drone simulator
+reserves a pad before a drone leaves for pickup, so no two drones hold the same pad. A
+pad is released once its drone is 8 m clear. If every pad is taken, the drone waits,
+charging on its home pad, until one frees up. Legs end with a curved approach: the
+drone leaves cruise altitude on a quarter-ellipse and touches down vertically on its
+pad. The approach falls back to a straight vertical descent when the curve would clip
+a building. The camera tunnel and both maps draw this same planned route, so they end
+on the assigned pad.
+
 The public OSM tile server is a volunteer-run service suitable for demos and
 development traffic only. Its [tile usage policy](https://operations.osmfoundation.org/policies/tiles/)
 requires visible attribution and forbids bulk downloading or heavy use. Before

@@ -6,6 +6,7 @@ import { fromLonLat } from './mapGeometry';
 import { useRealtimeSnapshot } from './useApi';
 import { airborne, droneLabel, fleetMap } from './model';
 import DroneDrawer from './DroneDrawer';
+import { camPads } from '../../frontend-shared/pads';
 
 export default function App() {
   const load = useCallback(async (signal: AbortSignal) => {
@@ -13,7 +14,10 @@ export default function App() {
     return { fleet, orders, stores };
   }, []);
   const { data, error, loading } = useRealtimeSnapshot(load, { fleet: [], orders: [], stores: [] });
-  const stores = useMemo(() => data.stores.map(store => ({ ...fromLonLat(store.location.longitude, store.location.latitude), label: store.name })), [data.stores]);
+  const held = useMemo(() => new Set(data.fleet.map(drone => drone.padId).filter(Boolean)), [data.fleet]);
+  const stores = useMemo(() => data.stores.map(store => ({ ...fromLonLat(store.location.longitude, store.location.latitude), label: store.name,
+    pads: store.pads?.map(pad => ({ id: pad.id, held: held.has(pad.id), ...fromLonLat(pad.location.longitude, pad.location.latitude) })) })), [data.stores, held]);
+  const pads = useMemo(() => camPads(data.stores), [data.stores]);
   const [selected, setSelected] = useState<string | null>(null);
   const selectedDrone = data.fleet.find(drone => drone.droneId === selected);
   const active = data.orders.filter(snapshot => !['Delivered', 'Failed', 'Unserviceable'].includes(snapshot.status));
@@ -52,6 +56,6 @@ export default function App() {
       <p className="privacy-note"><ShieldCheck size={14} />Fictional orders and flights. Logistics handles dispatch; operator commands affect the simulation only.</p>
     </main>
     <footer><span className="footer-brand">ForthCoffee.</span><span>Fleet operations · Built with Aspire.</span></footer>
-    {selectedDrone && <DroneDrawer key={selectedDrone.droneId} drone={selectedDrone} fleet={data.fleet} onSelect={setSelected} onClose={() => setSelected(null)} />}
+    {selectedDrone && <DroneDrawer key={selectedDrone.droneId} drone={selectedDrone} fleet={data.fleet} pads={pads} onSelect={setSelected} onClose={() => setSelected(null)} />}
   </div>;
 }

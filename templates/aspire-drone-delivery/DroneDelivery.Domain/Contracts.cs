@@ -74,7 +74,8 @@ public sealed record DroneTelemetry(
     double RollDegrees = 0,
     double SpeedMetresPerSecond = 0,
     IReadOnlyList<FlightWaypoint>? PlannedRoute = null,
-    string? RoutingError = null)
+    string? RoutingError = null,
+    string? PadId = null)
 {
     public CameraPose CameraPose() => new(DroneId, Timestamp, Position, AltitudeMetres, Heading, CameraPitchDegrees, PitchDegrees, RollDegrees);
 }

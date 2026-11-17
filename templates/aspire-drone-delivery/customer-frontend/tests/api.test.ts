@@ -57,6 +57,18 @@ test('tracking and camera keep the simulator detour and attitude instead of draw
   assert.equal(order.cameraPose?.rollDegrees, -1.7);
 });
 
+test('inbound leg targets the assigned store pad and the camera gets the store pads at deck height', () => {
+  const pad = { latitude: -37.83176, longitude: 144.95795 };
+  const store = { ...snapshot.store, deckAltitudeMetres: 18, pads: [
+    { id: 'coventry-1', location: pad }, { id: 'coventry-2', location: { latitude: -37.83176, longitude: 144.95805 } }] };
+  const order = customerOrder({ ...snapshot, store, telemetry: { ...telemetry, padId: 'coventry-1',
+    plannedRoute: [{ position: telemetry.homePad, altitudeMetres: 60 }, { position: pad, altitudeMetres: 18 }] } }, receipt, now);
+  assert.deepEqual({ x: order.tracking?.target.x, y: order.tracking?.target.y }, fromLonLat(pad.longitude, pad.latitude));
+  assert.deepEqual(order.pads?.map(item => [item.id, item.altitudeMetres]), [['coventry-1', 18], ['coventry-2', 18]]);
+  assert.deepEqual(customerOrder({ ...snapshot, telemetry }, receipt, now).tracking?.target.x,
+    fromLonLat(snapshot.store.location.longitude, snapshot.store.location.latitude).x, 'without a route the store is the target');
+});
+
 test('queued assignment, unrelated telemetry, returning and stale fixes never become live views', () => {
   for (const update of [
     { ...snapshot, droneId: null }, { ...snapshot, telemetry: null },
