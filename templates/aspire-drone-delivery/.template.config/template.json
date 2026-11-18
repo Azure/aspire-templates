@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json.schemastore.org/template",
+  "author": "Microsoft",
+  "name": "forthcoffee-drones",
+  "description": "Customer ordering, fleet operations and live drone tracking, orchestrated by Aspire.",
+  "identity": "Azure.Aspire.Templates.DroneDelivery.CSharp",
+  "groupIdentity": "Azure.Aspire.DroneDelivery",
+  "shortName": "forthcoffee-drones",
+  "sourceName": "DroneDelivery",
+  "defaultName": "DroneDelivery",
+  "preferNameDirectory": false,
+  "classifications": ["Aspire", "Cloud", "React", "Demo"],
+  "tags": {
+    "language": "C#",
+    "type": "solution"
+  },
+  "sources": [
+    {
+      "exclude": [
+        "**/bin/**", "**/obj/**", "**/node_modules/**", "**/dist/**",
+        "**/.env.local", "**/.env.*.local", "**/.aspire/**", "**/*.tsbuildinfo",
+        ".template.config/**"
+      ]
+    }
+  ],
+  "primaryOutputs": [
+    { "path": "DroneDelivery.AppHost/DroneDelivery.AppHost.csproj" }
+  ]
+}

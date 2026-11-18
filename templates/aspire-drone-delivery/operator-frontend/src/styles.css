@@ -1,0 +1,78 @@
+.operations-roster { margin-top: 40px; }
+.drone-search { display: grid; gap: 8px; max-width: 320px; font-size: 12px; }
+.drone-search input { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--line); border-radius: 5px; background: #fffdf7; color: var(--forest); font: inherit; }
+.drone-search input:focus-visible { outline: 2px solid var(--forest); outline-offset: 2px; }
+.operations-drones { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.operations-drones article { display: flex; flex-direction: column; gap: 9px; padding: 20px; background: #fffdf7; border: 1px solid #dde1d5; border-radius: 8px; }
+.operations-drones small { color: #73816c; }
+.operations-drones .outline-button { align-self: flex-start; margin-top: 5px; }
+.drawer-backdrop { position: fixed; inset: 0; z-index: 70; background: #14281e66; }
+.drone-drawer { position: absolute; right: 0; top: 0; bottom: 0; width: min(580px, 100%); background: #faf9f3; box-shadow: -8px 0 40px #17382c33; overflow-y: auto; overscroll-behavior: contain; animation: drawer-in .2s ease-out; }
+.drawer-heading { display: flex; align-items: center; justify-content: space-between; padding: 22px 24px 12px; }
+.drawer-heading h2 { font-size: 25px; margin: 8px 0 0; font-weight: 500; }
+.drone-select { display: flex; align-items: center; justify-content: space-between; margin: 0 24px 16px; font-size: 12px; }
+.drone-select select { background: #fffdf7; color: var(--forest); border: 1px solid var(--line); padding: 8px 14px; border-radius: 5px; font: inherit; }
+.drone-drawer .drone-cam { height: 330px; }
+.drawer-body { padding: 24px; }
+.drone-facts { display: grid; gap: 7px; color: var(--muted); font-size: 12px; }
+.drone-facts strong { color: var(--forest); font-size: 16px; }
+.command-disclaimer { font-size: 11px; line-height: 1.7; color: var(--muted); margin: 18px 0; }
+.command-status { font-size: 12px; line-height: 1.6; padding: 12px; background: #eaf0e2; border-left: 3px solid #879d71; }
+.drone-commands { display: grid; gap: 16px; margin-top: 20px; }
+.drone-commands > div { display: grid; gap: 5px; }
+.drone-commands button { text-align: left; padding: 13px 15px; border: 1px solid #ccd6c3; border-radius: 5px; background: #fffdf7; color: var(--forest); font-size: 12px; font-weight: 600; }
+.drone-commands button:hover:not(:disabled) { background: #eaf0e2; }
+.drone-commands button:disabled { opacity: .48; cursor: not-allowed; }
+.drone-commands .command-danger { color: #934b38; border-color: #d7b6a9; }
+.drone-commands small { font-size: 10px; line-height: 1.6; color: var(--muted); }
+@keyframes drawer-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@media (max-width: 650px) { .drone-drawer .drone-cam { height: 280px; } .drawer-body { padding: 20px; } }
+@media (prefers-reduced-motion: reduce) { .drone-drawer { animation: none; } }
+.take-control-row { display: grid; gap: 7px; margin: 0 0 18px; }
+.take-control-row button { justify-self: start; padding: 11px 18px; border: 0; border-radius: 5px; background: var(--forest); color: #fffdf5; font-size: 12px; font-weight: 700; letter-spacing: .04em; cursor: pointer; }
+.take-control-row button:disabled { background: #b9c2b4; cursor: not-allowed; }
+.take-control-row small { font-size: 10px; line-height: 1.6; color: var(--muted); }
+.pilot-placeholder { display: grid; place-items: center; color: #dfe9e4; background: #17382c; font-size: 12px; letter-spacing: .08em; }
+.pilot-overlay { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 18px; background: #0d1f17f0; backdrop-filter: blur(6px); overscroll-behavior: contain; animation: pilot-dim .3s ease-out; }
+.pilot-frame { width: min(1180px, 100%); max-height: 100%; display: grid; gap: 12px; color: #eef3ec; transform-origin: 100% 0; animation: pilot-float .45s cubic-bezier(.2, .8, .2, 1); }
+.pilot-heading { display: flex; justify-content: space-between; align-items: end; gap: 16px; }
+.pilot-heading .eyebrow { color: #f5b955; }
+.pilot-heading h2 { margin: 6px 0 0; font-size: 24px; font-weight: 500; }
+.pilot-link { font-size: 11px; padding: 6px 10px; border-radius: 99px; background: #1f4d3a; letter-spacing: .05em; }
+.pilot-link.degraded { background: #934b38; }
+.pilot-status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: end; }
+.pilot-battery { display: inline-flex; align-items: center; gap: 7px; font: 600 11px ui-monospace, monospace; padding: 5px 10px; border-radius: 99px; background: #1f4d3a; }
+.pilot-battery i { position: relative; width: 26px; height: 11px; border: 1.5px solid #eef3ec; border-radius: 3px; padding: 1px; }
+.pilot-battery i::after { content: ""; position: absolute; right: -4px; top: 2.5px; width: 2px; height: 4px; border-radius: 0 1px 1px 0; background: #eef3ec; }
+.pilot-battery b { display: block; height: 100%; border-radius: 1px; background: #7fd6a3; transition: width .4s; }
+.pilot-battery.low { background: #934b38; }
+.pilot-battery.low b { background: #f5b955; }
+.pilot-feed .cam-cross { display: none; }
+.aim-actual, .aim-desired { position: absolute; left: 50%; top: 50%; z-index: 3; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+.aim-actual { width: 38px; height: 38px; border: 1.5px solid #fffef5d0; box-shadow: 0 0 0 1px #0004; }
+.aim-actual::after { content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: #fffef5d0; }
+.aim-desired { width: 22px; height: 22px; border: 2px dashed #f5b955; box-shadow: 0 0 0 1px #0003; }
+.aim-desired[data-in-view="false"] { border-style: solid; opacity: .7; }
+.pilot-feed[data-paused="true"] .aim-desired { display: none; }
+.pilot-feed { position: relative; aspect-ratio: 16 / 9; max-height: calc(100vh - 210px); border-radius: 8px; overflow: hidden; box-shadow: 0 30px 80px #0008; outline: none; cursor: crosshair; }
+.pilot-feed .drone-cam { height: 100%; }
+.pilot-feed[data-paused="true"] { cursor: default; }
+.pilot-prompt { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 4px; padding: 20px; text-align: center; background: #0d1f17b8; }
+.pilot-prompt h3 { margin: 0; font-size: 22px; font-weight: 500; }
+.pilot-prompt p { margin: 6px 0 12px; max-width: 460px; font-size: 13px; line-height: 1.6; }
+.pilot-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.pilot-actions button { padding: 11px 16px; border-radius: 5px; border: 1px solid #ffffff55; background: transparent; color: #fffdf5; font-weight: 700; font-size: 12px; cursor: pointer; }
+.pilot-actions .primary { background: #f5b955; border-color: #f5b955; color: #17382c; }
+.pilot-actions .command-danger { background: #934b38; border-color: #934b38; }
+.pilot-help { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 18px; font-size: 12px; }
+.pilot-help dl { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0; }
+.pilot-help dl div { display: flex; align-items: center; gap: 6px; }
+.pilot-help dt { display: flex; gap: 3px; color: #f5b955; }
+.pilot-help dd { margin: 0; color: #cdd9cf; }
+.pilot-help kbd { min-width: 22px; padding: 2px 6px; border: 1px solid #ffffff44; border-bottom-width: 2px; border-radius: 4px; font: 600 11px/1.4 ui-monospace, monospace; text-align: center; color: #fffdf5; }
+.pilot-readout { font: 12px ui-monospace, monospace; color: #dfe9e4; }
+.pilot-note { margin: 0; font-size: 11px; color: #a9b8ad; }
+@keyframes pilot-dim { from { background: #0d1f1700; } }
+@keyframes pilot-float { from { transform: translate(18%, 2%) scale(.45); opacity: .4; } }
+@media (max-width: 650px) { .pilot-overlay { padding: 10px; } .pilot-heading h2 { font-size: 19px; } .pilot-feed { aspect-ratio: 4 / 3; } }
+@media (prefers-reduced-motion: reduce) { .pilot-overlay, .pilot-frame { animation: none; } }
