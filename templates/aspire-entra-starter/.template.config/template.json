@@ -11,11 +11,7 @@
     "API",
     "Service",
     "Blazor",
-    "Identity",
-    "Test",
-    "MSTest",
-    "NUnit",
-    "xUnit"
+    "Identity"
   ],
   "name": "aspire-entra-starter",
   "defaultName": "AspireApp",
@@ -33,13 +29,7 @@
   "thirdPartyNotices": "https://aka.ms/aspire/third-party-notices",
   "groupIdentity": "Azure.Aspire.EntraStarter",
   "guids": [
-    "EB78CA0D-830B-4BA4-B7CF-E30C03BD3344",
-    "DD05466C-15B3-409D-8890-4FFEE30DBF91",
-    "24EA6FD2-F87A-4AE6-A36A-0B2E0096E702",
-    "36602D6C-C1FD-4B67-BDF4-6FF07D8BC547",
-    "05434F30-3620-4647-896F-C640507264D8",
-    "FD6CA176-4F2E-481C-AC22-11713FD55BC9",
-    "0516F5D8-5284-4A0D-BD38-F44986BBB544"
+    "FD6CA176-4F2E-481C-AC22-11713FD55BC9"
   ],
   "sources": [
     {
@@ -49,13 +39,7 @@
         {
           "condition": "(hostIdentifier != \"dotnetcli\" && hostIdentifier != \"dotnetcli-preview\")",
           "exclude": [
-            "*.sln"
-          ]
-        },
-        {
-          "condition": "(TestFx == None)",
-          "exclude": [
-            "Aspire-StarterApplication.1.Tests/**/*.*"
+            "*.slnx"
           ]
         }
       ]
@@ -65,28 +49,28 @@
     "HostingAppHostVersion": {
       "type": "parameter",
       "datatype": "string",
-      "defaultValue": "17.0.0-preview.1.26555.11",
+      "defaultValue": "17.0.0",
       "description": "The version of Aspire.Hosting.AppHost.",
       "replaces": "HostingAppHostPackageVersion"
     },
     "HostingDotnetVersion": {
       "type": "parameter",
       "datatype": "string",
-      "defaultValue": "17.0.0-preview.1.26555.11",
+      "defaultValue": "17.0.0",
       "description": "The version of Aspire.Hosting.Dotnet.",
       "replaces": "HostingDotnetPackageVersion"
     },
     "HostingAzureAppContainersVersion": {
       "type": "parameter",
       "datatype": "string",
-      "defaultValue": "17.0.0-preview.1.26555.11",
+      "defaultValue": "17.0.0",
       "description": "The version of Aspire.Hosting.Azure.AppContainers.",
       "replaces": "HostingAzureAppContainersPackageVersion"
     },
     "HostingAzureEntraIdVersion": {
       "type": "parameter",
       "datatype": "string",
-      "defaultValue": "17.0.0-preview.1.26555.11",
+      "defaultValue": "17.0.0-preview.1.26567.5",
       "description": "The version of Aspire.Hosting.Azure.EntraId.",
       "replaces": "HostingAzureEntraIdPackageVersion"
     },
@@ -94,7 +78,7 @@
       "type": "parameter",
       "datatype": "string",
       "isEnabled": "UseRedisCache",
-      "defaultValue": "17.0.0-preview.1.26555.11",
+      "defaultValue": "17.0.0",
       "description": "The version of Aspire.Hosting.Azure.Redis.",
       "replaces": "HostingAzureRedisPackageVersion"
     },
@@ -102,7 +86,7 @@
       "type": "parameter",
       "datatype": "string",
       "isEnabled": "UseRedisCache",
-      "defaultValue": "17.0.0-preview.1.26555.11",
+      "defaultValue": "17.0.0",
       "description": "The version of Aspire.Microsoft.Azure.StackExchangeRedis.",
       "replaces": "AzureRedisClientPackageVersion"
     },
@@ -110,17 +94,9 @@
       "type": "parameter",
       "datatype": "string",
       "isEnabled": "UseRedisCache",
-      "defaultValue": "17.0.0-preview.1.26555.11",
+      "defaultValue": "17.0.0",
       "description": "The version of Aspire.StackExchange.Redis.OutputCaching.",
       "replaces": "RedisOutputCachingPackageVersion"
-    },
-    "HostingTestingVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "isEnabled": "(TestFx != None)",
-      "defaultValue": "17.0.0-preview.1.26555.11",
-      "description": "The version of Aspire.Hosting.Testing.",
-      "replaces": "HostingTestingPackageVersion"
     },
     "Framework": {
       "type": "parameter",
@@ -149,73 +125,6 @@
       "defaultValue": "false",
       "displayName": "_Use Azure Managed Redis for caching (local runs require a container runtime)",
       "description": "Use Azure Managed Redis for output caching, with a local Redis container for development. Local runs require a supported container runtime, not Azure credentials."
-    },
-    "TestFx": {
-      "type": "parameter",
-      "datatype": "choice",
-      "defaultValue": "None",
-      "displayName": "Create a _test project",
-      "description": "Configures whether to create a project for integration tests using the AppHost project.",
-      "choices": [
-        {
-          "choice": "None",
-          "description": "Do not create a test project."
-        },
-        {
-          "choice": "MSTest",
-          "description": "Creates an MSTest test project using the AppHost project."
-        },
-        {
-          "choice": "NUnit",
-          "description": "Creates an NUnit test project using the AppHost project."
-        },
-        {
-          "choice": "xUnit.net",
-          "description": "Creates an xUnit.net test project using the AppHost project."
-        }
-      ]
-    },
-    "XUnitVersion": {
-      "type": "parameter",
-      "description": "The version of xUnit.net to use.",
-      "displayName": "xUnit.net version",
-      "datatype": "choice",
-      "isEnabled": "(TestFx == xUnit.net)",
-      "replaces": "XUnitVersion",
-      "choices": [
-        {
-          "choice": "v2",
-          "displayName": "v2",
-          "description": "Chooses xUnit.net v2 with VSTest"
-        },
-        {
-          "choice": "v3",
-          "displayName": "v3",
-          "description": "Chooses xUnit.net v3 with VSTest"
-        },
-        {
-          "choice": "v3mtp",
-          "displayName": "v3 with Microsoft Test Platform",
-          "description": "Chooses xUnit.net v3 with Microsoft Test Platform"
-        }
-      ],
-      "defaultValue": "v2"
-    },
-    "IsXunit": {
-      "type": "generated",
-      "generator": "switch",
-      "parameters": {
-        "cases": [
-          {
-            "condition": "(TestFx == xUnit.net)",
-            "value": "true"
-          },
-          {
-            "condition": "",
-            "value": "false"
-          }
-        ]
-      }
     },
     "appHostHttpPort": {
       "type": "parameter",
@@ -544,7 +453,7 @@
   },
   "primaryOutputs": [
     {
-      "path": "Aspire-StarterApplication.1.sln",
+      "path": "Aspire-StarterApplication.1.slnx",
       "condition": "(hostIdentifier == \"dotnetcli\" || hostIdentifier == \"dotnetcli-preview\")"
     },
     {
@@ -558,10 +467,6 @@
     },
     {
       "path": "Aspire-StarterApplication.1.Web\\Aspire-StarterApplication.1.Web.csproj"
-    },
-    {
-      "path": "Aspire-StarterApplication.1.Tests\\Aspire-StarterApplication.1.Tests.csproj",
-      "condition": "(TestFx != None)"
     }
   ],
   "postActions": [

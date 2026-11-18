@@ -5,7 +5,6 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AspireUseCliBundle>true</AspireUseCliBundle>
     <UserSecretsId>fd6ca176-4f2e-481c-ac22-11713fd55bc9</UserSecretsId>
   </PropertyGroup>
 
@@ -14,12 +13,9 @@
     <PackageReference Include="Aspire.Hosting.Dotnet" Version="HostingDotnetPackageVersion" />
     <PackageReference Include="Aspire.Hosting.Azure.AppContainers" Version="HostingAzureAppContainersPackageVersion" />
     <PackageReference Include="Aspire.Hosting.Azure.EntraId" Version="HostingAzureEntraIdPackageVersion" />
-  </ItemGroup>
-
-  <!--#if (UseRedisCache) -->
-  <ItemGroup>
+    <!--#if (UseRedisCache) -->
     <PackageReference Include="Aspire.Hosting.Azure.Redis" Version="HostingAzureRedisPackageVersion" />
+    <!--#endif -->
   </ItemGroup>
 
-  <!--#endif -->
 </Project>
