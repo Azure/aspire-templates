@@ -2,11 +2,6 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 builder.AddAzureContainerAppEnvironment("env");
 
-#if UseRedisCache
-var cache = builder.AddAzureManagedRedis("cache")
-    .RunAsContainer();
-
-#endif
 // Entra ID app registration for the API. It exposes the "access_as_user" delegated scope.
 var apiEntra = builder.AddEntraIdApplication("apiservice-entra")
     .WithScope("access_as_user", "Access the weather API on behalf of the signed-in user");
@@ -25,10 +20,6 @@ var webEntra = builder.AddEntraIdApplication("webfrontend-entra")
 var webFrontend = builder.AddDotnetProject("webfrontend", "../Aspire-StarterApplication.1.Web/Aspire-StarterApplication.1.Web.csproj")
     .WithExternalHttpEndpoints()
     .WithHttpHealthCheck("/health")
-#if UseRedisCache
-    .WithReference(cache)
-    .WaitFor(cache)
-#endif
     .WithReference(webEntra)
     .WithReference(apiService)
     .WaitFor(apiService);

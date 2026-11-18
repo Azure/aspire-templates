@@ -7,11 +7,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
-#if (UseRedisCache)
-builder.AddRedisClientBuilder("cache")
-    .WithAzureAuthentication()
-    .WithOutputCache();
-#endif
 
 // Sign users in with Microsoft Entra ID and acquire access tokens to call the API service.
 // The AzureAd and DownstreamApis configuration sections are provided by the AppHost from the
@@ -28,10 +23,6 @@ builder.Services.AddScoped<BlazorAuthenticationChallengeHandler>();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-#if (!UseRedisCache)
-builder.Services.AddOutputCache();
-
-#endif
 builder.Services.AddHttpClient<WeatherApiClient>(client =>
     {
         // This URL uses "https+http://" to indicate HTTPS is preferred over HTTP.
@@ -56,8 +47,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.UseAntiforgery();
-
-app.UseOutputCache();
 
 app.MapStaticAssets();
 

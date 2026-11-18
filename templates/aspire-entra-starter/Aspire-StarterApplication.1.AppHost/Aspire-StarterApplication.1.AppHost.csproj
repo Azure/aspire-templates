@@ -13,9 +13,6 @@
     <PackageReference Include="Aspire.Hosting.Dotnet" Version="HostingDotnetPackageVersion" />
     <PackageReference Include="Aspire.Hosting.Azure.AppContainers" Version="HostingAzureAppContainersPackageVersion" />
     <PackageReference Include="Aspire.Hosting.Azure.EntraId" Version="HostingAzureEntraIdPackageVersion" />
-    <!--#if (UseRedisCache) -->
-    <PackageReference Include="Aspire.Hosting.Azure.Redis" Version="HostingAzureRedisPackageVersion" />
-    <!--#endif -->
   </ItemGroup>
 
 </Project>

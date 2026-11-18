@@ -37,35 +37,7 @@
         "allowPrerelease": true
       }
     },
-    "HostingAzureRedisVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.Hosting.Azure.Redis",
-        "versionRange": "[17.0.0-0,18.0.0-0)",
-        "allowPrerelease": false
-      }
-    },
-    "AzureRedisClientVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.Microsoft.Azure.StackExchangeRedis",
-        "versionRange": "[17.0.0-0,18.0.0-0)",
-        "allowPrerelease": false
-      }
-    },
-    "RedisOutputCachingVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.StackExchange.Redis.OutputCaching",
-        "versionRange": "[17.0.0-0,18.0.0-0)",
-        "allowPrerelease": false
-      }
-    },
     "Framework": { "isHidden": true },
-    "UseRedisCache": { "displayName": "Use Azure Managed Redis for caching (local runs require a container runtime)" },
     "appHostHttpPort": { "isHidden": true },
     "appHostHttpsPort": { "isHidden": true },
     "appHostOtlpHttpPort": { "isHidden": true },

@@ -15,7 +15,7 @@
   ],
   "name": "aspire-entra-starter",
   "defaultName": "AspireApp",
-  "description": "An Aspire Blazor frontend and web API targeting Azure Container Apps, secured with Microsoft Entra ID (user sign-in and JWT-protected API), with optional Azure Managed Redis caching.",
+  "description": "An Aspire Blazor frontend and web API targeting Azure Container Apps, secured with Microsoft Entra ID (user sign-in and JWT-protected API).",
   "shortName": "aspire-entra-starter",
   "sourceName": "Aspire-StarterApplication.1",
   "preferNameDirectory": false,
@@ -74,30 +74,6 @@
       "description": "The version of Aspire.Hosting.Azure.EntraId.",
       "replaces": "HostingAzureEntraIdPackageVersion"
     },
-    "HostingAzureRedisVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "isEnabled": "UseRedisCache",
-      "defaultValue": "17.0.0",
-      "description": "The version of Aspire.Hosting.Azure.Redis.",
-      "replaces": "HostingAzureRedisPackageVersion"
-    },
-    "AzureRedisClientVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "isEnabled": "UseRedisCache",
-      "defaultValue": "17.0.0",
-      "description": "The version of Aspire.Microsoft.Azure.StackExchangeRedis.",
-      "replaces": "AzureRedisClientPackageVersion"
-    },
-    "RedisOutputCachingVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "isEnabled": "UseRedisCache",
-      "defaultValue": "17.0.0",
-      "description": "The version of Aspire.StackExchange.Redis.OutputCaching.",
-      "replaces": "RedisOutputCachingPackageVersion"
-    },
     "Framework": {
       "type": "parameter",
       "description": "The target framework for the project.",
@@ -118,13 +94,6 @@
     "hostIdentifier": {
       "type": "bind",
       "binding": "HostIdentifier"
-    },
-    "UseRedisCache": {
-      "type": "parameter",
-      "datatype": "bool",
-      "defaultValue": "false",
-      "displayName": "_Use Azure Managed Redis for caching (local runs require a container runtime)",
-      "description": "Use Azure Managed Redis for output caching, with a local Redis container for development. Local runs require a supported container runtime, not Azure credentials."
     },
     "appHostHttpPort": {
       "type": "parameter",

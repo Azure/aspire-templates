@@ -34,16 +34,9 @@
       "apiServiceHttpsPort": {
         "isHidden": true
       },
-      "UseRedisCache": {
-        "longName": "use-redis-cache",
-        "shortName": ""
-      },
       "LocalhostTld": {
         "longName": "localhost-tld",
         "shortName": ""
       }
-    },
-    "usageExamples": [
-      "--use-redis-cache"
-    ]
+    }
   }
