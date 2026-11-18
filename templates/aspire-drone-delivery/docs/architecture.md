@@ -43,7 +43,7 @@ start at the latest event, so restarting a worker does not replay old missions.
 
 | Component | Responsibility | Current boundary |
 | --- | --- | --- |
-| AppHost | Start emulators, workers, backend, two UI servers and two Vite apps | Azure Container Apps target configured; end-to-end Azure deployment unverified |
+| AppHost | Start emulators, workers, backend, two UI servers and two Vite apps | Azure Container Apps deployment; single-replica backend and simulators |
 | Domain library | Drone classes, VTOL flight legs, logistics planner, dispatcher and event contracts | Pure .NET; unit tested |
 | Drone simulator | Fleet of Piccolo/Doppio/Abbondante drones; missions, charging, telemetry, camera shots | In-memory fleet; SVG placeholder images |
 | Customer simulator | Peak-and-quiet demand from many customers at random drop-offs | Synthetic only |
@@ -189,5 +189,6 @@ local prerequisites, rather than adding Azure services solely for a diagram.
 The AppHost targets Azure Container Apps and uses Aspire's native Vite builds and
 per-server `PublishWithContainerFiles` wiring. The backend and simulators are
 limited to one replica for their in-memory state and event consumers; this is not
-a highly available design. A successful end-to-end Azure deployment from a fresh
-generated project has not yet been verified.
+a highly available design. A generated project has been deployed to Azure and
+checked with a customer order, realtime updates and order recovery after a backend
+restart.

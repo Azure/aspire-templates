@@ -510,9 +510,10 @@ state or consume simulation events. They are not highly available, and events ca
 be missed during downtime. The two UI servers are public and unauthenticated; do
 not expose this demo to untrusted users.
 
-`aspire publish` generates infrastructure artifacts without deploying. The deployment
-pipeline and frontend/server image builds have been checked locally, but an
-end-to-end Azure deployment has not yet been verified.
+`aspire publish` generates infrastructure artifacts without deploying. A generated
+project has been deployed to Azure Container Apps and checked with a customer order,
+realtime updates and order recovery after a backend restart. Deployment still depends
+on the subscription, region and available quotas.
 
 The [design](docs/design.md) and [architecture](docs/architecture.md) notes
 describe the proposed next steps.
