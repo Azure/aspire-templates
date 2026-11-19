@@ -1,6 +1,7 @@
 using Aspire_StarterApplication._1.Web;
 using Aspire_StarterApplication._1.Web.Components;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.Identity.Web;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,8 +17,16 @@ builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
     .EnableTokenAcquisitionToCallDownstreamApi()
     .AddInMemoryTokenCaches();
 builder.Services.AddCascadingAuthenticationState();
-builder.Services.AddAuthorization();
 builder.Services.AddScoped<BlazorAuthenticationChallengeHandler>();
+
+// Require an authenticated user by default. The fallback policy applies to every endpoint without its own
+// authorization metadata, so all pages require sign-in unless they explicitly opt out with [AllowAnonymous].
+var requireAuthenticatedUser = new AuthorizationPolicyBuilder()
+    .RequireAuthenticatedUser()
+    .Build();
+builder.Services.AddAuthorizationBuilder()
+    .SetDefaultPolicy(requireAuthenticatedUser)
+    .SetFallbackPolicy(requireAuthenticatedUser);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
@@ -48,7 +57,10 @@ app.UseAuthorization();
 
 app.UseAntiforgery();
 
-app.MapStaticAssets();
+// Static assets (CSS, JS, images) don't need to be protected and are required to render pages
+// such as the error page for signed-out users.
+app.MapStaticAssets()
+    .AllowAnonymous();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
