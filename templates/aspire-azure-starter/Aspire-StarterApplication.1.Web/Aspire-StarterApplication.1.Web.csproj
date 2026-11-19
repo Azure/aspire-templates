@@ -12,8 +12,8 @@
 
   <!--#if (UseRedisCache) -->
   <ItemGroup>
-    <PackageReference Include="Aspire.StackExchange.Redis.OutputCaching" Version="RedisOutputCachingPackageVersion" />
-    <PackageReference Include="Aspire.Microsoft.Azure.StackExchangeRedis" Version="AzureRedisClientPackageVersion" />
+    <PackageReference Include="Aspire.StackExchange.Redis.OutputCaching" Version="AspirePackageVersion" />
+    <PackageReference Include="Aspire.Microsoft.Azure.StackExchangeRedis" Version="AspirePackageVersion" />
   </ItemGroup>
 
   <!--#endif -->
