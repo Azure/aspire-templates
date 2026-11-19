@@ -22,7 +22,9 @@ flowchart LR
 ## Requirements
 
 - .NET 10 SDK, Node.js 20.19+ or 22.13+, and Docker (for the Web PubSub emulator).
-- Aspire 17. The Web PubSub emulator (`RunAsEmulator`) is not available in Aspire 13.x.
+- Aspire 17 or later. The Web PubSub emulator (`RunAsEmulator`) is not available in Aspire 13.x.
+
+`aspire new` selects the latest stable `Aspire.Hosting.AppHost` version at or above 17.0.0 from the configured NuGet sources and uses it for all Aspire packages. `dotnet new` defaults to 17.0.0.
 
 ## Run
 

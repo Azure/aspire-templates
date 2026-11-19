@@ -1,57 +1,12 @@
 {
   "createNuGetConfig": true,
   "symbolInfo": {
-    "HostingAppHostVersion": {
+    "AspirePackagesVersion": {
       "isHidden": true,
       "valueSource": {
         "kind": "nugetPackageVersion",
         "packageId": "Aspire.Hosting.AppHost",
-        "versionRange": "[17.0.0]",
-        "allowPrerelease": false
-      }
-    },
-    "HostingDotnetVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.Hosting.Dotnet",
-        "versionRange": "[17.0.0]",
-        "allowPrerelease": false
-      }
-    },
-    "HostingJavaScriptVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.Hosting.JavaScript",
-        "versionRange": "[17.0.0]",
-        "allowPrerelease": false
-      }
-    },
-    "HostingAzureAppContainersVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.Hosting.Azure.AppContainers",
-        "versionRange": "[17.0.0]",
-        "allowPrerelease": false
-      }
-    },
-    "HostingAzureWebPubSubVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.Hosting.Azure.WebPubSub",
-        "versionRange": "[17.0.0]",
-        "allowPrerelease": false
-      }
-    },
-    "WebPubSubClientVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.Azure.Messaging.WebPubSub",
-        "versionRange": "[17.0.0]",
+        "versionRange": "[17.0.0,)",
         "allowPrerelease": false
       }
     },

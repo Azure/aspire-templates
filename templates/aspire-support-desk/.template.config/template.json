@@ -15,7 +15,7 @@
   ],
   "name": "aspire-support-desk",
   "defaultName": "AspireApp",
-  "description": "A real-time customer support scenario: a React public website with a support chat launcher and a React agent console, connected through Azure Web PubSub (emulator locally) and an ASP.NET Core API, targeting Azure Container Apps.",
+  "description": "Real-time support chat with Azure Web PubSub",
   "shortName": "aspire-support-desk",
   "sourceName": "Aspire-StarterApplication.1",
   "preferNameDirectory": false,
@@ -80,47 +80,16 @@
       "type": "bind",
       "binding": "HostIdentifier"
     },
-    "HostingAppHostVersion": {
+    "AspirePackagesVersion": {
       "type": "parameter",
       "datatype": "string",
       "defaultValue": "17.0.0",
-      "description": "The version of Aspire.Hosting.AppHost.",
-      "replaces": "HostingAppHostPackageVersion"
-    },
-    "HostingDotnetVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "defaultValue": "17.0.0",
-      "description": "The version of Aspire.Hosting.Dotnet.",
-      "replaces": "HostingDotnetPackageVersion"
-    },
-    "HostingJavaScriptVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "defaultValue": "17.0.0",
-      "description": "The version of Aspire.Hosting.JavaScript.",
-      "replaces": "HostingJavaScriptPackageVersion"
-    },
-    "HostingAzureAppContainersVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "defaultValue": "17.0.0",
-      "description": "The version of Aspire.Hosting.Azure.AppContainers.",
-      "replaces": "HostingAzureAppContainersPackageVersion"
-    },
-    "HostingAzureWebPubSubVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "defaultValue": "17.0.0",
-      "description": "The version of Aspire.Hosting.Azure.WebPubSub.",
-      "replaces": "HostingAzureWebPubSubPackageVersion"
-    },
-    "WebPubSubClientVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "defaultValue": "17.0.0",
-      "description": "The version of Aspire.Azure.Messaging.WebPubSub.",
-      "replaces": "WebPubSubClientPackageVersion"
+      "description": "The shared version of the Aspire.* packages.",
+      "replaces": "17.0.0",
+      "onlyIf": [{
+        "after": " Version=\"",
+        "before": "\""
+      }]
     },
     "appHostHttpPort": {
       "type": "parameter",

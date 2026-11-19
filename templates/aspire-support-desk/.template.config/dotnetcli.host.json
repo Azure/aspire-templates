@@ -36,22 +36,7 @@
       "longName": "localhost-tld",
       "shortName": ""
     },
-    "HostingAppHostVersion": {
-      "isHidden": true
-    },
-    "HostingDotnetVersion": {
-      "isHidden": true
-    },
-    "HostingJavaScriptVersion": {
-      "isHidden": true
-    },
-    "HostingAzureAppContainersVersion": {
-      "isHidden": true
-    },
-    "HostingAzureWebPubSubVersion": {
-      "isHidden": true
-    },
-    "WebPubSubClientVersion": {
+    "AspirePackagesVersion": {
       "isHidden": true
     }
   }
