@@ -18,7 +18,7 @@
   ],
   "name": "aspire-azure-starter",
   "defaultName": "AspireApp",
-  "description": "Blazor starter on Azure Container Apps",
+  "description": "An Aspire Blazor frontend and web API targeting Azure Container Apps, with optional Azure Managed Redis caching.",
   "shortName": "aspire-azure-starter",
   "sourceName": "Aspire-StarterApplication.1",
   "preferNameDirectory": false,
