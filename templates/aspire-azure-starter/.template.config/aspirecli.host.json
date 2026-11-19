@@ -1,66 +1,12 @@
 {
   "createNuGetConfig": true,
   "symbolInfo": {
-    "HostingAppHostVersion": {
+    "AspirePackagesVersion": {
       "isHidden": true,
       "valueSource": {
         "kind": "nugetPackageVersion",
         "packageId": "Aspire.Hosting.AppHost",
-        "versionRange": "[13.6.4]",
-        "allowPrerelease": false
-      }
-    },
-    "HostingDotnetVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.Hosting.Dotnet",
-        "versionRange": "[13.6.4-preview.1.26523.11]",
-        "allowPrerelease": true
-      }
-    },
-    "HostingAzureAppContainersVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.Hosting.Azure.AppContainers",
-        "versionRange": "[13.6.4]",
-        "allowPrerelease": false
-      }
-    },
-    "HostingAzureRedisVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.Hosting.Azure.Redis",
-        "versionRange": "[13.6.4]",
-        "allowPrerelease": false
-      }
-    },
-    "AzureRedisClientVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.Microsoft.Azure.StackExchangeRedis",
-        "versionRange": "[13.6.4]",
-        "allowPrerelease": false
-      }
-    },
-    "RedisOutputCachingVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.StackExchange.Redis.OutputCaching",
-        "versionRange": "[13.6.4]",
-        "allowPrerelease": false
-      }
-    },
-    "HostingTestingVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.Hosting.Testing",
-        "versionRange": "[13.6.4]",
+        "versionRange": "[17.0.0,)",
         "allowPrerelease": false
       }
     },

@@ -18,7 +18,7 @@
   ],
   "name": "aspire-azure-starter",
   "defaultName": "AspireApp",
-  "description": "An Aspire Blazor frontend and web API targeting Azure Container Apps, with optional Azure Managed Redis caching.",
+  "description": "Blazor starter on Azure Container Apps",
   "shortName": "aspire-azure-starter",
   "sourceName": "Aspire-StarterApplication.1",
   "preferNameDirectory": false,
@@ -61,58 +61,16 @@
     }
   ],
   "symbols": {
-    "HostingAppHostVersion": {
+    "AspirePackagesVersion": {
       "type": "parameter",
       "datatype": "string",
-      "defaultValue": "13.6.4",
-      "description": "The version of Aspire.Hosting.AppHost.",
-      "replaces": "HostingAppHostPackageVersion"
-    },
-    "HostingDotnetVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "defaultValue": "13.6.4-preview.1.26523.11",
-      "description": "The version of Aspire.Hosting.Dotnet.",
-      "replaces": "HostingDotnetPackageVersion"
-    },
-    "HostingAzureAppContainersVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "defaultValue": "13.6.4",
-      "description": "The version of Aspire.Hosting.Azure.AppContainers.",
-      "replaces": "HostingAzureAppContainersPackageVersion"
-    },
-    "HostingAzureRedisVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "isEnabled": "UseRedisCache",
-      "defaultValue": "13.6.4",
-      "description": "The version of Aspire.Hosting.Azure.Redis.",
-      "replaces": "HostingAzureRedisPackageVersion"
-    },
-    "AzureRedisClientVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "isEnabled": "UseRedisCache",
-      "defaultValue": "13.6.4",
-      "description": "The version of Aspire.Microsoft.Azure.StackExchangeRedis.",
-      "replaces": "AzureRedisClientPackageVersion"
-    },
-    "RedisOutputCachingVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "isEnabled": "UseRedisCache",
-      "defaultValue": "13.6.4",
-      "description": "The version of Aspire.StackExchange.Redis.OutputCaching.",
-      "replaces": "RedisOutputCachingPackageVersion"
-    },
-    "HostingTestingVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "isEnabled": "(TestFx != None)",
-      "defaultValue": "13.6.4",
-      "description": "The version of Aspire.Hosting.Testing.",
-      "replaces": "HostingTestingPackageVersion"
+      "defaultValue": "17.0.0",
+      "description": "The shared version of Aspire packages.",
+      "replaces": "17.0.0",
+      "onlyIf": [{
+        "after": " Version=\"",
+        "before": "\""
+      }]
     },
     "Framework": {
       "type": "parameter",
