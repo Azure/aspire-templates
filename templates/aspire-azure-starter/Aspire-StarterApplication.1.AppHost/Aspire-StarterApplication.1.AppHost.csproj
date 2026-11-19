@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <Sdk Name="Aspire.AppHost.Sdk" Version="AspirePackageVersion" />
+  <Sdk Name="Aspire.AppHost.Sdk" Version="17.0.0" />
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -12,14 +12,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.AppHost" Version="AspirePackageVersion" />
-    <PackageReference Include="Aspire.Hosting.Dotnet" Version="AspirePackageVersion" />
-    <PackageReference Include="Aspire.Hosting.Azure.AppContainers" Version="AspirePackageVersion" />
+    <PackageReference Include="Aspire.Hosting.AppHost" Version="17.0.0" />
+    <PackageReference Include="Aspire.Hosting.Dotnet" Version="17.0.0" />
+    <PackageReference Include="Aspire.Hosting.Azure.AppContainers" Version="17.0.0" />
   </ItemGroup>
 
   <!--#if (UseRedisCache) -->
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.Azure.Redis" Version="AspirePackageVersion" />
+    <PackageReference Include="Aspire.Hosting.Azure.Redis" Version="17.0.0" />
   </ItemGroup>
 
   <!--#endif -->
