@@ -61,65 +61,16 @@
     }
   ],
   "symbols": {
-    "HostingAppHostVersion": {
+    "AspirePackagesVersion": {
       "type": "parameter",
       "datatype": "string",
       "defaultValue": "17.0.0",
-      "description": "The version of Aspire.Hosting.AppHost.",
-      "replaces": "HostingAppHostPackageVersion"
-    },
-    "HostingDotnetVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "defaultValue": "17.0.0",
-      "description": "The version of Aspire.Hosting.Dotnet.",
-      "replaces": "HostingDotnetPackageVersion"
-    },
-    "HostingAzureKubernetesVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "defaultValue": "17.0.0",
-      "description": "The version of Aspire.Hosting.Azure.Kubernetes.",
-      "replaces": "HostingAzureKubernetesPackageVersion"
-    },
-    "HostingAzureNetworkVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "defaultValue": "17.0.0",
-      "description": "The version of Aspire.Hosting.Azure.Network.",
-      "replaces": "HostingAzureNetworkPackageVersion"
-    },
-    "HostingAzureRedisVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "isEnabled": "UseRedisCache",
-      "defaultValue": "17.0.0",
-      "description": "The version of Aspire.Hosting.Azure.Redis.",
-      "replaces": "HostingAzureRedisPackageVersion"
-    },
-    "AzureRedisClientVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "isEnabled": "UseRedisCache",
-      "defaultValue": "17.0.0",
-      "description": "The version of Aspire.Microsoft.Azure.StackExchangeRedis.",
-      "replaces": "AzureRedisClientPackageVersion"
-    },
-    "RedisOutputCachingVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "isEnabled": "UseRedisCache",
-      "defaultValue": "17.0.0",
-      "description": "The version of Aspire.StackExchange.Redis.OutputCaching.",
-      "replaces": "RedisOutputCachingPackageVersion"
-    },
-    "HostingTestingVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "isEnabled": "(TestFx != None)",
-      "defaultValue": "17.0.0",
-      "description": "The version of Aspire.Hosting.Testing.",
-      "replaces": "HostingTestingPackageVersion"
+      "description": "The shared version of the Aspire.* packages.",
+      "replaces": "17.0.0",
+      "onlyIf": [{
+        "after": " Version=\"",
+        "before": "\""
+      }]
     },
     "Framework": {
       "type": "parameter",

@@ -29,13 +29,11 @@ default**. With `UseRedisCache` enabled, `RunAsContainer()` runs Redis locally
 Managed Redis and uses workload identity for passwordless access. With caching
 disabled, the frontend uses in-process output caching and no Redis is provisioned.
 
-Use the released **Aspire 17 CLI**. `aspire new` resolves the highest available stable version of
-each Aspire package from the CLI-selected feeds and applicable NuGet configuration.
-The host metadata accepts `[17.0.0,18.0.0)` with prereleases disabled: released
-17.x versions are eligible, but previews and other major versions are not.
-Resolution is per package;
-use feeds containing a compatible set and review the generated versions.
-An unavailable matching version fails generation rather than falling back to 13.x.
+Use the released **Aspire 17 CLI** or newer. `aspire new` resolves one shared version
+for all Aspire packages using `Aspire.Hosting.AppHost` from the CLI-selected feeds
+and applicable NuGet configuration. The host metadata accepts `[17.0.0,)` with
+prereleases disabled, allowing newer stable releases. Use feeds that provide every
+required Aspire package at the selected version; missing packages fail restore.
 
 `dotnet new` does not use this CLI resolver; its version-symbol defaults are the
 matching **17.0.0** packages, available on **nuget.org**. No staging or daily feed

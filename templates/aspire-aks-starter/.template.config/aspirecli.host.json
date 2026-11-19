@@ -1,75 +1,12 @@
 {
   "createNuGetConfig": true,
   "symbolInfo": {
-    "HostingAppHostVersion": {
+    "AspirePackagesVersion": {
       "isHidden": true,
       "valueSource": {
         "kind": "nugetPackageVersion",
         "packageId": "Aspire.Hosting.AppHost",
-        "versionRange": "[17.0.0,18.0.0)",
-        "allowPrerelease": false
-      }
-    },
-    "HostingDotnetVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.Hosting.Dotnet",
-        "versionRange": "[17.0.0,18.0.0)",
-        "allowPrerelease": false
-      }
-    },
-    "HostingAzureKubernetesVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.Hosting.Azure.Kubernetes",
-        "versionRange": "[17.0.0,18.0.0)",
-        "allowPrerelease": false
-      }
-    },
-    "HostingAzureNetworkVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.Hosting.Azure.Network",
-        "versionRange": "[17.0.0,18.0.0)",
-        "allowPrerelease": false
-      }
-    },
-    "HostingAzureRedisVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.Hosting.Azure.Redis",
-        "versionRange": "[17.0.0,18.0.0)",
-        "allowPrerelease": false
-      }
-    },
-    "AzureRedisClientVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.Microsoft.Azure.StackExchangeRedis",
-        "versionRange": "[17.0.0,18.0.0)",
-        "allowPrerelease": false
-      }
-    },
-    "RedisOutputCachingVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.StackExchange.Redis.OutputCaching",
-        "versionRange": "[17.0.0,18.0.0)",
-        "allowPrerelease": false
-      }
-    },
-    "HostingTestingVersion": {
-      "isHidden": true,
-      "valueSource": {
-        "kind": "nugetPackageVersion",
-        "packageId": "Aspire.Hosting.Testing",
-        "versionRange": "[17.0.0,18.0.0)",
+        "versionRange": "[17.0.0,)",
         "allowPrerelease": false
       }
     },
