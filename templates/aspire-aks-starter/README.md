@@ -29,20 +29,17 @@ default**. With `UseRedisCache` enabled, `RunAsContainer()` runs Redis locally
 Managed Redis and uses workload identity for passwordless access. With caching
 disabled, the frontend uses in-process output caching and no Redis is provisioned.
 
-Use the **Aspire 17 CLI**. `aspire new` resolves the highest available version of
+Use the released **Aspire 17 CLI**. `aspire new` resolves the highest available stable version of
 each Aspire package from the CLI-selected feeds and applicable NuGet configuration.
-The host metadata accepts `[17.0.0-0,18.0.0-0)`, including prereleases: 17.0 and
-newer 17.x versions are eligible, but 13.x and 18.x (including previews) are not.
-Prereleases are enabled for all Aspire packages so daily builds can use a coherent
-package family, including preview-only AKS packages. Resolution is per package;
+The host metadata accepts `[17.0.0,18.0.0)` with prereleases disabled: released
+17.x versions are eligible, but previews and other major versions are not.
+Resolution is per package;
 use feeds containing a compatible set and review the generated versions.
 An unavailable matching version fails generation rather than falling back to 13.x.
 
 `dotnet new` does not use this CLI resolver; its version-symbol defaults are the
-matching **17.0.0** packages. Until these are available on nuget.org, configure the
-generated project's NuGet sources to use the same release feed as your Aspire 17
-CLI. The verified release/17.0 build is available from the public
-[a509f094 staging feed](https://pkgs.dev.azure.com/dnceng/public/_packaging/darc-pub-microsoft-aspire-a509f094/nuget/v3/index.json).
+matching **17.0.0** packages, available on **nuget.org**. No staging or daily feed
+is required.
 The AppHost uses explicit `Aspire.Hosting.AppHost` and `Aspire.Hosting.Dotnet`
 references without the obsolete `Aspire.AppHost.Sdk`. AKS and subnet APIs remain
 experimental; keep the hosting packages compatible when updating.
