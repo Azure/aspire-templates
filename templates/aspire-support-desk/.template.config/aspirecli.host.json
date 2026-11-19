@@ -1,0 +1,50 @@
+{
+  "createNuGetConfig": true,
+  "symbolInfo": {
+    "AspirePackagesVersion": {
+      "isHidden": true,
+      "valueSource": {
+        "kind": "nugetPackageVersion",
+        "packageId": "Aspire.Hosting.AppHost",
+        "versionRange": "[17.0.0,)",
+        "allowPrerelease": false
+      }
+    },
+    "Framework": {
+      "isHidden": true
+    },
+    "appHostHttpPort": {
+      "isHidden": true
+    },
+    "appHostHttpsPort": {
+      "isHidden": true
+    },
+    "appHostOtlpHttpPort": {
+      "isHidden": true
+    },
+    "appHostOtlpHttpsPort": {
+      "isHidden": true
+    },
+    "appHostResourceHttpPort": {
+      "isHidden": true
+    },
+    "appHostResourceHttpsPort": {
+      "isHidden": true
+    },
+    "serverHttpPort": {
+      "isHidden": true
+    },
+    "serverHttpsPort": {
+      "isHidden": true
+    },
+    "skipRestore": {
+      "isHidden": true
+    },
+    "NoHttps": {
+      "isHidden": true
+    },
+    "LocalhostTld": {
+      "displayName": "Use .dev.localhost URLs"
+    }
+  }
+}
