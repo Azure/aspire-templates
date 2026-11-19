@@ -65,7 +65,7 @@
       "type": "parameter",
       "datatype": "string",
       "defaultValue": "17.0.0",
-      "description": "The shared version of the Aspire SDK and Aspire.* packages.",
+      "description": "The shared version of Aspire packages.",
       "replaces": "17.0.0",
       "onlyIf": [{
         "after": " Version=\"",
