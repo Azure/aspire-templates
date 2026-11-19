@@ -34,15 +34,7 @@
   "sources": [
     {
       "source": "./",
-      "target": "./",
-      "modifiers": [
-        {
-          "condition": "(hostIdentifier != \"dotnetcli\" && hostIdentifier != \"dotnetcli-preview\")",
-          "exclude": [
-            "*.slnx"
-          ]
-        }
-      ]
+      "target": "./"
     }
   ],
   "symbols": {
@@ -422,10 +414,6 @@
   },
   "primaryOutputs": [
     {
-      "path": "Aspire-StarterApplication.1.slnx",
-      "condition": "(hostIdentifier == \"dotnetcli\" || hostIdentifier == \"dotnetcli-preview\")"
-    },
-    {
       "path": "Aspire-StarterApplication.1.AppHost\\Aspire-StarterApplication.1.AppHost.csproj"
     },
     {
@@ -436,6 +424,9 @@
     },
     {
       "path": "Aspire-StarterApplication.1.Web\\Aspire-StarterApplication.1.Web.csproj"
+    },
+    {
+      "path": "Aspire-StarterApplication.1.slnx"
     }
   ],
   "postActions": [

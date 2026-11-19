@@ -1,5 +1,4 @@
 ﻿@page "/weather"
-@attribute [Authorize]
 @attribute [StreamRendering(true)]
 
 @inject WeatherApiClient WeatherApi
@@ -50,12 +49,6 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        if (!await ChallengeHandler.IsAuthenticatedAsync())
-        {
-            await ChallengeHandler.ChallengeUserWithConfiguredScopesAsync("DownstreamApis:apiservice:Scopes");
-            return;
-        }
-
         try
         {
             forecasts = await WeatherApi.GetWeatherAsync();
