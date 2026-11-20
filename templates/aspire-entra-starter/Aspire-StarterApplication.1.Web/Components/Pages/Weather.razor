@@ -10,11 +10,7 @@
 
 <p>This component demonstrates showing data loaded from a backend API service secured with Microsoft Entra ID.</p>
 
-@if (!string.IsNullOrEmpty(errorMessage))
-{
-    <div class="alert alert-warning">@errorMessage</div>
-}
-else if (forecasts == null)
+@if (forecasts == null)
 {
     <p><em>Loading...</em></p>
 }
@@ -45,7 +41,6 @@ else
 
 @code {
     private WeatherForecast[]? forecasts;
-    private string? errorMessage;
 
     protected override async Task OnInitializedAsync()
     {
@@ -59,7 +54,7 @@ else
             // the in-memory token cache was cleared by an app restart or more consent is required.
             if (!await ChallengeHandler.HandleExceptionAsync(ex))
             {
-                errorMessage = $"Error loading weather data: {ex.Message}";
+                throw;
             }
         }
     }
