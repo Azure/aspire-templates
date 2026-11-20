@@ -38,33 +38,27 @@
     }
   ],
   "symbols": {
-    "HostingAppHostVersion": {
+    "AspirePackagesVersion": {
       "type": "parameter",
       "datatype": "string",
       "defaultValue": "17.0.0",
-      "description": "The version of Aspire.Hosting.AppHost.",
-      "replaces": "HostingAppHostPackageVersion"
-    },
-    "HostingDotnetVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "defaultValue": "17.0.0",
-      "description": "The version of Aspire.Hosting.Dotnet.",
-      "replaces": "HostingDotnetPackageVersion"
-    },
-    "HostingAzureAppContainersVersion": {
-      "type": "parameter",
-      "datatype": "string",
-      "defaultValue": "17.0.0",
-      "description": "The version of Aspire.Hosting.Azure.AppContainers.",
-      "replaces": "HostingAzureAppContainersPackageVersion"
+      "description": "The shared version of Aspire packages.",
+      "replaces": "17.0.0",
+      "onlyIf": [{
+        "after": " Version=\"",
+        "before": "\""
+      }]
     },
     "HostingAzureEntraIdVersion": {
       "type": "parameter",
       "datatype": "string",
       "defaultValue": "17.0.0-preview.1.26567.5",
       "description": "The version of Aspire.Hosting.Azure.EntraId.",
-      "replaces": "HostingAzureEntraIdPackageVersion"
+      "replaces": "17.0.0-preview.1.26567.5",
+      "onlyIf": [{
+        "after": " Version=\"",
+        "before": "\""
+      }]
     },
     "Framework": {
       "type": "parameter",

@@ -9,10 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.AppHost" Version="HostingAppHostPackageVersion" />
-    <PackageReference Include="Aspire.Hosting.Azure.AppContainers" Version="HostingAzureAppContainersPackageVersion" />
-    <PackageReference Include="Aspire.Hosting.Azure.EntraId" Version="HostingAzureEntraIdPackageVersion" />
-    <PackageReference Include="Aspire.Hosting.Dotnet" Version="HostingDotnetPackageVersion" />
+    <PackageReference Include="Aspire.Hosting.AppHost" Version="17.0.0" />
+    <PackageReference Include="Aspire.Hosting.Azure.AppContainers" Version="17.0.0" />
+    <PackageReference Include="Aspire.Hosting.Azure.EntraId" Version="17.0.0-preview.1.26567.5" />
+    <PackageReference Include="Aspire.Hosting.Dotnet" Version="17.0.0" />
   </ItemGroup>
 
 </Project>
