@@ -1,0 +1,19 @@
+/* Bootstrap positions dropdown menus with its JavaScript, which this menu doesn't use. */
+.dropdown-menu {
+    right: 0;
+    top: 100%;
+}
+
+summary {
+    list-style: none;
+}
+
+    summary::-webkit-details-marker {
+        display: none;
+    }
+
+.user-photo {
+    width: 1.75rem;
+    height: 1.75rem;
+    object-fit: cover;
+}

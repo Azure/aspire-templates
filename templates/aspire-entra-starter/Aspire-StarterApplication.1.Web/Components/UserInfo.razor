@@ -1,11 +1,24 @@
-﻿<AuthorizeView>
+<AuthorizeView>
     <Authorized>
-        <span class="nav-item">Hello, @context.User.Identity?.Name</span>
-        <form action="authentication/logout" method="post" class="nav-item">
-            <AntiforgeryToken />
-            <input type="hidden" name="returnUrl" value="/" />
-            <button type="submit" class="btn btn-link nav-link">Log out</button>
-        </form>
+        @* A native disclosure element, so the menu opens and closes without JavaScript in statically rendered pages. *@
+        <details class="user-menu dropdown">
+            <summary class="btn btn-light border rounded-pill d-flex align-items-center gap-2 dropdown-toggle">
+                <img src="@UserPhotoEndpoints.PhotoPath" alt="" class="user-photo rounded-circle" />
+                @context.User.Identity?.Name
+            </summary>
+            <div class="dropdown-menu d-block shadow">
+                <div class="px-3 py-2">
+                    <div class="small text-body-secondary">Signed in as</div>
+                    <div class="fw-semibold">@context.User.Identity?.Name</div>
+                </div>
+                <div class="dropdown-divider"></div>
+                <form action="authentication/logout" method="post">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="returnUrl" value="/" />
+                    <button type="submit" class="dropdown-item">Sign out</button>
+                </form>
+            </div>
+        </details>
     </Authorized>
     <NotAuthorized>
         <a href="authentication/login?returnUrl=/" class="nav-link">Log in</a>

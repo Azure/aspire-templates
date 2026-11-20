@@ -1,3 +1,5 @@
+using Aspire.Hosting.Azure;
+
 var builder = DistributedApplication.CreateBuilder(args);
 
 builder.AddAzureContainerAppEnvironment("env");
@@ -11,9 +13,11 @@ var apiService = builder.AddDotnetProject("apiservice", "../Aspire-StarterApplic
     .WithReference(apiEntra);
 
 // Entra ID app registration for the web frontend. It signs users in and calls the API on their behalf.
+// It also reads the signed-in user's profile photo from Microsoft Graph.
 // Locally it authenticates with a short-lived developer certificate; when deployed it uses a managed identity.
 var webEntra = builder.AddEntraIdApplication("webfrontend-entra")
     .WithApiPermissions(apiEntra, "access_as_user")
+    .WithApiPermissions(EntraIdApi.MicrosoftGraph, EntraIdApiPermission.Delegated("User.Read"))
     .RunWithLocalDeveloperCertificateCredential()
     .PublishWithFederatedManagedIdentityCredential();
 
