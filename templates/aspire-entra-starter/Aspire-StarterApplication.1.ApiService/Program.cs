@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.Identity.Web;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,14 +14,11 @@ builder.Services.AddProblemDetails();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddMicrosoftIdentityWebApi(builder.Configuration);
 
-// Require an authenticated user by default. The fallback policy applies to every endpoint without its own
-// authorization metadata, so new endpoints are protected unless they explicitly opt out with AllowAnonymous().
-var requireAuthenticatedUser = new AuthorizationPolicyBuilder()
-    .RequireAuthenticatedUser()
-    .Build();
-builder.Services.AddAuthorizationBuilder()
-    .SetDefaultPolicy(requireAuthenticatedUser)
-    .SetFallbackPolicy(requireAuthenticatedUser);
+builder.Services.AddAuthorization(options =>
+{
+    // By default, all incoming requests will be authorized according to the default policy.
+    options.FallbackPolicy = options.DefaultPolicy;
+});
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
