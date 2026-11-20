@@ -1,0 +1,10 @@
+@ApiService_HostAddress = https://localhost:7301
+# /weatherforecast requires a Microsoft Entra ID access token for the API's "access_as_user" scope.
+# Set the API_ACCESS_TOKEN environment variable before starting the editor, or replace the expression below with a token.
+@AccessToken = {{$processEnv API_ACCESS_TOKEN}}
+
+GET {{ApiService_HostAddress}}/weatherforecast/
+Accept: application/json
+Authorization: Bearer {{AccessToken}}
+
+###
