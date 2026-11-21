@@ -17,6 +17,18 @@ The AppHost creates the Entra ID app registrations with Bicep, both when running
 
 On the first run, the dashboard prompts for the tenant, subscription, resource group, and location (see [local Azure provisioning](https://aspire.dev/integrations/cloud/azure/local-provisioning/)). App registrations are tenant-scoped and remain after you delete the resource group. To give each developer their own registrations, set the optional **Tenant-scoped resource suffix** in that dialog or `Azure:TenantResourceSuffix` in configuration. Use the `https` launch profile, because the sign-in redirect URIs use the web frontend's HTTPS endpoint.
 
+## Testing
+
+[`tests/Aspire.Templates.Tests`](tests/Aspire.Templates.Tests) verifies every template under [`templates`](templates). For each template, it creates an app with `aspire new --template-path`, starts it with `aspire run`, and checks that all resources reach a running and healthy state without logging errors.
+
+Prerequisites: the [Aspire CLI](https://aspire.dev/get-started/install-cli/) on the `PATH` (or set `ASPIRE_CLI_PATH`) and the .NET 10 SDK.
+
+```shell
+dotnet test --project tests/Aspire.Templates.Tests
+```
+
+Set `ASPIRE_TEMPLATE_TESTS_STARTUP_TIMEOUT_SECONDS` to change how long resources may take to start (default: 300).
+
 ## Documentation
 
 - [`aspire new`](https://aspire.dev/reference/cli/commands/aspire-new/)
