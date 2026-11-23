@@ -1,0 +1,91 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using DroneDelivery.Domain;
+
+namespace DroneDelivery.DroneSimulator;
+
+public sealed class SimulatedDrone(string id, DroneSpec spec, GeoPoint homePad, double battery)
+{
+    long sequence;
+
+    public string Id { get; } = id;
+    public DroneSpec Spec { get; } = spec;
+    public GeoPoint HomePad { get; } = homePad;
+    public GeoPoint Position { get; set; } = homePad;
+    public double AltitudeMetres { get; set; } = BuildingAirspace.Shared.PadAltitude(homePad);
+    public double Heading { get; set; }
+    public double CameraPitchDegrees { get; set; } = -90;
+    public double PitchDegrees { get; set; }
+    public double RollDegrees { get; set; }
+    public double SpeedMetresPerSecond { get; set; }
+    public IReadOnlyList<FlightWaypoint>? PlannedRoute { get; set; }
+    public string? RoutingError { get; set; }
+    /// <summary>The store pad this drone has reserved or occupies, if any.</summary>
+    public LandingPad? Pad { get; set; }
+    public bool CarryingPackage { get; set; }
+    public DroneControl? Control { get; set; }
+    public ActivityContext MissionTrace { get; set; }
+    public double? FlightProgress { get; set; }
+    /// <summary>When the current flight leg, loading or unloading is expected to finish; unknown under manual control.</summary>
+    public DateTimeOffset? StageEndsAt { get; set; }
+    public double BatteryPercent { get; set; } = battery;
+    public DroneState State { get; set; } = battery < 100 ? DroneState.Charging : DroneState.Parked;
+    public Manoeuvre Manoeuvre { get; set; } = Manoeuvre.OnTheGround;
+    public MissionAssigned? Mission { get; set; }
+    public ConcurrentQueue<MissionAssigned> Queue { get; } = new();
+    public ConcurrentQueue<(DroneCommandRequested Request, ActivityContext Trace)> Commands { get; } = new();
+    public HashSet<string> ProcessedCommands { get; } = [];
+    public ConcurrentQueue<(ManualControlRequested Request, ActivityContext Trace)> ManualRequests { get; } = new();
+    public ManualControlState? Manual { get; set; }
+    public double CameraYawDegrees { get; set; }
+    public double CameraZoom { get; set; } = 1;
+    /// <summary>Manual focus distance in metres; 0 is autofocus.</summary>
+    public double CameraFocusMetres { get; set; }
+    /// <summary>True while flying a leg, the only time a takeover can be accepted.</summary>
+    public bool InFlightLeg { get; set; }
+    (ManualControlInput Input, DateTimeOffset ReceivedAt)? latestInput;
+    readonly Lock inputGate = new();
+
+    /// <summary>Keeps only the newest stick input; Event Hubs preserves per-drone order, but redelivery can repeat.</summary>
+    public void Receive(ManualControlInput input, DateTimeOffset now)
+    {
+        lock (inputGate)
+            if (latestInput is not { } current || current.Input.SessionId != input.SessionId || input.Sequence > current.Input.Sequence)
+                latestInput = (input, now);
+    }
+
+    public (ManualControlInput Input, DateTimeOffset ReceivedAt)? LatestInput(string sessionId)
+    {
+        lock (inputGate)
+            return latestInput is { } latest && latest.Input.SessionId == sessionId ? latest : null;
+    }
+
+    public DroneTelemetry Telemetry(DateTimeOffset now) => new(
+        Id, Spec.Class, Interlocked.Increment(ref sequence), now, Position, HomePad,
+        Math.Round(AltitudeMetres, 1), Math.Round(Heading), Math.Round(BatteryPercent, 1),
+        State, Manoeuvre, Mission?.MissionId, Mission?.OrderId, Queue.Count, FlightProgress, CameraPitchDegrees, Control, CarryingPackage,
+        PitchDegrees, RollDegrees, SpeedMetresPerSecond, PlannedRoute, RoutingError, Pad?.Id, Manual, CameraYawDegrees, StageEndsAt, CameraZoom, CameraFocusMetres);
+
+    /// <summary>Parked drones sit on their charging pad and top up.</summary>
+    public void ChargeFor(TimeSpan elapsed)
+    {
+        BatteryPercent = Math.Min(100, BatteryPercent + Spec.ChargePerMinute * elapsed.TotalMinutes);
+        State = BatteryPercent < 100 ? DroneState.Charging : DroneState.Parked;
+        FlightProgress = null;
+        StageEndsAt = null;
+        PlannedRoute = null;
+    }
+
+    public static IReadOnlyList<SimulatedDrone> CreateFleet(FleetOptions options)
+    {
+        var random = options.Seed is { } seed ? new Random(seed) : new Random();
+        var fleet = new List<SimulatedDrone>();
+        foreach (var (droneClass, count) in options.FleetSize)
+        {
+            var prefix = droneClass.ToString()[..3].ToUpperInvariant();
+            for (var i = 1; i <= count; i++)
+                fleet.Add(new($"{prefix}-{i:00}", DroneSpec.For(droneClass), ServiceArea.RandomPoint(random), Math.Round(35 + random.NextDouble() * 65)));
+        }
+        return fleet;
+    }
+}
