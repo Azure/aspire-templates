@@ -4,8 +4,6 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 builder.AddAzureContainerAppEnvironment("env");
 
-// Redis holds the web frontend's token cache and data cache, so they survive restarts and are shared across replicas.
-// Locally it runs as a container; when deployed it is Azure Managed Redis.
 var cache = builder.AddAzureManagedRedis("cache")
     .RunAsContainer();
 

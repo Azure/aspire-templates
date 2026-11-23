@@ -8,7 +8,6 @@ var builder = WebApplication.CreateBuilder(args);
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
 
-// Redis backs IDistributedCache, which holds the token cache and HybridCache's shared cache.
 builder.AddRedisClientBuilder("cache")
     .WithAzureAuthentication()
     .WithDistributedCache();
