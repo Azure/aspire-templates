@@ -8,14 +8,22 @@ var builder = WebApplication.CreateBuilder(args);
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
 
+// Redis backs IDistributedCache, which holds the token cache and HybridCache's shared cache.
+builder.AddRedisClientBuilder("cache")
+    .WithAzureAuthentication()
+    .WithDistributedCache();
+
+builder.Services.AddHybridCache();
+
 // Sign users in with Microsoft Entra ID and acquire access tokens to call the API service.
 // The AzureAd and DownstreamApis configuration sections are provided by the AppHost from the
 // frontend's Entra ID app registration, including the Microsoft Graph base URL and scopes.
+// Tokens are kept in the distributed cache, so they survive restarts and every replica can use them.
 builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
     .AddMicrosoftIdentityWebApp(builder.Configuration)
     .EnableTokenAcquisitionToCallDownstreamApi([$"{builder.Configuration["AzureAd:ClientId"]}/.default"])
     .AddMicrosoftGraph(builder.Configuration.GetSection(UserPhotoEndpoints.GraphConfigurationSection))
-    .AddInMemoryTokenCaches();
+    .AddDistributedTokenCaches();
 
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<BlazorAuthenticationChallengeHandler>();

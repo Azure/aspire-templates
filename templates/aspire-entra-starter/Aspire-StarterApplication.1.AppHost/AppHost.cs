@@ -4,6 +4,11 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 builder.AddAzureContainerAppEnvironment("env");
 
+// Redis holds the web frontend's token cache and data cache, so they survive restarts and are shared across replicas.
+// Locally it runs as a container; when deployed it is Azure Managed Redis.
+var cache = builder.AddAzureManagedRedis("cache")
+    .RunAsContainer();
+
 // Entra ID app registration for the API. It exposes the "access_as_user" delegated scope.
 var apiEntra = builder.AddEntraIdApplication("apiservice-entra")
     .WithScope("access_as_user", "Access the weather API on behalf of the signed-in user");
@@ -26,7 +31,9 @@ var webFrontend = builder.AddDotnetProject("webfrontend", "../Aspire-StarterAppl
     .WithHttpHealthCheck("/health")
     .WithReference(webEntra)
     .WithReference(apiService)
-    .WaitFor(apiService);
+    .WaitFor(apiService)
+    .WithReference(cache)
+    .WaitFor(cache);
 
 // The redirect URIs follow the web frontend's endpoint: its local https address when running, the deployed host when published.
 webEntra.WithRedirectUris(webFrontend.GetEndpoint("https"), "/signin-oidc", "/signout-callback-oidc");
