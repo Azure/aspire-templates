@@ -499,6 +499,15 @@ large vendor chunks produce a Vite size advisory.
 
 ## Azure Container Apps deployment
 
+When created with `aspire new`, the template selects the highest eligible
+`Aspire.Hosting.AppHost` version from enabled, package-source-mapping-eligible feeds
+and uses it for all `Aspire.*` package references. Prereleases are eligible, but
+must be at least the released `17.0.0` floor: `17.1.0-preview.*` qualifies;
+`17.0.0-preview.*` does not. Selecting a template Git ref does not select a package
+feed. `dotnet new` retains the `17.0.0` default unless `--AspirePackagesVersion` is
+supplied. Unrelated package versions remain independent. Version selection alone
+does not establish compatibility with every future Aspire release.
+
 The AppHost targets Azure Container Apps. With an authenticated Azure CLI and an
 appropriate subscription, resource group and region, run `aspire deploy` from the
 template root. Aspire provisions the Container Apps environment and registry,

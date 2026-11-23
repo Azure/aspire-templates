@@ -14,6 +14,28 @@
     "language": "C#",
     "type": "solution"
   },
+  "symbols": {
+    "AspirePackagesVersion": {
+      "type": "parameter",
+      "datatype": "string",
+      "defaultValue": "17.0.0",
+      "description": "The shared version of Aspire packages.",
+      "replaces": "17.0.0",
+      "onlyIf": [
+        { "after": "Include=\"Aspire.Hosting.AppHost\" Version=\"", "before": "\"" },
+        { "after": "Include=\"Aspire.Hosting.Azure.AppContainers\" Version=\"", "before": "\"" },
+        { "after": "Include=\"Aspire.Hosting.Azure.CosmosDB\" Version=\"", "before": "\"" },
+        { "after": "Include=\"Aspire.Hosting.Dotnet\" Version=\"", "before": "\"" },
+        { "after": "Include=\"Aspire.Hosting.Azure.EventHubs\" Version=\"", "before": "\"" },
+        { "after": "Include=\"Aspire.Hosting.Azure.Storage\" Version=\"", "before": "\"" },
+        { "after": "Include=\"Aspire.Hosting.Azure.SignalR\" Version=\"", "before": "\"" },
+        { "after": "Include=\"Aspire.Hosting.JavaScript\" Version=\"", "before": "\"" },
+        { "after": "Include=\"Aspire.Azure.Messaging.EventHubs\" Version=\"", "before": "\"" },
+        { "after": "Include=\"Aspire.Azure.Storage.Blobs\" Version=\"", "before": "\"" },
+        { "after": "Include=\"Aspire.Microsoft.Azure.Cosmos\" Version=\"", "before": "\"" }
+      ]
+    }
+  },
   "sources": [
     {
       "exclude": [

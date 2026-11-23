@@ -1,0 +1,14 @@
+{
+  "createNuGetConfig": true,
+  "symbolInfo": {
+    "AspirePackagesVersion": {
+      "isHidden": true,
+      "valueSource": {
+        "kind": "nugetPackageVersion",
+        "packageId": "Aspire.Hosting.AppHost",
+        "versionRange": "[17.0.0,)",
+        "allowPrerelease": true
+      }
+    }
+  }
+}
