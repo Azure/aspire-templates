@@ -7,7 +7,7 @@
         "kind": "nugetPackageVersion",
         "packageId": "Aspire.Hosting.AppHost",
         "versionRange": "[17.0.0,)",
-        "allowPrerelease": false
+        "allowPrerelease": true
       }
     },
     "Framework": { "isHidden": true },
