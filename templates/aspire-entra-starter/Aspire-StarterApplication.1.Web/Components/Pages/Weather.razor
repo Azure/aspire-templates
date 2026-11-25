@@ -1,7 +1,9 @@
 ﻿@page "/weather"
 @attribute [StreamRendering(true)]
+@using Microsoft.Extensions.Caching.Hybrid
 
 @inject WeatherApiClient WeatherApi
+@inject HybridCache Cache
 @inject BlazorAuthenticationChallengeHandler ChallengeHandler
 
 <PageTitle>Weather</PageTitle>
@@ -42,16 +44,31 @@ else
 @code {
     private WeatherForecast[]? forecasts;
 
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthenticationState { get; set; } = default!;
+
+    private static readonly HybridCacheEntryOptions CacheOptions = new()
+    {
+        Expiration = TimeSpan.FromSeconds(5),
+        LocalCacheExpiration = TimeSpan.FromSeconds(5),
+    };
+
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            forecasts = await WeatherApi.GetWeatherAsync();
+            // Cached per user, since the API is called on the signed-in user's behalf.
+            var user = (await AuthenticationState).User;
+            forecasts = await Cache.GetOrCreateAsync(
+                $"weather:{user.GetMsalAccountId()}",
+                WeatherApi,
+                static async (api, cancellationToken) => await api.GetWeatherAsync(cancellationToken: cancellationToken),
+                CacheOptions);
         }
         catch (Exception ex)
         {
             // Sends the user to sign in again when a token can't be acquired silently, for example when
-            // the in-memory token cache was cleared by an app restart or more consent is required.
+            // the token cache no longer has the user's tokens or more consent is required.
             if (!await ChallengeHandler.HandleExceptionAsync(ex))
             {
                 throw;

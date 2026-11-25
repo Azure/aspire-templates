@@ -61,9 +61,11 @@ public static class UserPhotoEndpoints
             }
             catch (MicrosoftIdentityWebChallengeUserException)
             {
-                // A Graph token can't be acquired silently, for example after an app restart cleared the in-memory
-                // token cache. An image request can't follow a sign-in redirect, so the placeholder is shown without
-                // being cached, and the photo is fetched again on the next page.
+                // A Graph token can't be acquired silently, for example when the token cache no longer has the user's
+                // tokens. An image request can't follow a sign-in redirect, so the placeholder is shown and the photo is
+                // fetched again on the next page. "no-store" is required because the placeholder file has a
+                // Last-Modified header, which otherwise lets the browser cache it heuristically.
+                response.GetTypedHeaders().CacheControl = new CacheControlHeaderValue { NoStore = true };
                 return Placeholder();
             }
         });

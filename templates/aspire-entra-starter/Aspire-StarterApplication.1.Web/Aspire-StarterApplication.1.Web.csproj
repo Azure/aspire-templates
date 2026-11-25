@@ -11,6 +11,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Aspire.Microsoft.Azure.StackExchangeRedis" Version="17.0.0" />
+    <PackageReference Include="Aspire.StackExchange.Redis.DistributedCaching" Version="17.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.11.1" />
     <PackageReference Include="Microsoft.Identity.Web" Version="4.18.0" />
     <PackageReference Include="Microsoft.Identity.Web.GraphServiceClient" Version="4.18.0" />
   </ItemGroup>

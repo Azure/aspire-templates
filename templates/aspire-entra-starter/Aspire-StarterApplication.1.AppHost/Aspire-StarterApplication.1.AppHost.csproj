@@ -12,6 +12,7 @@
     <PackageReference Include="Aspire.Hosting.AppHost" Version="17.0.0" />
     <PackageReference Include="Aspire.Hosting.Azure.AppContainers" Version="17.0.0" />
     <PackageReference Include="Aspire.Hosting.Azure.EntraId" Version="17.0.0-preview.1.26567.5" />
+    <PackageReference Include="Aspire.Hosting.Azure.Redis" Version="17.0.0" />
     <PackageReference Include="Aspire.Hosting.Dotnet" Version="17.0.0" />
   </ItemGroup>
 
