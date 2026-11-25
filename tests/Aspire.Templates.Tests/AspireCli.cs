@@ -16,9 +16,10 @@ internal static class AspireCli
     public static string ExecutablePath =>
         Environment.GetEnvironmentVariable("ASPIRE_CLI_PATH") is { Length: > 0 } path ? path : "aspire";
 
-    public static async Task<CliResult> RunAsync(string workingDirectory, IEnumerable<string> args, TimeSpan timeout, CancellationToken cancellationToken)
+    public static async Task<CliResult> RunAsync(string workingDirectory, IEnumerable<string> args, TimeSpan timeout, CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
-        using var process = new CliProcess(workingDirectory, args);
+        using var process = new CliProcess(workingDirectory, args, environment);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(timeout);
 
@@ -45,7 +46,7 @@ internal static class AspireCli
         private readonly StringBuilder _output = new();
         private readonly StringBuilder _standardOutput = new();
 
-        public CliProcess(string workingDirectory, IEnumerable<string> args)
+        public CliProcess(string workingDirectory, IEnumerable<string> args, IReadOnlyDictionary<string, string>? environment = null)
         {
             var startInfo = new ProcessStartInfo(ExecutablePath)
             {
@@ -70,6 +71,14 @@ internal static class AspireCli
             // Avoid lingering build processes that hold files in the temporary project directory.
             startInfo.Environment["MSBUILDDISABLENODEREUSE"] = "1";
             startInfo.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"] = "0";
+
+            if (environment is not null)
+            {
+                foreach (var (key, value) in environment)
+                {
+                    startInfo.Environment[key] = value;
+                }
+            }
 
             CommandLine = $"aspire {string.Join(' ', startInfo.ArgumentList)}";
 
